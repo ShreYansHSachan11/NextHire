@@ -1,0 +1,118 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String         @id @default(uuid())
+  name          String
+  email         String         @unique
+  password      String
+  role          Role
+  companyId     String?
+  profile       String?
+  website       String?
+  industry      String?
+  size          String?
+  location      String?
+  description   String?
+  createdAt     DateTime       @default(now())
+  applications  Application[]
+  conversations Conversation[] @relation("UserConversations")
+  messages      Message[]
+  notifications Notification[]
+  resumes       Resume[]
+  company       Company?       @relation(fields: [companyId], references: [id])
+}
+
+model Company {
+  id            String         @id @default(uuid())
+  name          String
+  profile       String?
+  createdAt     DateTime       @default(now())
+  conversations Conversation[]
+  jobs          Job[]
+  users         User[]
+}
+
+model Job {
+  id           String        @id @default(uuid())
+  jobId        String?       @unique // Custom job ID field
+  title        String
+  description  String
+  salary       String?
+  experience   String?
+  location     String?
+  type         String?
+  companyId    String
+  createdAt    DateTime      @default(now())
+  isActive     Boolean       @default(true)
+  applications Application[]
+  company      Company       @relation(fields: [companyId], references: [id])
+}
+
+model Application {
+  id        String            @id @default(uuid())
+  userId    String
+  jobId     String
+  status    ApplicationStatus @default(PENDING)
+  message   String?
+  createdAt DateTime          @default(now())
+  job       Job               @relation(fields: [jobId], references: [id])
+  user      User              @relation(fields: [userId], references: [id])
+}
+
+model Conversation {
+  id        String    @id @default(uuid())
+  userId    String
+  companyId String
+  createdAt DateTime  @default(now())
+  company   Company   @relation(fields: [companyId], references: [id])
+  user      User      @relation("UserConversations", fields: [userId], references: [id])
+  messages  Message[]
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  senderId       String
+  content        String
+  createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  sender         User         @relation(fields: [senderId], references: [id])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  content   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Resume {
+  id        String   @id @default(uuid())
+  userId    String
+  url       String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+enum Role {
+  SEEKER
+  COMPANY
+  ADMIN
+}
+
+enum ApplicationStatus {
+  PENDING
+  SHORTLISTED
+  INTERVIEW
+  REJECTED
+  ACCEPTED
+}
