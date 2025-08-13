@@ -14,13 +14,13 @@ model User {
   password      String
   role          Role
   companyId     String?
-  profile       String?
-  website       String?
-  industry      String?
-  size          String?
-  location      String?
-  description   String?
   createdAt     DateTime       @default(now())
+  description   String?
+  industry      String?
+  location      String?
+  profile       String?
+  size          String?
+  website       String?
   applications  Application[]
   conversations Conversation[] @relation("UserConversations")
   messages      Message[]
@@ -41,7 +41,6 @@ model Company {
 
 model Job {
   id           String        @id @default(uuid())
-  jobId        String?       @unique // Custom job ID field
   title        String
   description  String
   salary       String?
@@ -51,6 +50,7 @@ model Job {
   companyId    String
   createdAt    DateTime      @default(now())
   isActive     Boolean       @default(true)
+  jobId        String?       @unique
   applications Application[]
   company      Company       @relation(fields: [companyId], references: [id])
 }
