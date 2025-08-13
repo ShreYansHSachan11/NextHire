@@ -4,8 +4,8 @@ import React, { useEffect, useState, useRef } from "react";
 import { useSelector } from "react-redux";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useSocket } from "../../lib/socketContext";
-import type { RootState } from "../../store/store";
+import { useSocket } from "@/lib/socketContext";
+import type { RootState } from "@/store/store";
 
 interface Application {
   id: string;

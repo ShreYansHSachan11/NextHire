@@ -3,8 +3,8 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useDispatch } from "react-redux";
-import { login } from "../../../store/authSlice";
-import type { AppDispatch } from "../../../store/store";
+import { login } from "@/store/authSlice";
+import type { AppDispatch } from "@/store/store";
 import Link from "next/link";
 
 export default function LoginPage() {

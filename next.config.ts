@@ -15,10 +15,8 @@ const nextConfig: NextConfig = {
     formats: ['image/webp', 'image/avif'],
   },
   
-  // API configuration
-  experimental: {
-    serverComponentsExternalPackages: ['@prisma/client'],
-  },
+  // API configuration - updated for Next.js 15
+  serverExternalPackages: ['@prisma/client'],
 };
 
 export default nextConfig;

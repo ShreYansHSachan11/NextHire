@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import { useSelector } from "react-redux";
-import type { RootState } from "../store/store";
+import type { RootState } from "@/store/store";
 
 export default function Home() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);

@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useSelector } from "react-redux";
 import { useRouter } from "next/navigation";
-import type { RootState } from "../../../store/store";
+import type { RootState } from "@/store/store";
 
 export default function PostJobPage() {
   const { user, isAuthenticated } = useSelector((state: RootState) => state.auth);

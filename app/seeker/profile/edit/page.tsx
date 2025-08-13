@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { useRouter } from "next/navigation";
-import type { RootState } from "../../../../store/store";
+import type { RootState } from "@/store/store";
 
 export default function EditProfilePage() {
   const { user, isAuthenticated } = useSelector((state: RootState) => state.auth);

@@ -3,8 +3,8 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useDispatch, useSelector } from "react-redux";
-import { setJobs } from "../../store/jobsSlice";
-import type { RootState, AppDispatch } from "../../store/store";
+import { setJobs } from "@/store/jobsSlice";
+import type { RootState, AppDispatch } from "@/store/store";
 
 interface Job {
   id: string;

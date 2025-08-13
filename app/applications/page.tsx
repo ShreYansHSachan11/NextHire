@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import { useSelector } from "react-redux";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import type { RootState } from "../../store/store";
+import type { RootState } from "@/store/store";
 
 interface Application {
   id: string;

@@ -4,8 +4,8 @@ import React, { useState, useEffect } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import type { RootState } from "../../../../store/store";
-import { updateProfile } from "../../../../store/authSlice";
+import type { RootState } from "@/store/store";
+import { updateProfile } from "@/store/authSlice";
 
 
 interface CompanyProfile {
