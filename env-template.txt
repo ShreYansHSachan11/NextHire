@@ -1,0 +1,30 @@
+# Database Configuration
+DATABASE_URL="postgresql://postgres:Garima%401234@localhost:5432/jobportal"
+
+# JWT Configuration
+JWT_SECRET="your-super-secret-jwt-key-change-this-in-production"
+
+# Cloudinary Configuration
+CLOUDINARY_CLOUD_NAME="dscg8f8bg"
+CLOUDINARY_API_KEY="489153691184969"
+CLOUDINARY_API_SECRET="_QjYfhYCQpbDnuz3o25f4q-dzbM"
+
+# Application Configuration
+NODE_ENV="development"
+NEXT_PUBLIC_APP_URL="http://localhost:3000"
+
+# Socket.IO Configuration (if needed for production)
+SOCKET_SERVER_PORT="3002"
+
+# Optional: Email Configuration (for future features)
+# SMTP_HOST="smtp.gmail.com"
+# SMTP_PORT="587"
+# SMTP_USER="your-email@gmail.com"
+# SMTP_PASS="your-app-password"
+
+# Optional: Redis Configuration (for caching)
+# REDIS_URL="redis://localhost:6379"
+
+# Optional: Monitoring (for production)
+# SENTRY_DSN="your-sentry-dsn"
+# LOG_LEVEL="info" 
