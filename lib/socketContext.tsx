@@ -45,7 +45,6 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           reconnectionAttempts: 5,
           reconnectionDelay: 1000,
           reconnectionDelayMax: 5000,
-          maxReconnectionAttempts: 5,
           forceNew: true,
         });
 
@@ -64,9 +63,8 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           console.error('Socket.IO connection error:', error);
           console.error('Error details:', {
             message: error.message,
-            description: error.description,
-            context: error.context,
-            type: error.type
+            name: error.name,
+            stack: error.stack
           });
           setIsConnected(false);
           

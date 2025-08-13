@@ -7,7 +7,7 @@ import Link from "next/link";
 import type { RootState } from "@/store/store";
 import { logout } from "@/store/authSlice";
 
-import NotificationBell from "@/components/NotificationBell";
+import NotificationBell from "../../components/NotificationBell";
 
 interface Application {
   id: string;
