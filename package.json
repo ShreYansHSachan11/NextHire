@@ -20,7 +20,7 @@
     "dotenv": "^17.2.0",
     "formidable": "^3.5.4",
     "jsonwebtoken": "^9.0.2",
-    "next": "15.3.5",
+    "next": "15.3.8",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-redux": "^9.2.0",
