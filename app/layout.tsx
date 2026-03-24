@@ -9,8 +9,8 @@ import SessionProviderWrapper from "@/app/components/SessionProviderWrapper";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Job Portal",
-  description: "A full-stack job portal like Naukri.com",
+  title: "NextHire",
+  description: "NextHire - Find your dream job or hire top talent.",
 };
 
 export default function RootLayout({
@@ -33,3 +33,4 @@ export default function RootLayout({
     </html>
   );
 }
+

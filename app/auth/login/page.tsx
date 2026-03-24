@@ -101,7 +101,7 @@ function LoginForm() {
         <div className="container-responsive py-4">
           <div className="flex items-center justify-between">
             <Link href="/" className="text-xl sm:text-2xl font-bold text-blue-600 dark:text-blue-400">
-              Filling
+              NextHire
             </Link>
           </div>
         </div>

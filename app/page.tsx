@@ -18,7 +18,7 @@ export default function Home() {
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <h1 className="text-2xl sm:text-3xl font-extrabold text-blue-700 tracking-tight drop-shadow-sm">Filling</h1>
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-blue-700 tracking-tight drop-shadow-sm">NextHire</h1>
               </div>
             </div>
             
@@ -136,7 +136,7 @@ export default function Home() {
           <div className="text-center">
             <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold text-gray-900 mb-6 sm:mb-8 leading-tight drop-shadow-sm animate-fade-in-up">
               Find Your Dream Job with
-              <span className="text-blue-600"> Filling</span>
+              <span className="text-blue-600"> NextHire</span>
             </h1>
             <p className="text-lg sm:text-xl lg:text-2xl text-gray-700 mb-8 sm:mb-10 max-w-3xl mx-auto animate-fade-in-up delay-100 px-4">
               Connect talented professionals with amazing opportunities. Whether you're looking for your next career move or seeking the perfect team member, we've got you covered.
@@ -188,7 +188,7 @@ export default function Home() {
         <div className="container-responsive">
           <div className="text-center mb-12 sm:mb-16">
             <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-              Why Choose Filling?
+              Why Choose NextHire?
             </h2>
             <p className="text-lg sm:text-xl text-gray-600 max-w-2xl mx-auto px-4">
               We provide the tools and platform you need to succeed in your career journey.
@@ -307,7 +307,7 @@ export default function Home() {
                 </div>
               </div>
               <p className="text-gray-600 text-sm sm:text-base">
-                 "Filling helped me find my dream job in just 2 weeks! The matching algorithm is incredible."
+                 "NextHire helped me find my dream job in just 2 weeks! The matching algorithm is incredible."
                </p>
             </div>
 
@@ -322,7 +322,7 @@ export default function Home() {
                 </div>
               </div>
               <p className="text-gray-600 text-sm sm:text-base">
-                "We've hired 15 amazing developers through Filling. The quality of candidates is outstanding."
+                "We've hired 15 amazing developers through NextHire. The quality of candidates is outstanding."
               </p>
             </div>
 
@@ -352,7 +352,7 @@ export default function Home() {
             Ready to Get Started?
           </h2>
             <p className="text-lg sm:text-xl text-blue-100 mb-8 max-w-2xl mx-auto px-4">
-              Join thousands of professionals who have found their dream jobs through Filling
+              Join thousands of professionals who have found their dream jobs through NextHire
            </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link 
@@ -377,7 +377,7 @@ export default function Home() {
         <div className="container-responsive">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             <div className="md:col-span-2">
-                             <h3 className="text-2xl font-bold text-blue-400 mb-4">Filling</h3>
+                             <h3 className="text-2xl font-bold text-blue-400 mb-4">NextHire</h3>
               <p className="text-gray-300 text-sm sm:text-base mb-6 max-w-md">
                 Connecting talented professionals with amazing opportunities. Your career journey starts here.
               </p>
@@ -423,7 +423,7 @@ export default function Home() {
           
           <div className="border-t border-gray-800 mt-8 pt-8 text-center">
             <p className="text-gray-400 text-sm">
-              © 2024 Filling. All rights reserved. Made with ❤️ for job seekers and employers.
+              © 2025 NextHire. All rights reserved. Made with ❤️ for job seekers and employers.
             </p>
           </div>
         </div>
@@ -431,3 +431,4 @@ export default function Home() {
     </div>
   );
 }
+

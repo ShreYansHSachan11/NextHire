@@ -106,7 +106,7 @@ export default function JobsPage() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center space-x-4">
               <Link href="/" className="text-xl sm:text-2xl font-bold text-blue-600 dark:text-blue-400">
-                Filling
+                NextHire
               </Link>
               <h1 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white">Job Feed</h1>
             </div>
