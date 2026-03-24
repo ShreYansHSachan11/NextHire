@@ -4,6 +4,7 @@ import { Inter } from "next/font/google";
 import ReduxProvider from "@/store/Provider";
 import AuthRehydrator from "@/store/AuthRehydrator";
 import { SocketProvider } from "@/lib/socketContext";
+import SessionProviderWrapper from "@/app/components/SessionProviderWrapper";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -20,12 +21,14 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.className} bg-white`}>
-        <ReduxProvider>
-          <AuthRehydrator />
-          <SocketProvider>
-            {children}
-          </SocketProvider>
-        </ReduxProvider>
+        <SessionProviderWrapper>
+          <ReduxProvider>
+            <AuthRehydrator />
+            <SocketProvider>
+              {children}
+            </SocketProvider>
+          </ReduxProvider>
+        </SessionProviderWrapper>
       </body>
     </html>
   );

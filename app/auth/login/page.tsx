@@ -1,13 +1,14 @@
 "use client";
 
-import React, { useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { Suspense, useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useDispatch } from "react-redux";
 import { login } from "@/store/authSlice";
 import type { AppDispatch } from "@/store/store";
 import Link from "next/link";
+import { signIn } from "next-auth/react";
 
-export default function LoginPage() {
+function LoginForm() {
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -15,7 +16,25 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const dispatch = useDispatch<AppDispatch>();
+
+  // Pick up auth data injected by google-callback route
+  useEffect(() => {
+    const googleAuth = searchParams.get("googleAuth");
+    if (googleAuth) {
+      try {
+        const { user, token } = JSON.parse(decodeURIComponent(googleAuth));
+        document.cookie = `token=${token}; path=/; max-age=2592000`;
+        dispatch(login({ user, token }));
+        router.replace(user.role === "COMPANY" ? "/company/dashboard" : "/seeker/dashboard");
+      } catch {
+        setError("Google sign-in failed. Please try again.");
+      }
+    }
+    const authError = searchParams.get("error");
+    if (authError) setError("Google sign-in failed. Please try again.");
+  }, [searchParams, dispatch, router]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -174,7 +193,9 @@ export default function LoginPage() {
               </div>
 
               <div className="mt-4 sm:mt-6">
-                <button className="w-full flex items-center justify-center gap-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 py-3 px-4 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors font-medium text-gray-700 dark:text-gray-300 btn-touch">
+                <button
+                  onClick={() => signIn('google')}
+                  className="w-full flex items-center justify-center gap-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 py-3 px-4 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors font-medium text-gray-700 dark:text-gray-300 btn-touch">
                   <svg className="w-4 h-4 sm:w-5 sm:h-5" viewBox="0 0 48 48">
                     <g>
                       <path fill="#4285F4" d="M44.5 20H24v8.5h11.7C34.7 33.1 30.1 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.1 8.1 2.9l6.4-6.4C34.5 6.5 29.6 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20c11 0 19.7-8 19.7-20 0-1.3-.1-2.7-.3-4z"/>
@@ -201,4 +222,12 @@ export default function LoginPage() {
       </div>
     </main>
   );
-} 
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
+  );
+}
