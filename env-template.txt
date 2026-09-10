@@ -51,7 +51,7 @@ GEMINI_API_KEY=""
 # Optional overrides. gemini-embedding-001 supports asymmetric task types, which
 # measurably improves query-vs-document retrieval.
 GEMINI_EMBEDDING_MODEL="gemini-embedding-001"
-GEMINI_TEXT_MODEL="gemini-2.5-flash"
+GEMINI_TEXT_MODEL="gemini-3.6-flash"
 # Stored vector width (128-3072). 768 keeps rows and the similarity loop about
 # four times cheaper than the 3072 default for very little loss in quality.
 GEMINI_EMBEDDING_DIMENSIONS="768"

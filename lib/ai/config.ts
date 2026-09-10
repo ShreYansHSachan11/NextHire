@@ -12,8 +12,15 @@
  *  `GEMINI_EMBEDDING_MODEL` to move to a newer model. */
 export const EMBEDDING_MODEL = process.env.GEMINI_EMBEDDING_MODEL || 'gemini-embedding-001';
 
-/** Generative model used for résumé parsing and drafting help. */
-export const TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || 'gemini-2.5-flash';
+/**
+ * Generative model used for résumé parsing and drafting help.
+ *
+ * Pinned to an explicit version rather than a `-latest` alias: the résumé
+ * parser depends on structured output matching a fixed schema, and an alias
+ * that moves underneath us changes that behaviour with no code change and no
+ * warning. Bump this deliberately after testing.
+ */
+export const TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || 'gemini-3.6-flash';
 
 /**
  * Stored vector width. The model emits 3072 by default; 768 keeps the row size

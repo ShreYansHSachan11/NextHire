@@ -46,7 +46,7 @@ lib/ai/
 | Purpose | Model | Notes |
 | --- | --- | --- |
 | Embeddings | `gemini-embedding-001` | Supports asymmetric task types |
-| Generation | `gemini-2.5-flash` | Résumé parsing, drafting help |
+| Generation | `gemini-3.6-flash` | Résumé parsing, drafting help |
 
 Both are overridable via `GEMINI_EMBEDDING_MODEL` / `GEMINI_TEXT_MODEL`.
 
