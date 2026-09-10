@@ -1,0 +1,201 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(uuid())
+  name        String
+  email       String   @unique
+  password    String
+  role        Role
+  companyId   String?
+  createdAt   DateTime @default(now())
+  description String?
+  industry    String?
+  location    String?
+  profile     String?
+  size        String?
+  website     String?
+
+  /// AI-derived profile, extracted from the uploaded resume by Gemini and
+  /// editable by the user. These feed the profile embedding.
+  headline    String?
+  skills      String[]  @default([])
+  seniority   String?
+  yearsOfExp  Int?
+  aiSummary   String?
+  aiUpdatedAt DateTime?
+
+  applications  Application[]
+  embedding     ProfileEmbedding?
+  conversations Conversation[]    @relation("UserConversations")
+  messages      Message[]
+  notifications Notification[]
+  resumes       Resume[]
+  company       Company?          @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+}
+
+model Company {
+  id            String         @id @default(uuid())
+  name          String
+  profile       String?
+  createdAt     DateTime       @default(now())
+  conversations Conversation[]
+  jobs          Job[]
+  users         User[]
+}
+
+model Job {
+  id          String   @id @default(uuid())
+  title       String
+  description String
+  salary      String?
+  experience  String?
+  location    String?
+  type        String?
+  companyId   String
+  createdAt   DateTime @default(now())
+  isActive    Boolean  @default(true)
+  jobId       String?  @unique
+
+  /// Skills parsed out of the posting, used both for display and as one facet
+  /// of the match score.
+  skills String[] @default([])
+
+  applications Application[]
+  embedding    JobEmbedding?
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([isActive, createdAt])
+}
+
+model Application {
+  id         String            @id @default(uuid())
+  userId     String
+  jobId      String
+  status     ApplicationStatus @default(PENDING)
+  message    String?
+  /// Match score at the moment of applying, so the company sees the fit that
+  /// was true then rather than one that drifts as either side is edited.
+  matchScore Int?
+  createdAt  DateTime          @default(now())
+  job        Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // A seeker may only apply to a given job once. Previously enforced by a racy
+  // findFirst, which let a double-click create duplicates.
+  @@unique([userId, jobId])
+  @@index([jobId])
+  @@index([userId, createdAt])
+}
+
+model Conversation {
+  id        String    @id @default(uuid())
+  userId    String
+  companyId String
+  createdAt DateTime  @default(now())
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user      User      @relation("UserConversations", fields: [userId], references: [id], onDelete: Cascade)
+  messages  Message[]
+
+  // One thread per seeker/company pair.
+  @@unique([userId, companyId])
+  @@index([companyId])
+  @@index([userId])
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  senderId       String
+  content        String
+  readAt         DateTime?
+  createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  content   String
+  /// Where clicking the notification should take the user. Replaces parsing the
+  /// destination back out of `content` with a regex.
+  link      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read, createdAt])
+}
+
+model Resume {
+  id        String   @id @default(uuid())
+  userId    String
+  url       String
+  /// Cloudinary public id, kept so the old asset can be deleted reliably on
+  /// replace instead of guessing it from the URL.
+  publicId  String?
+  fileName  String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+/// Vector index for a job posting.
+///
+/// Stored as a plain float array and compared in Node rather than via pgvector,
+/// which many managed Postgres tiers do not offer. `contentHash` lets a re-index
+/// skip rows whose source text has not changed, so editing a salary does not
+/// spend an embedding call.
+model JobEmbedding {
+  jobId       String   @id
+  vector      Float[]
+  model       String
+  dimensions  Int
+  contentHash String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  job         Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([contentHash])
+}
+
+/// Vector index for a job seeker's profile. Mirrors JobEmbedding.
+model ProfileEmbedding {
+  userId      String   @id
+  vector      Float[]
+  model       String
+  dimensions  Int
+  contentHash String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([contentHash])
+}
+
+enum Role {
+  SEEKER
+  COMPANY
+  ADMIN
+}
+
+enum ApplicationStatus {
+  PENDING
+  SHORTLISTED
+  INTERVIEW
+  REJECTED
+  ACCEPTED
+}

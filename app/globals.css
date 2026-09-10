@@ -1,0 +1,614 @@
+@import "tailwindcss";
+
+/*
+ * Tailwind v4 discovers its theme from CSS, not from tailwind.config.js. The
+ * project shipped a v3-style config with `darkMode: 'class'` that was silently
+ * ignored, so every `dark:` class was firing off the OS setting while `body`
+ * stayed hard-coded white — dark cards on a light page.
+ */
+@config "../tailwind.config.js";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ==========================================================================
+   NextHire design system — "signal"
+   --------------------------------------------------------------------------
+   A precise, technical language rather than a decorative one: hairline rules,
+   a cool slate-navy neutral ramp, monospace for machine-generated labels, and
+   a single emerald accent reserved for AI/match signal. Nothing glows; the
+   futurism comes from density and precision.
+
+   The neutral, primary and accent ramps below intentionally override Tailwind's
+   defaults, so every existing `bg-gray-50` / `border-gray-200` / `text-blue-600`
+   in the app shifts onto the new palette without touching each call site.
+   ========================================================================== */
+
+@theme inline {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: var(--font-mono-jb), ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo,
+    Consolas, monospace;
+
+  /* Neutral ramp: cool slate in the light range, true navy in the dark range. */
+  --color-gray-50: #f7f8fa;
+  --color-gray-100: #eff1f5;
+  --color-gray-200: #e2e6ec;
+  --color-gray-300: #cbd2dc;
+  --color-gray-400: #94a0b0;
+  --color-gray-500: #6b7889;
+  --color-gray-600: #4e5a6b;
+  --color-gray-700: #27313f;
+  --color-gray-800: #131b2a;
+  --color-gray-900: #0b111c;
+  --color-gray-950: #060a12;
+
+  /* Primary: indigo, used for links, focus and the top signal rail. */
+  --color-blue-50: #eef2ff;
+  --color-blue-100: #e0e7ff;
+  --color-blue-200: #c7d2fe;
+  --color-blue-300: #a5b4fc;
+  --color-blue-400: #818cf8;
+  --color-blue-500: #6366f1;
+  --color-blue-600: #4f46e5;
+  --color-blue-700: #4338ca;
+  --color-blue-800: #3730a3;
+  --color-blue-900: #312e81;
+
+  /* Accent: emerald. Reserved for match quality, live state and confirmation. */
+  --color-green-50: #ecfdf5;
+  --color-green-100: #d1fae5;
+  --color-green-200: #a7f3d0;
+  --color-green-300: #6ee7b7;
+  --color-green-400: #34d399;
+  --color-green-500: #10b981;
+  --color-green-600: #059669;
+  --color-green-700: #047857;
+  --color-green-800: #065f46;
+  --color-green-900: #064e3b;
+}
+
+:root {
+  --canvas: #f7f8fa;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --ink: #0b111c;
+  --ink-muted: #4e5a6b;
+  --ink-faint: #6b7889;
+  --line: #e2e6ec;
+  --line-strong: #cbd2dc;
+  --accent: #059669;
+  --accent-soft: #ecfdf5;
+  --rail: linear-gradient(90deg, #4f46e5 0%, #6366f1 45%, #10b981 100%);
+
+  /* Primary button inverts between themes so it always reads as the loudest
+     element on the page. */
+  --btn-bg: #0b111c;
+  --btn-fg: #ffffff;
+  --btn-bg-hover: #27313f;
+
+  /* Graph-paper rule colour used by .grid-field. */
+  --grid-line: rgba(11, 17, 28, 0.06);
+}
+
+.dark {
+  --canvas: #0b111c;
+  --surface: #131b2a;
+  --surface-raised: #182130;
+  --ink: #f2f5f9;
+  --ink-muted: #94a0b0;
+  --ink-faint: #6b7889;
+  --line: #27313f;
+  --line-strong: #37424f;
+  --accent: #34d399;
+  --accent-soft: rgba(16, 185, 129, 0.12);
+
+  --btn-bg: #f2f5f9;
+  --btn-fg: #0b111c;
+  --btn-bg-hover: #ffffff;
+
+  --grid-line: rgba(148, 160, 176, 0.09);
+}
+
+html {
+  color-scheme: light;
+  scroll-behavior: smooth;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--canvas);
+  color: var(--ink);
+  /* Was Arial/Helvetica, which overrode the Inter font loaded in the layout. */
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Display type is set tight and dark — the reference's defining move. */
+h1,
+h2,
+h3 {
+  letter-spacing: -0.025em;
+}
+
+h1 {
+  letter-spacing: -0.035em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  /* Honour the user's motion preference instead of animating regardless. */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/*
+ * Theme-change transitions, scoped to the properties that actually change.
+ * This used to be a bare `* { transition: ... }`, which animated every element
+ * on the page on first paint and during every hover.
+ */
+body,
+header,
+main,
+footer,
+aside,
+section,
+nav {
+  transition-property: background-color, border-color, color;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 200ms;
+}
+
+/* A visible focus ring everywhere, for keyboard users. */
+:focus-visible {
+  outline: 2px solid #4f46e5;
+  outline-offset: 2px;
+}
+
+.dark :focus-visible {
+  outline-color: #818cf8;
+}
+
+::selection {
+  background: rgba(79, 70, 229, 0.18);
+}
+
+@layer components {
+  /* ==========================================================================
+     Signal rail — the thin gradient strip pinned above the navigation.
+     ========================================================================== */
+
+  .signal-rail {
+    height: 3px;
+    width: 100%;
+    background: var(--rail);
+  }
+
+  /* ==========================================================================
+     Monospace labels
+     Machine-generated values (match scores, model versions, counts, statuses)
+     are set in mono so they read as instrument output rather than prose.
+     ========================================================================== */
+
+  .mono {
+    font-family: var(--font-mono);
+    font-feature-settings: "tnum" 1, "zero" 1;
+  }
+
+  /* Small uppercase eyebrow: "4 MATCHES FOR YOUR PROFILE", "GRAPH CONFIDENCE". */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    line-height: 1.2;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  .eyebrow-accent {
+    color: var(--accent);
+  }
+
+  /* Numeric readout, e.g. "94.2%". */
+  .readout {
+    font-family: var(--font-mono);
+    font-feature-settings: "tnum" 1;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+
+  /* ==========================================================================
+     Surfaces
+     ========================================================================== */
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 0.75rem;
+  }
+
+  .panel-flush {
+    background: var(--surface);
+    border: 1px solid var(--line);
+  }
+
+  /* Highlighted/selected state: emerald hairline plus the faintest tint. */
+  .panel-signal {
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+    background: color-mix(in srgb, var(--accent) 4%, var(--surface));
+  }
+
+  /* Graph-paper field, used behind AI/telemetry panels. */
+  .grid-field {
+    background-image: linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+    background-size: 34px 34px;
+  }
+
+  /* Full-bleed dark band for the "how it works" style sections. */
+  .band-dark {
+    background: #0b111c;
+    color: #f2f5f9;
+  }
+
+  .dark .band-dark {
+    background: #060a12;
+  }
+
+  /* ==========================================================================
+     Meters — flat, hairline progress bars for match strength.
+     ========================================================================== */
+
+  .meter {
+    position: relative;
+    height: 4px;
+    width: 100%;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--line);
+  }
+
+  .meter-fill {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: var(--accent);
+    transition: width 500ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Below the "strong match" threshold the bar goes neutral, so colour still
+     carries meaning at a glance without being the only signal. */
+  .meter-fill-muted {
+    background: var(--line-strong);
+  }
+
+  /* ==========================================================================
+     Chips — compact metadata tags (skills, salary band, location).
+     ========================================================================== */
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    border: 1px solid var(--line);
+    border-radius: 0.5rem;
+    background: var(--canvas);
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    line-height: 1.25;
+    color: var(--ink-muted);
+    white-space: nowrap;
+  }
+
+  .dark .chip {
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .chip-accent {
+    border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+
+  /* ==========================================================================
+     Buttons
+     ========================================================================== */
+
+  .btn-ink {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 0.5rem;
+    background: var(--btn-bg);
+    color: var(--btn-fg);
+    padding: 0.625rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    transition: background-color 150ms ease;
+  }
+
+  .btn-ink:hover:not(:disabled) {
+    background: var(--btn-bg-hover);
+  }
+
+  .btn-ink:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-outline {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--line-strong);
+    background: var(--surface);
+    color: var(--ink);
+    padding: 0.625rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    transition: background-color 150ms ease, border-color 150ms ease;
+  }
+
+  .btn-outline:hover:not(:disabled) {
+    background: var(--canvas);
+    border-color: var(--ink-faint);
+  }
+
+  .btn-outline:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* ==========================================================================
+     Fields
+     ========================================================================== */
+
+  .field {
+    width: 100%;
+    border: 1px solid var(--line-strong);
+    border-radius: 0.5rem;
+    background: var(--surface);
+    color: var(--ink);
+    padding: 0.625rem 0.875rem;
+    font-size: 0.9375rem;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+  }
+
+  .field::placeholder {
+    color: var(--ink-faint);
+  }
+
+  .field:focus {
+    outline: none;
+    border-color: #4f46e5;
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+  }
+
+  .dark .field:focus {
+    border-color: #818cf8;
+    box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.15);
+  }
+
+  .field:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  /* ==========================================================================
+     Status dot with a live pulse, for "LIVE" / connected indicators.
+     ========================================================================== */
+
+  .dot-live {
+    position: relative;
+    display: inline-block;
+    height: 0.5rem;
+    width: 0.5rem;
+    border-radius: 999px;
+    background: var(--accent);
+  }
+
+  .dot-live::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 999px;
+    background: var(--accent);
+    animation: signal-ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
+
+  @keyframes signal-ping {
+    0% {
+      transform: scale(1);
+      opacity: 0.65;
+    }
+    75%,
+    100% {
+      transform: scale(2.4);
+      opacity: 0;
+    }
+  }
+
+}
+
+/* ==========================================================================
+   Responsive container
+   ========================================================================== */
+
+.container-responsive {
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+@media (min-width: 640px) {
+  .container-responsive {
+    max-width: 640px;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .container-responsive {
+    max-width: 768px;
+    padding-left: 2rem;
+    padding-right: 2rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .container-responsive {
+    max-width: 1024px;
+    padding-left: 2.5rem;
+    padding-right: 2.5rem;
+  }
+}
+
+@media (min-width: 1280px) {
+  .container-responsive {
+    max-width: 1280px;
+    padding-left: 3rem;
+    padding-right: 3rem;
+  }
+}
+
+@media (min-width: 1536px) {
+  .container-responsive {
+    max-width: 1536px;
+    padding-left: 4rem;
+    padding-right: 4rem;
+  }
+}
+
+/* ==========================================================================
+   Animations
+   ========================================================================== */
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in-down {
+  from {
+    opacity: 0;
+    transform: translateY(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-fade-in-down {
+  animation: fade-in-down 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.delay-100 {
+  animation-delay: 100ms;
+}
+
+.delay-200 {
+  animation-delay: 200ms;
+}
+
+.delay-300 {
+  animation-delay: 300ms;
+}
+
+/* ==========================================================================
+   Utilities
+   ========================================================================== */
+
+/* Touch-friendly hit area on small screens, tightened up on pointer devices. */
+.btn-touch {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+@media (min-width: 768px) {
+  .btn-touch {
+    min-height: 40px;
+    min-width: 40px;
+  }
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ==========================================================================
+   Scrollbars
+   ========================================================================== */
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border: 3px solid var(--canvas);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-faint);
+}
