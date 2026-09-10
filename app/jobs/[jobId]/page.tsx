@@ -15,6 +15,8 @@ import {
   Icon,
   JobStateBadge,
   Label,
+  Meter,
+  MeterRow,
   Readout,
   Spinner,
   StatusBadge,
@@ -30,13 +32,36 @@ import { apiFetch } from "@/lib/clientAuth";
 /** The cover letter the API stores; anything past this is truncated server-side. */
 const MESSAGE_LIMIT = 2000;
 
+/**
+ * Mirror of `MatchBreakdown` in `lib/ai/matching.ts`.
+ *
+ * A bare cosine value is accurate but not explainable, so the headline score is
+ * a weighted blend of four facets and every facet comes back with it. Declared
+ * locally rather than imported: that module reaches for Prisma and must never
+ * end up in a client bundle.
+ */
+interface MatchBreakdown {
+  /** 0-100 composite, the headline figure. */
+  score: number;
+  facets: {
+    semantic: number;
+    skills: number;
+    location: number;
+    seniority: number;
+  };
+  /** Skills present on both sides - the evidence behind the score. */
+  sharedSkills: string[];
+  /** Skills the posting names that the profile does not evidence. */
+  missingSkills: string[];
+}
+
 interface JobApplication {
   id: string;
   status: string;
   createdAt: string;
 }
 
-/** `GET /api/jobs/:jobId`. The last three fields only appear for a signed-in caller. */
+/** `GET /api/jobs/:jobId`. The last four fields only appear for a signed-in caller. */
 interface JobDetail {
   id: string;
   title: string;
@@ -49,10 +74,14 @@ interface JobDetail {
   company?: { id: string; name: string; profile?: string | null };
   createdAt: string;
   isActive: boolean;
+  /** Skill tags on the posting itself; public, and empty until it is indexed. */
+  skills?: string[];
   _count?: { applications: number };
   hasApplied?: boolean;
   application?: JobApplication | null;
   isOwner?: boolean;
+  /** Present only for a seeker whose profile and this job both have vectors. */
+  match?: MatchBreakdown | null;
 }
 
 export default function JobDetailsPage({ params }: { params: Promise<{ jobId: string }> }) {
@@ -91,8 +120,8 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
     }
   }, [jobId]);
 
-  // Refetched when the signed-in user changes, because `hasApplied`, `application`
-  // and `isOwner` are all derived from the caller's session.
+  // Refetched when the signed-in user changes, because `hasApplied`, `application`,
+  // `isOwner` and `match` are all derived from the caller's session.
   useEffect(() => {
     void fetchJob();
   }, [fetchJob, user?.id]);
@@ -157,6 +186,12 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
   const existingApplication = submitted ?? job.application ?? null;
   const alreadyApplied = mounted && (Boolean(submitted) || job.hasApplied === true);
 
+  // The one gate for the whole breakdown. `null` covers every degraded path:
+  // signed out, a company account, a profile with no vector, a job that has not
+  // been indexed, and Gemini switched off entirely.
+  const match = job.match ?? null;
+  const skills = job.skills ?? [];
+
   return (
     <PageShell>
       <Link href="/jobs" className={`${buttonGhost} -ml-2.5 mb-5`}>
@@ -192,6 +227,19 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
           )}
           {job.salary && <Chip icon={<Icon.money className="h-3.5 w-3.5" />}>{job.salary}</Chip>}
         </div>
+
+        {/* The posting's own skill tags, on their own line so they do not read
+            as more location/salary metadata. Empty until the job is indexed. */}
+        {skills.length > 0 && (
+          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+            <Eyebrow as="span" className="mr-1">
+              Skills
+            </Eyebrow>
+            {skills.map((skill) => (
+              <Chip key={skill}>{skill}</Chip>
+            ))}
+          </div>
+        )}
       </header>
 
       <div className="grid gap-5 lg:grid-cols-3 lg:gap-6">
@@ -354,6 +402,25 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
             </Card>
           )}
 
+          {/* Sits above the fact readout: the score is about *this reader*, the
+              facts below are about the role, and the personal thing goes first. */}
+          {match && <MatchPanel match={match} />}
+
+          {/* No score and nothing to score against. One line, no panel — an
+              empty breakdown frame would be worse than none at all. */}
+          {!match && isSeeker && (
+            <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+              Fit scoring is off for you until your profile is indexed.{" "}
+              <Link
+                href="/seeker/dashboard"
+                className="font-medium text-gray-900 underline underline-offset-2 hover:no-underline dark:text-white"
+              >
+                Add a r&eacute;sum&eacute; or profile details
+              </Link>{" "}
+              to see how this role lines up.
+            </p>
+          )}
+
           {/* The fact readout: mono values under mono captions, on the
               graph-paper field used for telemetry elsewhere in the app. */}
           <Card grid className="p-4 sm:p-5">
@@ -376,6 +443,107 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
 /* -------------------------------------------------------------------------- */
 /* Pieces                                                                      */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * The match breakdown.
+ *
+ * The point of showing all four facets rather than one number is that "78%"
+ * with nothing behind it invites distrust — and a seeker can act on "skills
+ * overlap is thin" in a way they cannot act on a composite. Rendered only when
+ * a breakdown actually exists; there is no zero state here by design.
+ */
+function MatchPanel({ match }: { match: MatchBreakdown }) {
+  return (
+    <Card grid className="p-4 sm:p-5">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <span
+            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border border-green-200 bg-green-50 text-green-600 dark:border-green-800 dark:bg-green-900/25 dark:text-green-400"
+            aria-hidden="true"
+          >
+            <Icon.graph className="h-4 w-4" />
+          </span>
+          <h2 className="truncate text-sm font-semibold text-gray-900 dark:text-white">
+            Match breakdown
+          </h2>
+        </div>
+        {/* Our own scoring revision, not a model version — inventing one would
+            be a claim we cannot stand behind. */}
+        <Eyebrow as="span" className="flex-shrink-0 pt-1.5">
+          Signal v1
+        </Eyebrow>
+      </div>
+
+      {/* Headline: the composite, as digits and as bar length. */}
+      <div className="mb-5 border-b border-gray-200 pb-4 dark:border-gray-700">
+        <span className="flex items-baseline gap-1.5">
+          <Icon.pulse
+            className="h-4 w-4 flex-shrink-0 self-center text-green-600 dark:text-green-400"
+            aria-hidden="true"
+          />
+          <Readout className="text-3xl font-semibold leading-none text-gray-900 dark:text-white sm:text-4xl">
+            {match.score}
+          </Readout>
+          <Readout className="text-lg font-semibold leading-none text-gray-400 dark:text-gray-500">
+            %
+          </Readout>
+        </span>
+        <Eyebrow className="mt-2">Profile fit</Eyebrow>
+        <Meter
+          value={match.score}
+          label={`Overall profile fit: ${match.score} out of 100`}
+          className="mt-3"
+        />
+      </div>
+
+      {/* The four facets that produced the number above. */}
+      <div className="space-y-3">
+        <MeterRow label="Semantic fit" value={match.facets.semantic} />
+        <MeterRow label="Skills overlap" value={match.facets.skills} />
+        <MeterRow label="Location" value={match.facets.location} />
+        <MeterRow label="Seniority" value={match.facets.seniority} />
+      </div>
+
+      {match.sharedSkills.length > 0 && (
+        <div className="mt-5">
+          <Eyebrow accent className="mb-2">
+            Matched
+          </Eyebrow>
+          <div className="flex flex-wrap gap-1.5">
+            {match.sharedSkills.map((skill) => (
+              <Chip key={skill} accent>
+                {skill}
+              </Chip>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {match.missingSkills.length > 0 && (
+        <div className="mt-4">
+          <Eyebrow className="mb-2">Not evidenced</Eyebrow>
+          <div className="flex flex-wrap gap-1.5">
+            {match.missingSkills.map((skill) => (
+              <Chip key={skill}>{skill}</Chip>
+            ))}
+          </div>
+          {/* Deliberately not "missing": the posting asks for these and your
+              profile does not mention them, which is a prompt to update the
+              profile at least as often as it is a reason not to apply. */}
+          <p className="mt-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+            The posting names these and your profile doesn&rsquo;t mention them yet. Worth adding if
+            you have them.
+          </p>
+        </div>
+      )}
+
+      <p className="mt-5 border-t border-gray-200 pt-4 text-xs leading-relaxed text-gray-500 dark:border-gray-700 dark:text-gray-400">
+        Scored by comparing your profile with this posting. It is guidance to help you decide where
+        to spend your time, not a decision — the company reads every application it receives.
+      </p>
+    </Card>
+  );
+}
 
 /** Page chrome shared by the job, the error state and the skeleton. */
 function PageShell({ children }: { children: React.ReactNode }) {

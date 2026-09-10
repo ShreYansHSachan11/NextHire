@@ -161,8 +161,18 @@ export function cleanTagList(value: unknown, max: number = MAX_SKILLS): string[]
   return tags;
 }
 
-/** Clamps a years-of-experience figure to something a person could plausibly have. */
+/**
+ * Clamps a years-of-experience figure to something a person could plausibly have.
+ *
+ * Absent values return null, not 0. `Number(null)` and `Number('')` are both 0,
+ * so a naive coercion would record "zero years of experience" for anyone who
+ * simply left the field blank — and because the field is presence-gated on the
+ * profile route, a blank box does get sent.
+ */
 export function cleanYearsOfExperience(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'string' && value.trim() === '') return null;
+
   const years = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(years)) return null;
   return Math.max(0, Math.min(60, Math.trunc(years)));

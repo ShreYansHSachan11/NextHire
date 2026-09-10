@@ -15,6 +15,8 @@ import {
   Eyebrow,
   Icon,
   Label,
+  MatchScore,
+  Meter,
   PageHeading,
   buttonGhost,
   buttonPrimary,
@@ -26,9 +28,29 @@ import { apiFetch } from "@/lib/clientAuth";
 import { JOB_TYPES } from "@/lib/validation";
 
 /**
+ * Mirror of `MatchBreakdown` in `lib/ai/matching.ts`.
+ *
+ * The headline figure is a weighted blend of the four facets, and every facet
+ * rides along so the UI can show what produced it. Declared locally rather than
+ * imported because that module reaches for Prisma and must never be pulled into
+ * a client bundle.
+ */
+interface MatchBreakdown {
+  score: number;
+  facets: { semantic: number; skills: number; location: number; seniority: number };
+  sharedSkills: string[];
+  missingSkills: string[];
+}
+
+/**
  * One row of `GET /api/jobs`. The feed is active-only, so `isActive` is always
  * true here. Nullable columns come back as `null`, matching `jobsSlice`, so the
  * list round-trips through Redux without a cast.
+ *
+ * `match` and `relevance` are optional on purpose: the first is present only
+ * for a signed-in seeker with an indexed profile, the second only on the
+ * results of a `?q=` search. Everything that renders them is gated on the
+ * value actually being there.
  */
 interface JobListItem {
   id: string;
@@ -43,9 +65,22 @@ interface JobListItem {
   createdAt: string;
   isActive: boolean;
   _count?: { applications: number };
+  skills?: string[];
+  match?: MatchBreakdown | null;
+  /** 0-100 retrieval score, present only on results of a `?q=` search. */
+  relevance?: number | null;
 }
 
-type SortKey = "newest" | "applicants";
+/** The `?meta=1` envelope. Without it the route still returns a bare array. */
+interface JobFeedResponse {
+  jobs: JobListItem[];
+  /** True when the server ranked these rows by semantic relevance. */
+  semantic: boolean;
+  /** True when the caller is a seeker whose profile has a vector. */
+  matched: boolean;
+}
+
+type SortKey = "newest" | "applicants" | "match";
 
 interface Filters {
   location: string;
@@ -57,6 +92,9 @@ const EMPTY_FILTERS: Filters = { location: "", experience: "", type: "" };
 
 /** A posting is flagged "New" for its first week on the feed. */
 const NEW_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Evidence, not decoration - three named skills is enough to earn a score. */
+const CARD_SKILL_LIMIT = 3;
 
 /**
  * `useSearchParams` opts the subtree into client-side rendering, which Next 15
@@ -80,44 +118,74 @@ export default function JobsPage() {
 function JobsFeed() {
   const dispatch = useDispatch<AppDispatch>();
   const jobList: JobListItem[] = useSelector((state: RootState) => state.jobs.jobs);
+  const { user, isAuthenticated } = useSelector((state: RootState) => state.auth);
 
   // The homepage hero links here as `/jobs?q=…&location=…`. They seed the local
-  // state once; from then on this is an ordinary client-side filter, so editing
-  // a field does not need to round-trip through the URL.
+  // state once; from then on this is ordinary local state, so editing a field
+  // does not need to round-trip through the URL.
   const searchParams = useSearchParams();
   const initialQuery = searchParams.get("q")?.trim() ?? "";
   const initialLocation = searchParams.get("location")?.trim() ?? "";
 
   const [loading, setLoading] = useState(true);
+  // A search re-request must not blank the list out from under the reader, so
+  // only the first load shows skeletons; later ones dim the grid in place.
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
 
-  // Two pieces of search state: what the user is typing, and the debounced value
-  // the filter actually runs on. Filtering on every keystroke re-rendered the
-  // whole list for each character.
+  // Two pieces of search state: what the user is typing, and the debounced
+  // value that actually drives the request. Search is a server round-trip now,
+  // so firing on every keystroke would spend an embedding call per character.
   const [searchInput, setSearchInput] = useState(initialQuery);
-  const [search, setSearch] = useState(initialQuery.toLowerCase());
+  const [search, setSearch] = useState(initialQuery);
   const [filters, setFilters] = useState<Filters>({ ...EMPTY_FILTERS, location: initialLocation });
   const [sort, setSort] = useState<SortKey>("newest");
 
-  const fetchJobs = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError("");
-      const jobs = await apiFetch<JobListItem[]>("/api/jobs");
-      dispatch(setJobs(jobs));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load jobs");
-    } finally {
-      setLoading(false);
-    }
-  }, [dispatch]);
+  // Read off the `?meta=1` envelope: `semantic` says the server ranked these
+  // rows, `matched` says the caller has an indexed profile.
+  const [semantic, setSemantic] = useState(false);
+  const [matched, setMatched] = useState<boolean | null>(null);
+  const [indexHintDismissed, setIndexHintDismissed] = useState(false);
+
+  // Redux rehydrates the session from the cookie inside an effect, so the first
+  // client render must not assume a role. The fetch is unaffected: `apiFetch`
+  // reads the cookie directly, so matches arrive on the very first call.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  const fetchJobs = useCallback(
+    async (term: string) => {
+      try {
+        setRefreshing(true);
+        setError("");
+
+        const params = new URLSearchParams({ meta: "1" });
+        // An empty term is simply omitted, which returns the plain listing.
+        if (term) params.set("q", term);
+
+        const data = await apiFetch<JobFeedResponse>(`/api/jobs?${params.toString()}`);
+        dispatch(setJobs(data.jobs));
+        setSemantic(data.semantic);
+        setMatched(data.matched);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load jobs");
+      } finally {
+        setRefreshing(false);
+        setLoading(false);
+      }
+    },
+    [dispatch]
+  );
+
+  // The debounced term is the only fetch key. Deliberately not keyed on the
+  // signed-in user: the cookie is already on the first request, so re-running
+  // when Redux rehydrates would just double every page load.
+  useEffect(() => {
+    void fetchJobs(search);
+  }, [fetchJobs, search]);
 
   useEffect(() => {
-    void fetchJobs();
-  }, [fetchJobs]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => setSearch(searchInput.trim().toLowerCase()), 250);
+    const timer = window.setTimeout(() => setSearch(searchInput.trim()), 250);
     return () => window.clearTimeout(timer);
   }, [searchInput]);
 
@@ -142,26 +210,56 @@ function JobsFeed() {
 
   const hasFilters = Boolean(search || filters.location || filters.experience || filters.type);
 
-  const visibleJobs = useMemo(() => {
-    const matched = jobList.filter((job) => {
-      const haystack = [job.title, job.company?.name, job.description, job.location, job.type]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+  // "Best match" only exists when there is something to sort by. Anonymous
+  // visitors, company accounts and un-indexed seekers never see the option.
+  const hasMatches = useMemo(() => jobList.some((job) => job.match), [jobList]);
+  // Covers the case where the option disappears (a sign-out, or a result set
+  // with no scored rows) while "match" is still the selected value.
+  const activeSort: SortKey = sort === "match" && !hasMatches ? "newest" : sort;
 
-      if (search && !haystack.includes(search)) return false;
+  const visibleJobs = useMemo(() => {
+    // When the server ranked semantically, its result set *is* the answer for
+    // this term, so no substring test is applied on top: that would discard
+    // exactly the rows semantic retrieval exists to surface - the role that
+    // never says "frontend" but is one. The selects still apply, because those
+    // are facts about the posting rather than a guess at relevance.
+    const needle = semantic ? "" : search.toLowerCase();
+
+    const filtered = jobList.filter((job) => {
+      if (needle) {
+        const haystack = [job.title, job.company?.name, job.description, job.location, job.type]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(needle)) return false;
+      }
       if (!equalsIgnoreCase(job.location, filters.location)) return false;
       if (!equalsIgnoreCase(job.experience, filters.experience)) return false;
       if (!equalsIgnoreCase(job.type, filters.type)) return false;
       return true;
     });
 
-    return [...matched].sort((a, b) =>
-      sort === "applicants"
-        ? (b._count?.applications ?? 0) - (a._count?.applications ?? 0)
-        : new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    // Sorting by match is done in memory rather than by re-requesting with
+    // `&sort=match`: the scores are already on the rows, so ordering them here
+    // is instant and costs no round-trip. The server's `?sort=match` stays
+    // available for any client that pages instead of loading the feed whole.
+    if (activeSort === "match") {
+      // Unscored rows sort to the end, not the top - which is what `?? -1`
+      // buys over `?? 0`, and mirrors what the route does server-side.
+      return [...filtered].sort((a, b) => (b.match?.score ?? -1) - (a.match?.score ?? -1));
+    }
+    if (activeSort === "applicants") {
+      return [...filtered].sort(
+        (a, b) => (b._count?.applications ?? 0) - (a._count?.applications ?? 0)
+      );
+    }
+    // Default order. Under a semantic search that order is already the server's
+    // relevance ranking, so re-sorting by date here would throw it away.
+    if (semantic) return filtered;
+    return [...filtered].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
-  }, [jobList, search, filters, sort]);
+  }, [jobList, search, semantic, filters, activeSort]);
 
   const clearFilters = () => {
     setSearchInput("");
@@ -169,12 +267,22 @@ function JobsFeed() {
     setFilters(EMPTY_FILTERS);
   };
 
+  // One quiet nudge, shown only to the person it can help: a signed-in seeker
+  // whose profile has no vector yet. Everyone else sees the feed unchanged.
+  const showIndexHint =
+    mounted &&
+    isAuthenticated &&
+    user?.role === "SEEKER" &&
+    matched === false &&
+    !indexHintDismissed &&
+    !error;
+
   return (
     <FeedShell>
       <PageHeading
         eyebrow="Live job feed"
         title="Open roles"
-        description="Every role currently accepting applications on NextHire, filtered client-side as you type."
+        description="Every role currently accepting applications on NextHire."
         className="mb-6"
       />
 
@@ -182,7 +290,7 @@ function JobsFeed() {
         <Alert variant="error" className="mb-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <span>{error}</span>
-            <button type="button" onClick={() => void fetchJobs()} className={buttonPrimary}>
+            <button type="button" onClick={() => void fetchJobs(search)} className={buttonPrimary}>
               Try again
             </button>
           </div>
@@ -242,17 +350,45 @@ function JobsFeed() {
               <Label htmlFor="sort-jobs">Sort</Label>
               <select
                 id="sort-jobs"
-                value={sort}
+                value={activeSort}
                 onChange={(event) => setSort(event.target.value as SortKey)}
                 className={inputClass}
               >
-                <option value="newest">Newest first</option>
+                {/* Same value, honest label: the default order under a semantic
+                    search is the server's relevance ranking, not the date. */}
+                <option value="newest">{semantic ? "Best relevance" : "Newest first"}</option>
                 <option value="applicants">Most applicants</option>
+                {hasMatches && <option value="match">Best match</option>}
               </select>
             </div>
           </div>
         </Card>
       </section>
+
+      {showIndexHint && (
+        <Alert variant="info" className="mb-4 sm:mb-5">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <span>
+              Your profile isn&rsquo;t indexed yet, so these roles aren&rsquo;t scored for fit.{" "}
+              <Link
+                href="/seeker/dashboard"
+                className="font-semibold underline underline-offset-2 hover:no-underline"
+              >
+                Add a r&eacute;sum&eacute; or profile details
+              </Link>
+              .
+            </span>
+            <button
+              type="button"
+              onClick={() => setIndexHintDismissed(true)}
+              className="eyebrow flex-shrink-0 rounded p-1 hover:text-gray-900 dark:hover:text-white"
+            >
+              <Icon.x className="h-3.5 w-3.5" aria-hidden="true" />
+              <span className="sr-only">Dismiss</span>
+            </button>
+          </div>
+        </Alert>
+      )}
 
       {/* Result count, read as instrument output: "12 ROLES MATCHED". */}
       {!loading && !error && (
@@ -260,14 +396,24 @@ function JobsFeed() {
           className="mb-4 flex flex-wrap items-center justify-between gap-2 sm:mb-5"
           aria-live="polite"
         >
-          <Eyebrow>
-            {visibleJobs.length === 0
-              ? "No roles matched"
-              : `${visibleJobs.length} ${visibleJobs.length === 1 ? "role" : "roles"} matched`}
-            {hasFilters && visibleJobs.length > 0 && (
-              <span className="text-gray-400 dark:text-gray-500"> / {jobList.length} total</span>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <Eyebrow as="span">
+              {visibleJobs.length === 0
+                ? "No roles matched"
+                : `${visibleJobs.length} ${visibleJobs.length === 1 ? "role" : "roles"} matched`}
+              {hasFilters && !semantic && visibleJobs.length > 0 && (
+                <span className="text-gray-400 dark:text-gray-500"> / {jobList.length} total</span>
+              )}
+            </Eyebrow>
+
+            {/* Explains why a result with no keyword overlap is on the list. */}
+            {semantic && (
+              <Eyebrow as="span" accent className="inline-flex items-center gap-1">
+                <Icon.spark className="h-3.5 w-3.5" aria-hidden="true" />
+                Semantic match
+              </Eyebrow>
             )}
-          </Eyebrow>
+          </div>
 
           {hasFilters && (
             <button type="button" onClick={clearFilters} className={buttonGhost}>
@@ -281,7 +427,12 @@ function JobsFeed() {
       {loading ? (
         <JobSkeletonGrid />
       ) : visibleJobs.length > 0 ? (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-5">
+        <div
+          className={`grid grid-cols-1 gap-4 transition-opacity lg:grid-cols-2 lg:gap-5 ${
+            refreshing ? "opacity-60" : ""
+          }`}
+          aria-busy={refreshing}
+        >
           {visibleJobs.map((job) => (
             <JobCard key={job.id} job={job} />
           ))}
@@ -404,6 +555,14 @@ function JobCard({ job }: { job: JobListItem }) {
   const applicants = job._count?.applications ?? 0;
   const isNew = Date.now() - new Date(job.createdAt).getTime() < NEW_WINDOW_MS;
 
+  // Every match affordance hangs off this one binding. When it is null - an
+  // anonymous visitor, a company account, a seeker with no indexed profile, or
+  // no `GEMINI_API_KEY` at all - the card renders exactly as it did before
+  // matching existed. That is the whole contract.
+  const match = job.match ?? null;
+  const sharedSkills = match?.sharedSkills.slice(0, CARD_SKILL_LIMIT) ?? [];
+  const extraSkills = (match?.sharedSkills.length ?? 0) - sharedSkills.length;
+
   return (
     // The card is a plain surface and the title carries the only anchor, which
     // is stretched over the card with `after:absolute`. That keeps one link per
@@ -445,6 +604,9 @@ function JobCard({ job }: { job: JobListItem }) {
               New
             </span>
           )}
+          {/* The score takes the prominent slot; the applicant count stays,
+              one line down, because it is still the competitive signal. */}
+          {match && <MatchScore value={match.score} caption="Profile fit" />}
           <Eyebrow as="span">{formatCount(applicants)} applied</Eyebrow>
         </div>
       </div>
@@ -462,6 +624,23 @@ function JobCard({ job }: { job: JobListItem }) {
         {job.salary && <Chip icon={<Icon.money className="h-3.5 w-3.5" />}>{job.salary}</Chip>}
       </div>
 
+      {/* A number on its own is an assertion. These are the receipts for it. */}
+      {sharedSkills.length > 0 && (
+        <div className="mt-3">
+          <Eyebrow accent className="mb-1.5">
+            Matched skills
+          </Eyebrow>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {sharedSkills.map((skill) => (
+              <Chip key={skill} accent>
+                {skill}
+              </Chip>
+            ))}
+            {extraSkills > 0 && <Eyebrow as="span">+{extraSkills} more</Eyebrow>}
+          </div>
+        </div>
+      )}
+
       <div className="mt-4 flex items-center justify-between gap-3 border-t border-gray-200 pt-3 dark:border-gray-700">
         <Eyebrow as="span">Posted {formatDate(job.createdAt)}</Eyebrow>
         <span
@@ -472,6 +651,16 @@ function JobCard({ job }: { job: JobListItem }) {
           <Icon.arrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
         </span>
       </div>
+
+      {/* The score again, as length rather than digits: legible at a glance
+          across a two-column grid, and neutral rather than red when it is low. */}
+      {match && (
+        <Meter
+          value={match.score}
+          label={`Profile fit: ${match.score} out of 100`}
+          className="mt-3"
+        />
+      )}
     </Card>
   );
 }

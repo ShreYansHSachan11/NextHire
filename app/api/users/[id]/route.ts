@@ -14,7 +14,7 @@ import {
   isUuid,
   type SessionUser,
 } from '@/lib/auth';
-import { cleanString, cleanText, cleanUrl, isValidEmail } from '@/lib/validation';
+import { cleanString, cleanText, cleanUrl, isValidEmail, cleanYearsOfExperience } from '@/lib/validation';
 import { queueProfileEmbedding } from '@/lib/ai/embeddings';
 
 /**
@@ -38,12 +38,6 @@ function cleanSeniority(value: unknown): string | null {
   const raw = cleanString(value, 40);
   if (!raw) return null;
   return SENIORITY_LEVELS.find((level) => level.toLowerCase() === raw.toLowerCase()) ?? null;
-}
-
-function cleanYears(value: unknown): number | null {
-  const years = Number(value);
-  if (!Number.isFinite(years)) return null;
-  return Math.min(60, Math.max(0, Math.trunc(years)));
 }
 
 function cleanSkillTags(value: unknown): string[] {
@@ -147,7 +141,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
   if ('headline' in body) data.headline = cleanString(body.headline, 140);
   if ('skills' in body) data.skills = cleanSkillTags(body.skills);
   if ('seniority' in body) data.seniority = cleanSeniority(body.seniority);
-  if ('yearsOfExp' in body) data.yearsOfExp = cleanYears(body.yearsOfExp);
+  if ('yearsOfExp' in body) data.yearsOfExp = cleanYearsOfExperience(body.yearsOfExp);
 
   try {
     const existing = await prisma.user.findUnique({

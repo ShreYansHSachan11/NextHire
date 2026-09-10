@@ -82,6 +82,128 @@ interface Resume {
 
 type StatusFilter = "ALL" | ApplicationStatus;
 
+/** Mirrors `MatchBreakdown` in `lib/ai/matching.ts`; only the score and the
+ *  shared skills are surfaced here — the facet breakdown belongs on the job
+ *  page, where there is room to explain it. */
+interface MatchBreakdown {
+  score: number;
+  facets: { semantic: number; skills: number; location: number; seniority: number };
+  sharedSkills: string[];
+  missingSkills: string[];
+}
+
+interface RecommendedJob {
+  id: string;
+  title: string;
+  location?: string | null;
+  type?: string | null;
+  skills?: string[];
+  company?: { id: string; name: string } | null;
+  _count?: { applications: number };
+  /** Null when there was no semantic signal on either side — see `computeMatch`. */
+  match: MatchBreakdown | null;
+}
+
+/**
+ * `GET /api/jobs/recommended` answers 200 in every ordinary case. `reason` says
+ * which of the three empty states applies, so an absent list is never confused
+ * with a failure.
+ */
+interface RecommendedResponse {
+  jobs: RecommendedJob[];
+  reason: "no-profile" | "disabled" | null;
+}
+
+/**
+ * What the résumé parser extracted, and what the user row keeps of it.
+ * `strengths` is the exception: the model returns it, nothing stores it, so it
+ * is present straight after an analysis and absent on a cold load.
+ */
+interface ProfileSignal {
+  headline: string | null;
+  seniority: string | null;
+  yearsOfExp: number | null;
+  skills: string[];
+  summary: string | null;
+  strengths: string[];
+  updatedAt: string | null;
+}
+
+/**
+ * "loading" and "hidden" are both silent: a recommendation strip is a bonus,
+ * and a bonus that failed has nothing to say to the person reading the page.
+ */
+type RecommendState = "loading" | "ready" | "no-profile" | "hidden";
+
+/* -------------------------------------------------------------------------- */
+/* Untrusted JSON readers                                                      */
+/* -------------------------------------------------------------------------- */
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function readString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function readNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function readStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.reduce<string[]>((tags, entry) => {
+    const tag = readString(entry);
+    if (tag) tags.push(tag);
+    return tags;
+  }, []);
+}
+
+/** An empty extraction is worth nothing on screen, so it reads as absent. */
+function orNull(signal: ProfileSignal): ProfileSignal | null {
+  return signal.headline || signal.summary || signal.skills.length > 0 ? signal : null;
+}
+
+/**
+ * Reads the AI-derived half of a user row off whatever object is to hand — the
+ * rehydrated Redux user, or the `/api/users/:id` record. Both are read through
+ * the same reader because the JWT carries only session fields, so the store
+ * frequently has none of these and the record is the fallback.
+ */
+function readStoredSignal(source: unknown): ProfileSignal | null {
+  if (!isRecord(source)) return null;
+  return orNull({
+    headline: readString(source.headline),
+    seniority: readString(source.seniority),
+    yearsOfExp: readNumber(source.yearsOfExp),
+    skills: readStringList(source.skills),
+    summary: readString(source.aiSummary),
+    strengths: [],
+    updatedAt: readString(source.aiUpdatedAt),
+  });
+}
+
+/** The `POST /api/ai/resume` body, which names `summary`/`updatedAt` directly. */
+function readAnalysis(source: unknown): ProfileSignal | null {
+  if (!isRecord(source)) return null;
+  return orNull({
+    headline: readString(source.headline),
+    seniority: readString(source.seniority),
+    yearsOfExp: readNumber(source.yearsOfExp),
+    skills: readStringList(source.skills),
+    summary: readString(source.summary),
+    strengths: readStringList(source.strengths),
+    updatedAt: readString(source.updatedAt),
+  });
+}
+
+function readErrorMessage(payload: unknown): string | null {
+  return isRecord(payload) ? readString(payload.error) : null;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Presentation constants                                                      */
 /* -------------------------------------------------------------------------- */
@@ -116,6 +238,16 @@ const STAGE_CAPTION: Record<ApplicationStatus, string> = {
   REJECTED: "Closed",
 };
 
+/** Six fills two rows of three on a wide screen and still reads on a phone. */
+const RECOMMENDED_LIMIT = 6;
+
+/**
+ * Where a match stops being "worth a look" and starts being "this is you". The
+ * route already floors recommendations at 40, so every card here has cleared a
+ * bar — the emerald fill is reserved for the top of that range.
+ */
+const STRONG_MATCH = 70;
+
 const FILTERS: readonly StatusFilter[] = ["ALL", ...APPLICATION_STATUSES];
 
 const FILTER_LABELS: Record<StatusFilter, string> = {
@@ -146,6 +278,22 @@ export default function SeekerDashboardPage() {
 
   const [messagingId, setMessagingId] = useState<string | null>(null);
   const [withdrawingId, setWithdrawingId] = useState<string | null>(null);
+
+  const [recommendations, setRecommendations] = useState<RecommendedJob[]>([]);
+  const [recommendState, setRecommendState] = useState<RecommendState>("loading");
+
+  /**
+   * Null until something has told us either way. The recommendations probe and
+   * the résumé parser both key off the same `isAiEnabled()`, so one 'disabled'
+   * or one 503 settles it for the session and every AI affordance retires
+   * quietly — no toast, no dead button, no panel that never resolves.
+   */
+  const [aiEnabled, setAiEnabled] = useState<boolean | null>(null);
+
+  const [signal, setSignal] = useState<ProfileSignal | null>(null);
+  const [analysing, setAnalysing] = useState(false);
+  /** The one thing worth saying in-panel: "there is no file to read". */
+  const [analyseNotice, setAnalyseNotice] = useState("");
 
   const resumeSectionRef = useRef<HTMLElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -187,11 +335,69 @@ export default function SeekerDashboardPage() {
     }
   }, []);
 
+  const loadRecommended = useCallback(async () => {
+    setRecommendState("loading");
+    try {
+      const data = await apiFetch<RecommendedResponse>(
+        `/api/jobs/recommended?limit=${RECOMMENDED_LIMIT}`
+      );
+      const reason = data?.reason ?? null;
+
+      if (reason === "disabled") {
+        setAiEnabled(false);
+        setRecommendations([]);
+        setRecommendState("hidden");
+        return;
+      }
+
+      setAiEnabled(true);
+      const jobs = Array.isArray(data?.jobs) ? data.jobs : [];
+      setRecommendations(jobs);
+      // An empty list with no reason means nothing cleared the score floor.
+      // There is no useful prompt for that, so the strip stands down.
+      setRecommendState(reason === "no-profile" ? "no-profile" : jobs.length > 0 ? "ready" : "hidden");
+    } catch (error) {
+      // Never an error state: the dashboard's job is the application list, and
+      // a failed bonus panel must not look like a broken page.
+      console.error("Failed to load recommendations:", error);
+      setRecommendations([]);
+      setRecommendState("hidden");
+    }
+  }, []);
+
   useEffect(() => {
     if (!allowed) return;
     void loadApplications();
     void loadResume();
-  }, [allowed, loadApplications, loadResume]);
+    void loadRecommended();
+  }, [allowed, loadApplications, loadResume, loadRecommended]);
+
+  // Whatever a previous analysis left on the row, so the panel is not empty on
+  // a cold load. The JWT carries only session fields, so the store usually has
+  // none of this and the user record is the fallback — and failing to read it
+  // is not worth telling anybody about, since the panel simply stays quiet.
+  useEffect(() => {
+    if (!allowed || !user?.id) return;
+
+    const fromStore = readStoredSignal(user);
+    if (fromStore) {
+      setSignal(fromStore);
+      return;
+    }
+
+    let cancelled = false;
+    apiFetch<unknown>(`/api/users/${user.id}`)
+      .then((record) => {
+        if (!cancelled) setSignal(readStoredSignal(record));
+      })
+      .catch((error: unknown) => {
+        console.error("Could not load your extracted profile:", error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [allowed, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ---------------------------------------------------------------------- */
   /* Derived data                                                            */
@@ -345,6 +551,68 @@ export default function SeekerDashboardPage() {
     }
   };
 
+  /**
+   * Reads the resume on file into a structured profile.
+   *
+   * Raw `fetch` rather than `apiFetch`, because the status code is the whole
+   * decision here: 503 means this deployment has no model and the button should
+   * disappear, 404 means there is nothing to read and the answer is an upload
+   * prompt, and only what is left is a genuine failure worth a toast.
+   */
+  const analyseResume = async () => {
+    setAnalyseNotice("");
+    setAnalysing(true);
+    try {
+      const response = await fetch("/api/ai/resume", { method: "POST", headers: authHeaders() });
+      const text = await response.text();
+      let payload: unknown = null;
+      try {
+        payload = text ? JSON.parse(text) : null;
+      } catch {
+        payload = null;
+      }
+
+      if (response.status === 503) {
+        setAiEnabled(false);
+        return;
+      }
+
+      if (response.status === 404) {
+        setAnalyseNotice(
+          readErrorMessage(payload) ??
+            "Upload a resume first and we will read it into your profile."
+        );
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          readErrorMessage(payload) ?? "We could not read your resume. Please try again."
+        );
+      }
+
+      const extracted = readAnalysis(payload);
+      if (!extracted) {
+        throw new Error("We could not find a professional profile in that file.");
+      }
+
+      setSignal(extracted);
+      setAiEnabled(true);
+      toast.success("Resume read into your profile");
+
+      // The profile vector was just rewritten, so anything already on screen is
+      // scored against a profile that no longer exists.
+      void loadRecommended();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "We could not read your resume";
+      console.error("Resume analysis failed:", error);
+      toast.error(message);
+    } finally {
+      setAnalysing(false);
+    }
+  };
+
   /* ---------------------------------------------------------------------- */
   /* Render                                                                  */
   /* ---------------------------------------------------------------------- */
@@ -485,6 +753,79 @@ export default function SeekerDashboardPage() {
             </button>
           </Card>
         </section>
+
+        {/* Roles scored against the profile vector. The whole section is absent
+            when the deployment has no model, when the fetch failed, or when
+            nothing cleared the score floor — there is no half-state. */}
+        {recommendState !== "hidden" && (
+          <section aria-labelledby="matched-heading" className="mt-6">
+            <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+              <div className="min-w-0">
+                <Eyebrow className="mb-1.5 flex items-center gap-1.5" as="div">
+                  <Icon.spark className="h-3.5 w-3.5" />
+                  Profile match
+                </Eyebrow>
+                <h2
+                  id="matched-heading"
+                  className="text-lg font-semibold text-gray-900 dark:text-white sm:text-xl"
+                >
+                  Matched to you
+                </h2>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  Open roles scored against your profile, strongest fit first.
+                </p>
+              </div>
+              {recommendState === "ready" && (
+                <Eyebrow>{recommendations.length} roles scored</Eyebrow>
+              )}
+            </div>
+
+            <div aria-live="polite" aria-busy={recommendState === "loading"}>
+              {recommendState === "loading" ? (
+                <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
+                  {Array.from({ length: 3 }, (_, index) => (
+                    <MatchCardSkeleton key={index} />
+                  ))}
+                  <span className="sr-only">Scoring roles against your profile</span>
+                </div>
+              ) : recommendState === "no-profile" ? (
+                // The state that teaches the feature. Two doors, both short:
+                // the file we can read, or the fields they can type.
+                <Card grid className="p-4 sm:p-6">
+                  <Eyebrow accent className="mb-1.5 flex items-center gap-1.5" as="div">
+                    <Icon.graph className="h-3.5 w-3.5" />
+                    Matching not started
+                  </Eyebrow>
+                  <h3 className="text-base font-semibold text-gray-900 dark:text-white">
+                    Tell us what you do and we will score roles for you
+                  </h3>
+                  <p className="mt-1 max-w-prose text-sm text-gray-500 dark:text-gray-400">
+                    Matching reads your headline, skills and experience. Upload a resume and we
+                    will pull them out for you, or fill them in yourself.
+                  </p>
+                  <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                    <button type="button" onClick={scrollToResume} className={buttonPrimary}>
+                      <Icon.upload className="h-4 w-4" />
+                      Add your resume
+                    </button>
+                    <Link href="/seeker/profile/edit" className={buttonSecondary}>
+                      <Icon.edit className="h-4 w-4" />
+                      Fill in your profile
+                    </Link>
+                  </div>
+                </Card>
+              ) : (
+                <ul className="grid list-none gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
+                  {recommendations.map((job) => (
+                    <li key={job.id} className="flex min-w-0">
+                      <MatchedJobCard job={job} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </section>
+        )}
 
         {/* Applications — the centrepiece. One panel, hairline-divided rows. */}
         <Card className="mt-6">
@@ -697,6 +1038,56 @@ export default function SeekerDashboardPage() {
               )}
             </div>
 
+            {/* Resume intelligence. Gated on a file being on record and on the
+                deployment actually having a model — `aiEnabled === false` is
+                latched for the session, so the button never comes back. */}
+            {resume && !resumeLoading && !resumeError && aiEnabled !== false && (
+              <div className="mt-6 border-t border-gray-200 pt-5 dark:border-gray-700">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 max-w-prose">
+                    <Eyebrow className="mb-1.5 flex items-center gap-1.5" as="div">
+                      <Icon.spark className="h-3.5 w-3.5" />
+                      Resume intelligence
+                    </Eyebrow>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      We can read this file into a structured profile — headline, seniority,
+                      skills — which is what job matching scores against. Everything it finds
+                      stays yours to edit.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void analyseResume()}
+                    disabled={analysing}
+                    aria-busy={analysing}
+                    className={buttonSecondary}
+                  >
+                    {analysing ? (
+                      <>
+                        <Spinner className="h-4 w-4" />
+                        Reading your resume…
+                      </>
+                    ) : (
+                      <>
+                        <Icon.spark className="h-4 w-4" />
+                        {signal ? "Analyse again" : "Analyse resume"}
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {analyseNotice && (
+                  <Alert variant="warning" className="mt-3">
+                    {analyseNotice}
+                  </Alert>
+                )}
+              </div>
+            )}
+
+            {/* Shown whether or not the model is still switched on: this is the
+                user's own profile data, not a live AI feature. */}
+            {signal && <ExtractedProfile signal={signal} />}
+
             <form
               onSubmit={handleResumeUpload}
               className="mt-6 space-y-4 border-t border-gray-200 pt-5 dark:border-gray-700"
@@ -774,6 +1165,7 @@ function ApplicationRow({
   const progress = status ? STAGE_PROGRESS[status] : 0;
   const caption = status ? STAGE_CAPTION[status] : "Unknown stage";
   const statusLabel = status ? STATUS_LABELS[status] : application.status;
+  const fitAtApply = readNumber(application.matchScore);
 
   return (
     <li className="p-4 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50 sm:p-6">
@@ -817,19 +1209,31 @@ function ApplicationRow({
             </p>
           )}
 
-          {/* Progress through the four live stages. `strongAt` is pinned to 100
-              so only an accepted application fills emerald — the accent stays
-              reserved for a genuinely good outcome. */}
-          <div className="mt-4 max-w-md">
-            <div className="mb-1.5 flex items-baseline justify-between gap-3">
-              <Eyebrow>{caption}</Eyebrow>
-              <Readout className="text-xs font-medium">{progress}%</Readout>
+          {/* Two different numbers sit side by side here, so both are labelled
+              in full: the meter is how far the application has travelled, the
+              readout is how well the profile fitted on the day it was sent.
+              The fit is a stored historical figure and never a progress bar. */}
+          <div className="mt-4 flex flex-wrap items-end gap-x-8 gap-y-4">
+            {/* `strongAt` is pinned to 100 so only an accepted application fills
+                emerald — the accent stays reserved for a good outcome. */}
+            <div className="min-w-[14rem] max-w-md flex-1">
+              <div className="mb-1.5 flex items-baseline justify-between gap-3">
+                <Eyebrow>Pipeline · {caption}</Eyebrow>
+                <Readout className="text-xs font-medium">{progress}%</Readout>
+              </div>
+              <Meter
+                value={progress}
+                strongAt={100}
+                label={`Application progress for ${application.job.title}: ${statusLabel}`}
+              />
             </div>
-            <Meter
-              value={progress}
-              strongAt={100}
-              label={`Application progress for ${application.job.title}: ${statusLabel}`}
-            />
+
+            {fitAtApply !== null && (
+              <div>
+                <Eyebrow className="mb-1">Fit at apply</Eyebrow>
+                <Readout className="text-sm font-semibold">{Math.round(fitAtApply)}%</Readout>
+              </div>
+            )}
           </div>
         </div>
 
@@ -858,6 +1262,200 @@ function ApplicationRow({
         </div>
       </div>
     </li>
+  );
+}
+
+/**
+ * A compact scored role. The score is the reason the card is here at all, so it
+ * sits at the top right in mono and is repeated as a bar — the length carries
+ * the meaning on its own, and emerald only arrives at the top of the range.
+ */
+function MatchedJobCard({ job }: { job: RecommendedJob }) {
+  const match = job.match;
+  const score = match ? Math.round(match.score) : null;
+  const shared = match?.sharedSkills.slice(0, 3) ?? [];
+  const applicants = job._count?.applications ?? 0;
+
+  return (
+    <Card
+      signal={score !== null && score >= STRONG_MATCH}
+      className="flex w-full min-w-0 flex-col p-4"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+            <Link
+              href={`/jobs/${job.id}`}
+              className="rounded transition-colors hover:text-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:hover:text-blue-400"
+            >
+              {job.title}
+            </Link>
+          </h3>
+          <p className="mt-0.5 truncate text-sm text-gray-500 dark:text-gray-400">
+            {job.company?.name ?? "—"}
+          </p>
+        </div>
+        {score !== null && (
+          <MatchScore value={score} caption="PROFILE FIT" className="flex-shrink-0" />
+        )}
+      </div>
+
+      {score !== null && (
+        <Meter
+          className="mt-3"
+          value={score}
+          strongAt={STRONG_MATCH}
+          label={`Profile fit for ${job.title}: ${score} out of 100`}
+        />
+      )}
+
+      {shared.length > 0 && (
+        <div className="mt-3">
+          <Eyebrow className="mb-1.5">Skills in common</Eyebrow>
+          <div className="flex flex-wrap gap-1.5">
+            {shared.map((skill) => (
+              <Chip key={skill} accent>
+                {skill}
+              </Chip>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="mt-auto flex items-center justify-between gap-3 pt-4">
+        <Eyebrow>{formatCount(applicants)} applied</Eyebrow>
+        <Link href={`/jobs/${job.id}`} className={buttonGhost}>
+          View role
+          <Icon.arrowUpRight className="h-4 w-4" />
+        </Link>
+      </div>
+    </Card>
+  );
+}
+
+/** Placeholder in the shape of the card it becomes, so the grid doesn't jump. */
+function MatchCardSkeleton() {
+  return (
+    <Card className="p-4" aria-hidden="true">
+      <div className="animate-pulse space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="w-full space-y-2">
+            <div className="h-3.5 w-3/4 rounded bg-gray-200 dark:bg-gray-700" />
+            <div className="h-3 w-1/2 rounded bg-gray-200 dark:bg-gray-700" />
+          </div>
+          <div className="h-8 w-16 flex-shrink-0 rounded bg-gray-200 dark:bg-gray-700" />
+        </div>
+        <div className="h-1 w-full rounded-full bg-gray-200 dark:bg-gray-700" />
+        <div className="flex gap-1.5">
+          <div className="h-6 w-16 rounded-lg bg-gray-200 dark:bg-gray-700" />
+          <div className="h-6 w-20 rounded-lg bg-gray-200 dark:bg-gray-700" />
+        </div>
+        <div className="h-6 w-full rounded bg-gray-200 dark:bg-gray-700" />
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * The profile the model read out of the résumé.
+ *
+ * Labelled as extracted and paired with the editor on every render: the model
+ * is a fast first draft of the fields, never a finding about the person, and
+ * the page should never imply otherwise.
+ */
+function ExtractedProfile({ signal }: { signal: ProfileSignal }) {
+  return (
+    <div className="mt-4 rounded-lg border border-gray-200 bg-white/75 p-3 dark:border-gray-700 dark:bg-gray-800/70 sm:p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 max-w-prose">
+          <Eyebrow accent className="mb-1.5 flex items-center gap-1.5" as="div">
+            <Icon.spark className="h-3.5 w-3.5" />
+            Extracted by AI
+            {signal.updatedAt && (
+              <span className="text-gray-400 dark:text-gray-500">
+                · {formatRelative(signal.updatedAt)}
+              </span>
+            )}
+          </Eyebrow>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Read out of your resume by our matching model. It is a draft of your profile, not a
+            verdict on it — correct anything that is wrong.
+          </p>
+        </div>
+        <Link href="/seeker/profile/edit" className={buttonSecondary}>
+          <Icon.edit className="h-4 w-4" />
+          Edit these fields
+        </Link>
+      </div>
+
+      {signal.headline && (
+        <p className="mt-4 text-base font-semibold text-gray-900 dark:text-white">
+          {signal.headline}
+        </p>
+      )}
+
+      {(signal.seniority || signal.yearsOfExp !== null) && (
+        <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+          {signal.seniority && (
+            <div>
+              <dt>
+                <Eyebrow>Seniority</Eyebrow>
+              </dt>
+              <dd className="mt-1">
+                <Readout className="text-sm font-semibold">{signal.seniority}</Readout>
+              </dd>
+            </div>
+          )}
+          {signal.yearsOfExp !== null && (
+            <div>
+              <dt>
+                <Eyebrow>Years of experience</Eyebrow>
+              </dt>
+              <dd className="mt-1">
+                <Readout className="text-sm font-semibold">{signal.yearsOfExp}</Readout>
+              </dd>
+            </div>
+          )}
+        </dl>
+      )}
+
+      {signal.skills.length > 0 && (
+        <div className="mt-4">
+          <Eyebrow className="mb-1.5">Skills · {signal.skills.length}</Eyebrow>
+          <div className="flex flex-wrap gap-1.5">
+            {signal.skills.map((skill) => (
+              <Chip key={skill}>{skill}</Chip>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {signal.summary && (
+        <div className="mt-4">
+          <Eyebrow className="mb-1.5">Summary</Eyebrow>
+          <p className="whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">
+            {signal.summary}
+          </p>
+        </div>
+      )}
+
+      {signal.strengths.length > 0 && (
+        <div className="mt-4">
+          <Eyebrow className="mb-1.5">Strengths</Eyebrow>
+          <ul className="space-y-1.5">
+            {signal.strengths.map((strength) => (
+              <li
+                key={strength}
+                className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300"
+              >
+                <Icon.check className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400 dark:text-gray-500" />
+                {strength}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }
 
