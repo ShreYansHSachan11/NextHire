@@ -96,6 +96,9 @@ interface Filters {
 
 const EMPTY_FILTERS: Filters = { search: "", status: "", jobId: "", hasResume: "" };
 
+/** "recent" is the historical behaviour and stays the default. */
+type SortMode = "recent" | "fit";
+
 export default function ApplicationsPage() {
   const { ready, allowed, user } = useAuthGuard(["COMPANY"]);
   const router = useRouter();
@@ -108,19 +111,36 @@ export default function ApplicationsPage() {
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
   const [messagingUserId, setMessagingUserId] = useState<string | null>(null);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  const [sort, setSort] = useState<SortMode>("recent");
+  // Latched: once a scored row has been seen the sort control stays available,
+  // so it cannot flicker away mid-session when a filter empties the list.
+  const [scoresSeen, setScoresSeen] = useState(false);
 
   const companyId = user?.companyId;
+
+  // Live scoring only happens when the server is given one posting to score
+  // against, so the job id is only worth sending while ranking by fit.
+  const rankJobId = sort === "fit" ? filters.jobId : "";
 
   const loadData = useCallback(async () => {
     setLoading(true);
     setLoadError("");
     // The endpoint defaults to the caller's own company, so the query param is
     // only a hint — never a way to read someone else's applications.
-    const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+    const companyQuery = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+
+    const params = new URLSearchParams();
+    if (companyId) params.set("companyId", companyId);
+    if (sort === "fit") {
+      params.set("rank", "fit");
+      if (rankJobId) params.set("jobId", rankJobId);
+    }
+    const applicationQuery = params.toString() ? `?${params.toString()}` : "";
+
     try {
       const [applicationList, jobList] = await Promise.all([
-        apiFetch<Application[]>(`/api/applications${query}`),
-        apiFetch<JobOption[]>(`/api/jobs${query}`),
+        apiFetch<Application[]>(`/api/applications${applicationQuery}`),
+        apiFetch<JobOption[]>(`/api/jobs${companyQuery}`),
       ]);
       setApplications(Array.isArray(applicationList) ? applicationList : []);
       setJobs(Array.isArray(jobList) ? jobList.map(({ id, title }) => ({ id, title })) : []);
@@ -130,11 +150,22 @@ export default function ApplicationsPage() {
     } finally {
       setLoading(false);
     }
-  }, [companyId]);
+  }, [companyId, sort, rankJobId]);
 
   useEffect(() => {
     if (allowed) void loadData();
   }, [allowed, loadData]);
+
+  // A deployment with no Gemini key returns `match: null` and a null
+  // `matchScore` on every row. That is not an error state — it just means there
+  // is nothing to sort by, so the affordance never appears at all.
+  useEffect(() => {
+    if (scoresSeen) return;
+    const scored = applications.some(
+      (application) => application.match != null || typeof application.matchScore === "number"
+    );
+    if (scored) setScoresSeen(true);
+  }, [applications, scoresSeen]);
 
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -355,6 +386,26 @@ export default function ApplicationsPage() {
                   <option value="no">Without r&eacute;sum&eacute;</option>
                 </select>
               </div>
+
+              {/* Only rendered once a scored row has actually arrived: on a
+                  deployment without a model there is nothing to sort by, and an
+                  option that cannot change the order is just noise. */}
+              {scoresSeen && (
+                <div className="min-w-0 lg:w-40">
+                  <Label htmlFor="filter-sort">Sort by</Label>
+                  <select
+                    id="filter-sort"
+                    value={sort}
+                    onChange={(event) =>
+                      setSort(event.target.value === "fit" ? "fit" : "recent")
+                    }
+                    className={inputClass}
+                  >
+                    <option value="recent">Most recent</option>
+                    <option value="fit">Best fit</option>
+                  </select>
+                </div>
+              )}
             </div>
 
             {filtersActive && (
@@ -368,6 +419,26 @@ export default function ApplicationsPage() {
               </button>
             )}
           </div>
+
+          {/* The two fit figures are not the same measurement, and blurring them
+              would let a stale number look like a fresh one. Say which is on
+              screen, and say plainly what the number is for. */}
+          {scoresSeen && (
+            <div className="border-t border-gray-200 px-3 pb-3 pt-2.5 dark:border-gray-700 sm:px-4">
+              {sort === "fit" && (
+                <Eyebrow>
+                  {rankJobId
+                    ? "Scored live against the selected role"
+                    : "Fit captured at apply time · choose a role to score live"}
+                </Eyebrow>
+              )}
+              <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                Fit is a sorting aid, not an assessment. It reads the profile against the
+                posting and knows nothing else about the person — read the application before
+                you decide.
+              </p>
+            </div>
+          )}
         </Card>
 
         {/* List */}
@@ -378,7 +449,11 @@ export default function ApplicationsPage() {
               {filteredApplications.length === 1 ? "applicant" : "applicants"}
             </Eyebrow>
             <Eyebrow as="span">
-              {filtersActive ? `Filtered from ${applications.length}` : "Newest first"}
+              {filtersActive
+                ? `Filtered from ${applications.length}`
+                : sort === "fit"
+                  ? "Best fit first"
+                  : "Newest first"}
             </Eyebrow>
           </div>
 
@@ -470,6 +545,12 @@ function ApplicationRow({
   onMessage: (applicantId: string) => Promise<void>;
 }) {
   const resume = application.user.resumes?.[0];
+  const [showBreakdown, setShowBreakdown] = useState(false);
+
+  const match = application.match ?? null;
+  const storedScore = typeof application.matchScore === "number" ? application.matchScore : null;
+  const sharedSkills = match?.sharedSkills ?? [];
+  const breakdownId = `fit-breakdown-${application.id}`;
 
   return (
     <li className="px-4 py-4 sm:px-6 sm:py-5">
@@ -508,10 +589,55 @@ function ApplicationRow({
                 {application.message}
               </p>
             )}
+
+            {/* Evidence, not verdict: the skills the posting and the profile
+                actually share, with the arithmetic one click away. */}
+            {match && (
+              <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                {sharedSkills.slice(0, 3).map((skill) => (
+                  <Chip key={skill} accent>
+                    {skill}
+                  </Chip>
+                ))}
+                {sharedSkills.length > 3 && (
+                  <Eyebrow as="span">+{sharedSkills.length - 3} more</Eyebrow>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowBreakdown((open) => !open)}
+                  aria-expanded={showBreakdown}
+                  aria-controls={breakdownId}
+                  className={buttonGhost}
+                >
+                  <Icon.graph className="h-4 w-4" />
+                  {showBreakdown ? "Hide breakdown" : "How this was scored"}
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
         <div className="flex flex-col gap-2.5 sm:w-56 sm:flex-shrink-0">
+          {/* A live breakdown when the server scored against one posting;
+              otherwise the figure frozen at apply time, labelled as such. A low
+              number stays neutral here — it orders the queue, it does not
+              condemn anybody. */}
+          {match ? (
+            <div>
+              <MatchScore value={match.score} caption="ROLE FIT" />
+              <Meter
+                value={match.score}
+                label={`Role fit, ${match.score} out of 100`}
+                className="mt-1.5"
+              />
+            </div>
+          ) : storedScore !== null ? (
+            <div className="text-right">
+              <Readout className="text-sm font-semibold">{storedScore}%</Readout>
+              <Eyebrow className="mt-0.5">FIT AT APPLY</Eyebrow>
+            </div>
+          ) : null}
+
           <StatusBadge status={application.status} className="self-start" />
 
           <div>
@@ -558,6 +684,62 @@ function ApplicationRow({
           </button>
         </div>
       </div>
+
+      {/* Kept in the tree while collapsed so `aria-controls` always points at a
+          real element, and so the panel is findable by in-page search. */}
+      {match && (
+        <div id={breakdownId} hidden={!showBreakdown} className="mt-4">
+          <Card grid className="p-4">
+            <Eyebrow>Fit breakdown</Eyebrow>
+
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-x-6">
+              <MeterRow label="Semantic fit" value={match.facets.semantic} />
+              <MeterRow label="Skills overlap" value={match.facets.skills} />
+              <MeterRow label="Location" value={match.facets.location} />
+              <MeterRow label="Seniority" value={match.facets.seniority} />
+            </div>
+
+            <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-x-6">
+              <div>
+                <Eyebrow>Shared skills</Eyebrow>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {match.sharedSkills.length > 0 ? (
+                    match.sharedSkills.map((skill) => (
+                      <Chip key={skill} accent>
+                        {skill}
+                      </Chip>
+                    ))
+                  ) : (
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      No overlapping tags recorded.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                {/* "Not evidenced" rather than "missing": the profile may simply
+                    be thin. Neutral chips — a gap is a question, not a fault. */}
+                <Eyebrow>Not evidenced in the profile</Eyebrow>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {match.missingSkills.length > 0 ? (
+                    match.missingSkills.map((skill) => <Chip key={skill}>{skill}</Chip>)
+                  ) : (
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Nothing on the posting is unaccounted for.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <p className="mt-5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+              Computed from this posting and the candidate&rsquo;s profile. A gap here is
+              something to ask about in a screen, not a reason to pass.
+            </p>
+          </Card>
+        </div>
+      )}
     </li>
   );
 }

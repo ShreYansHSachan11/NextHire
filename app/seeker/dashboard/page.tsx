@@ -7,7 +7,7 @@ import Link from "next/link";
 import Navbar from "@/app/components/Navbar";
 import { useToast } from "@/app/components/Toast";
 import { useAuthGuard } from "@/app/hooks/useAuthGuard";
-import { apiFetch } from "@/lib/clientAuth";
+import { apiFetch, authHeaders } from "@/lib/clientAuth";
 import {
   APPLICATION_STATUSES,
   RESUME_ACCEPT,
@@ -25,6 +25,7 @@ import {
   Eyebrow,
   Icon,
   Label,
+  MatchScore,
   Meter,
   PageHeading,
   Readout,
@@ -32,6 +33,7 @@ import {
   Spinner,
   StatCard,
   StatusBadge,
+  buttonGhost,
   buttonPrimary,
   buttonSecondary,
   formatCount,
@@ -53,6 +55,12 @@ interface Application {
   status: string;
   message?: string | null;
   createdAt: string;
+  /**
+   * The fit as it stood on the day of applying — stored, not recomputed, so it
+   * stays a record of the decision rather than a number that drifts. Null on an
+   * application made before the profile was indexed, or with AI switched off.
+   */
+  matchScore?: number | null;
   job: {
     id: string;
     title: string;
