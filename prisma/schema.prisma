@@ -37,6 +37,8 @@ model User {
   messages      Message[]
   notifications Notification[]
   resumes       Resume[]
+  savedSearches SavedSearch[]
+  explanations  MatchExplanation[]
   company       Company?          @relation(fields: [companyId], references: [id])
 
   @@index([companyId])
@@ -71,6 +73,8 @@ model Job {
 
   applications Application[]
   embedding    JobEmbedding?
+  questions    JobQuestion[]
+  explanations MatchExplanation[]
   company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
@@ -89,6 +93,7 @@ model Application {
   createdAt  DateTime          @default(now())
   job        Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
   user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  answers    ApplicationAnswer[]
 
   // A seeker may only apply to a given job once. Previously enforced by a racy
   // findFirst, which let a double-click create duplicates.
@@ -184,6 +189,129 @@ model ProfileEmbedding {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([contentHash])
+}
+
+/// Embedding for a single canonical skill tag.
+///
+/// The skill vocabulary is small and nearly static, so caching these turns
+/// fuzzy skill comparison ("GraphQL" vs "Apollo") into arithmetic against rows
+/// we already hold rather than a model call per comparison.
+model SkillVector {
+  tag        String   @id
+  label      String
+  vector     Float[]
+  model      String
+  dimensions Int
+  createdAt  DateTime @default(now())
+}
+
+/// Embedding for a search query.
+///
+/// Semantic search is the one read path that has to embed on the request, so
+/// repeated queries would otherwise pay a model call and ~300ms every time.
+/// Keyed by a hash of the normalised query plus the model and dimensions, so a
+/// model change cannot serve stale vectors of a different shape.
+model QueryVector {
+  queryHash  String   @id
+  query      String
+  vector     Float[]
+  model      String
+  dimensions Int
+  hits       Int      @default(1)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([updatedAt])
+}
+
+/// A seeker's saved search, optionally delivering alerts on new matches.
+model SavedSearch {
+  id        String         @id @default(uuid())
+  userId    String
+  name      String
+  query     String
+  /// Structured filters parsed out of the query (remote, seniority, salary).
+  filters   Json?
+  frequency AlertFrequency @default(DAILY)
+  /// Watermark: only postings newer than this are considered for the next
+  /// alert, so a run can never notify the same job twice.
+  lastNotifiedAt DateTime?
+  lastRunAt DateTime?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
+  @@index([userId])
+  @@index([frequency, lastRunAt])
+}
+
+enum AlertFrequency {
+  OFF
+  DAILY
+  WEEKLY
+}
+
+/// A one-sentence, grounded explanation of why a seeker matches a posting.
+///
+/// Cached per (user, job) and invalidated by `contentHash`, so an explanation
+/// costs one generation call per pair rather than one per page view.
+model MatchExplanation {
+  userId      String
+  jobId       String
+  text        String
+  score       Int
+  contentHash String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job         Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@id([userId, jobId])
+  @@index([contentHash])
+}
+
+/// A screening question attached to a posting.
+model JobQuestion {
+  id        String              @id @default(uuid())
+  jobId     String
+  prompt    String
+  kind      QuestionKind        @default(TEXT)
+  /// Choices for SINGLE_CHOICE; empty for every other kind.
+  options   String[]            @default([])
+  required  Boolean             @default(true)
+  /// A knockout question filters rather than scores. Kept advisory in the UI:
+  /// it flags an applicant, it does not silently discard them.
+  knockout  Boolean             @default(false)
+  /// Expected answer for a knockout check, compared case-insensitively.
+  expected  String?
+  position  Int                 @default(0)
+  createdAt DateTime            @default(now())
+  job       Job                 @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  answers   ApplicationAnswer[]
+
+  @@index([jobId, position])
+}
+
+enum QuestionKind {
+  TEXT
+  BOOLEAN
+  SINGLE_CHOICE
+  NUMBER
+}
+
+/// One applicant's answer to one screening question.
+model ApplicationAnswer {
+  id            String      @id @default(uuid())
+  applicationId String
+  questionId    String
+  value         String
+  createdAt     DateTime    @default(now())
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  question      JobQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([applicationId, questionId])
+  @@index([applicationId])
 }
 
 enum Role {

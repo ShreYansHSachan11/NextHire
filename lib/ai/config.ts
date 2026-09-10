@@ -71,3 +71,47 @@ export const MATCH_WEIGHTS = {
   location: 0.07,
   seniority: 0.05,
 } as const;
+
+/* -------------------------------------------------------------------------- */
+/* Phase two — retrieval, skills, caching                                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Reciprocal Rank Fusion constant for hybrid retrieval.
+ *
+ * RRF combines the lexical and vector rankings by *position* rather than by
+ * score, which is the point: a full-text `ts_rank` and a cosine similarity are
+ * not on comparable scales, and any weighted sum of the two would be tuning a
+ * meaningless ratio. 60 is the value from the original TREC work and behaves
+ * well without corpus-specific tuning.
+ */
+export const RRF_K = 60;
+
+/** How many candidates each retrieval arm contributes before fusion. */
+export const RETRIEVAL_DEPTH = 100;
+
+/**
+ * Similarity above which two skill tags are treated as the same skill.
+ *
+ * Deliberately high. Embedding neighbours degrade gracefully into "vaguely
+ * related" ("Go" and "Rust" are close in embedding space but are not the same
+ * skill), and a false skill match inflates a candidate's score against a role
+ * they cannot do — a worse failure than missing a real one.
+ */
+export const SKILL_MATCH_THRESHOLD = 0.82;
+
+/** Partial credit given to a skill matched by embedding rather than by alias. */
+export const FUZZY_SKILL_CREDIT = 0.75;
+
+/**
+ * Query vectors older than this are re-embedded on next use. Postings change,
+ * but a query's *meaning* does not, so this is long: it exists to pick up model
+ * changes, not to chase freshness.
+ */
+export const QUERY_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** In-process job-vector cache lifetime. Short, because postings do change. */
+export const VECTOR_CACHE_TTL_MS = 60 * 1000;
+
+/** Cosine at or above which two postings are treated as near-duplicates. */
+export const DUPLICATE_THRESHOLD = 0.94;
