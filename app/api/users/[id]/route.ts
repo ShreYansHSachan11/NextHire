@@ -123,17 +123,34 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
   const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
   if (!isValidEmail(email)) return badRequest('Please enter a valid email address');
 
-  const data: Prisma.UserUpdateInput = {
-    name,
-    email,
-    profile: cleanText(body.profile, 2000),
-    // Run links through `cleanUrl` so a profile can never store `javascript:`.
-    website: cleanUrl(body.website),
-    industry: cleanString(body.industry, 100),
-    size: cleanString(body.size, 50),
-    location: cleanString(body.location, 100),
-    description: cleanText(body.description, 5000),
-  };
+  // Name and email are required by the validation above, so they are always
+  // written. Everything else is presence-gated.
+  const data: Prisma.UserUpdateInput = { name, email };
+
+  /*
+   * These six were written unconditionally, and that destroyed data.
+   *
+   * The company profile editor seeds its form from the Redux `user`, which on a
+   * cold load is rehydrated from the JWT — and the JWT carries only id, name,
+   * email, role and company. Website, industry, size, location, description and
+   * profile therefore seeded as empty strings, and submitting the form sent
+   * those empty strings, and this handler wrote every one of them. An employer
+   * who filled in their profile, came back the next day and corrected a typo in
+   * their company name had all six columns nulled — while the page reported
+   * "Company profile updated".
+   *
+   * Presence-gating them is the fix that holds regardless of which client is
+   * calling: an absent key now means "leave alone", exactly as it already did
+   * for the AI-derived fields below. A caller that genuinely wants to clear one
+   * still can, by sending it explicitly as an empty string.
+   */
+  if ('profile' in body) data.profile = cleanText(body.profile, 2000);
+  // Run links through `cleanUrl` so a profile can never store `javascript:`.
+  if ('website' in body) data.website = cleanUrl(body.website);
+  if ('industry' in body) data.industry = cleanString(body.industry, 100);
+  if ('size' in body) data.size = cleanString(body.size, 50);
+  if ('location' in body) data.location = cleanString(body.location, 100);
+  if ('description' in body) data.description = cleanText(body.description, 5000);
 
   // The AI-derived fields are only touched when the caller actually sends them.
   // The general profile form does not, and an absent key must not wipe what

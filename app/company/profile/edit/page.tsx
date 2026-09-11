@@ -111,6 +111,12 @@ export default function CompanyProfileEdit() {
   const [formData, setFormData] = useState<CompanyProfileForm>(EMPTY_FORM);
   /** The values as last loaded or saved, so "has anything changed?" is answerable. */
   const [baseline, setBaseline] = useState<CompanyProfileForm>(EMPTY_FORM);
+  /** Mirror of `baseline` for the record fetch below, which must read the
+   *  current value without re-running when it changes. */
+  const baselineRef = useRef<CompanyProfileForm>(EMPTY_FORM);
+  useEffect(() => {
+    baselineRef.current = baseline;
+  }, [baseline]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [errors, setErrors] = useState<Partial<Record<keyof CompanyProfileForm, string>>>({});
@@ -136,6 +142,60 @@ export default function CompanyProfileEdit() {
     };
     setFormData(seeded);
     setBaseline(seeded);
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /*
+   * Then the authoritative copy, exactly as the seeker editor does.
+   *
+   * The seed above comes from the Redux store, which on a cold load is
+   * rehydrated from the JWT — and the JWT carries only id, name, email, role
+   * and company. Website, industry, size, location, description and profile
+   * seeded as "" for everyone who had actually filled them in, so the form
+   * opened blank and saving it wrote those blanks straight back over six real
+   * columns. The route is presence-gated now, which stops the data loss, but
+   * without this read the employer would still be shown an empty form and
+   * would have to retype what was already on record.
+   */
+  useEffect(() => {
+    if (!user?.id) return;
+
+    let cancelled = false;
+    apiFetch<Partial<CompanyProfileForm>>(`/api/users/${user.id}`)
+      .then((record) => {
+        if (cancelled) return;
+
+        const stored: CompanyProfileForm = {
+          name: record.name ?? user.name ?? "",
+          email: record.email ?? user.email ?? "",
+          profile: record.profile ?? "",
+          website: record.website ?? "",
+          industry: record.industry ?? "",
+          size: record.size ?? "",
+          location: record.location ?? "",
+          description: record.description ?? "",
+        };
+
+        // Never clobber something already being typed: compare against the
+        // baseline rather than the live form, and only adopt the record when
+        // the user has not started editing.
+        setFormData((current) =>
+          (Object.keys(stored) as (keyof CompanyProfileForm)[]).some(
+            (key) => current[key] !== baselineRef.current[key]
+          )
+            ? current
+            : stored
+        );
+        // The unsaved-changes guard has to compare against what is really on
+        // record, or this late arrival would read as an edit nobody made.
+        setBaseline(stored);
+      })
+      .catch(() => {
+        // The seeded form still works; this read only enriches it.
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const dirty = useMemo(
