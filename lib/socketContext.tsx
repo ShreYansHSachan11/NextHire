@@ -2,6 +2,7 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { getToken } from '@/lib/clientAuth';
 
 /** Payload broadcast by the socket server when a message is persisted. */
 export interface SocketMessageEvent {
@@ -72,6 +73,11 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       reconnectionAttempts: 5,
       reconnectionDelay: 1_000,
       reconnectionDelayMax: 5_000,
+      // The relay rejects an unauthenticated handshake, and checks membership
+      // against the conversation row before honouring a join. Read lazily on
+      // every (re)connection attempt rather than captured once, so a socket
+      // that reconnects after a token refresh presents the current one.
+      auth: (cb) => cb({ token: getToken() ?? '' }),
     });
 
     const handleConnect = () => {
