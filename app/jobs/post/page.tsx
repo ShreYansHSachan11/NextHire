@@ -1359,7 +1359,10 @@ export default function PostJobPage() {
                               type="button"
                               onClick={() => removeSkill(skill)}
                               aria-label={`Remove ${skill}`}
-                              className="-mr-0.5 rounded p-0.5 text-gray-400 hover:text-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:hover:text-gray-100"
+                              // 24x24 hit area (WCAG 2.2 AA target minimum) held
+                              // inside the chip by negative margins, so the
+                              // target grows without the chip doing the same.
+                              className="-my-1 -mr-1.5 flex h-6 w-6 items-center justify-center rounded text-gray-500 hover:text-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-gray-400 dark:hover:text-gray-100"
                             >
                               <Icon.x className="h-3 w-3" />
                             </button>
@@ -1382,7 +1385,17 @@ export default function PostJobPage() {
                     onKeyDown={handleSkillKeyDown}
                     onBlur={() => commitSkillInput(skillInput)}
                     disabled={skillsFull}
-                    maxLength={MAX_SKILL_LENGTH}
+                    // Sized for a pasted *list*, not for one tag.
+                    //
+                    // This used to be `MAX_SKILL_LENGTH`, which the browser
+                    // applies to the paste itself — so pasting
+                    // "React, TypeScript, Node.js, PostgreSQL, Kubernetes" was
+                    // silently clipped to 40 characters before `onChange` ever
+                    // saw a comma to split on, and most of the list was lost.
+                    // Each individual tag is still cut to `MAX_SKILL_LENGTH` by
+                    // `cleanTagList` when it is committed, which is the same
+                    // code the API runs.
+                    maxLength={MAX_SKILL_LENGTH * MAX_SKILLS}
                     placeholder={
                       skillsFull ? "Skill limit reached" : "e.g. TypeScript, Postgres, Figma"
                     }

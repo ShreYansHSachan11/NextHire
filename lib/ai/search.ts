@@ -34,7 +34,7 @@ import type { SemanticHit } from './matching';
 /* Query understanding                                                         */
 /* -------------------------------------------------------------------------- */
 
-export type FilterKey = 'remote' | 'seniority' | 'type' | 'minSalary';
+export type FilterKey = 'remote' | 'seniority' | 'type' | 'minSalary' | 'location';
 
 /** Employment types a query may filter to — the same allowlist the post-a-job form writes. */
 export type JobType = (typeof JOB_TYPES)[number];
@@ -45,6 +45,16 @@ export interface SearchFilters {
   seniority?: SeniorityLevel;
   type?: JobType;
   minSalary?: number;
+  /**
+   * A place, canonicalised to a `KNOWN_LOCATIONS` label ("Berlin, Germany").
+   *
+   * Set by the parser only when the query named a place the gazetteer below
+   * recognises. A caller that sets it from somewhere else — an explicit
+   * Location select on the feed, a saved search — may pass any string;
+   * `locationPredicate` degrades to a plain substring match on values it does
+   * not recognise, so an unknown city still filters sensibly.
+   */
+  location?: string;
 }
 
 /**
@@ -138,6 +148,343 @@ const SENIORITY_PATTERNS: ReadonlyArray<{ level: SeniorityLevel; pattern: RegExp
   { level: 'Intern', pattern: /\bintern\b/i },
 ];
 
+/* ---- Location ------------------------------------------------------------ */
+
+/**
+ * One place the parser is willing to recognise.
+ *
+ * Location is the first *open-ended* dimension in this parser, and it is the
+ * one where being wrong is expensive: seniority or employment type read off a
+ * closed vocabulary, but "in X" will happily hand any noun to a filter that
+ * then removes most of the corpus before ranking. The answer used here is a
+ * closed vocabulary again — a curated gazetteer — so the open-endedness is
+ * bounded by data rather than by a model call on the request path.
+ *
+ * The cost of that choice is honest and bounded: a city nobody listed here is
+ * simply not parsed, the words stay in the remainder, and the query is ranked
+ * as prose exactly as it is today. The cost of the alternative — a generic
+ * `in (\w+)` rule — is that "Engineer in Test" silently searches a city called
+ * Test and returns nothing. Under-matching degrades to today's behaviour;
+ * over-matching does not degrade to anything.
+ */
+interface KnownLocation {
+  /**
+   * Canonical label. This is the chip's text and the value carried in
+   * `SearchFilters.location`, so it is also the key `locationPredicate` looks
+   * needles up by — changing one means changing the other.
+   */
+  label: string;
+  /** Spellings a query may use. Matched whole-word and case-insensitively. */
+  names: string[];
+  /**
+   * Substrings matched against `Job.location`. Defaults to `names`.
+   *
+   * Overridden wherever a name is an abbreviation a posting would never write
+   * out ("UK", "NYC", "SF"): `%uk%` inside a free-text column matches far more
+   * than the United Kingdom, and the spelled-out needle already covers the
+   * query that used the abbreviation.
+   */
+  needles?: string[];
+}
+
+/**
+ * Places deliberately *absent* from the gazetteer, because the word is load
+ * bearing somewhere else in a job query and a false positive costs more than
+ * the miss:
+ *
+ *   Mobile (AL), Reading, Bath, Derby, Hull, Sale, Cork, Nice, Split, Male,
+ *   York, Victoria, Washington, Georgia — ordinary English or ordinary names.
+ *   Java (Indonesia), Jakarta (Jakarta EE), Phoenix (the Elixir framework),
+ *   Delphi — a place name that is also a thing people write code in.
+ *
+ * The test for adding an entry is not "is it a city" but "would a job seeker
+ * ever type this word meaning anything else".
+ */
+const KNOWN_LOCATIONS: readonly KnownLocation[] = [
+  /* Europe */
+  { label: 'Berlin, Germany', names: ['Berlin'] },
+  { label: 'Munich, Germany', names: ['Munich', 'München', 'Muenchen'] },
+  { label: 'Hamburg, Germany', names: ['Hamburg'] },
+  { label: 'Frankfurt, Germany', names: ['Frankfurt'] },
+  { label: 'Cologne, Germany', names: ['Cologne', 'Köln'] },
+  { label: 'Stuttgart, Germany', names: ['Stuttgart'] },
+  { label: 'London, United Kingdom', names: ['London'] },
+  { label: 'Manchester, United Kingdom', names: ['Manchester'] },
+  { label: 'Edinburgh, United Kingdom', names: ['Edinburgh'] },
+  { label: 'Glasgow, United Kingdom', names: ['Glasgow'] },
+  { label: 'Birmingham, United Kingdom', names: ['Birmingham'] },
+  { label: 'Bristol, United Kingdom', names: ['Bristol'] },
+  { label: 'Leeds, United Kingdom', names: ['Leeds'] },
+  { label: 'Cambridge, United Kingdom', names: ['Cambridge'] },
+  { label: 'Oxford, United Kingdom', names: ['Oxford'] },
+  { label: 'Cardiff, United Kingdom', names: ['Cardiff'] },
+  { label: 'Belfast, United Kingdom', names: ['Belfast'] },
+  { label: 'Dublin, Ireland', names: ['Dublin'] },
+  { label: 'Amsterdam, Netherlands', names: ['Amsterdam'] },
+  { label: 'Rotterdam, Netherlands', names: ['Rotterdam'] },
+  { label: 'Utrecht, Netherlands', names: ['Utrecht'] },
+  { label: 'Eindhoven, Netherlands', names: ['Eindhoven'] },
+  { label: 'Brussels, Belgium', names: ['Brussels', 'Bruxelles'] },
+  { label: 'Paris, France', names: ['Paris'] },
+  { label: 'Lyon, France', names: ['Lyon'] },
+  { label: 'Toulouse, France', names: ['Toulouse'] },
+  { label: 'Madrid, Spain', names: ['Madrid'] },
+  { label: 'Barcelona, Spain', names: ['Barcelona'] },
+  { label: 'Valencia, Spain', names: ['Valencia'] },
+  { label: 'Lisbon, Portugal', names: ['Lisbon', 'Lisboa'] },
+  { label: 'Porto, Portugal', names: ['Porto'] },
+  { label: 'Milan, Italy', names: ['Milan', 'Milano'] },
+  { label: 'Rome, Italy', names: ['Rome', 'Roma'] },
+  { label: 'Zurich, Switzerland', names: ['Zurich', 'Zürich'] },
+  { label: 'Geneva, Switzerland', names: ['Geneva'] },
+  { label: 'Vienna, Austria', names: ['Vienna', 'Wien'] },
+  { label: 'Prague, Czechia', names: ['Prague', 'Praha'] },
+  { label: 'Warsaw, Poland', names: ['Warsaw', 'Warszawa'] },
+  { label: 'Kraków, Poland', names: ['Kraków', 'Krakow', 'Cracow'] },
+  { label: 'Wrocław, Poland', names: ['Wrocław', 'Wroclaw'] },
+  { label: 'Budapest, Hungary', names: ['Budapest'] },
+  { label: 'Bucharest, Romania', names: ['Bucharest'] },
+  { label: 'Sofia, Bulgaria', names: ['Sofia'] },
+  { label: 'Athens, Greece', names: ['Athens'] },
+  { label: 'Stockholm, Sweden', names: ['Stockholm'] },
+  { label: 'Gothenburg, Sweden', names: ['Gothenburg', 'Göteborg'] },
+  { label: 'Oslo, Norway', names: ['Oslo'] },
+  { label: 'Copenhagen, Denmark', names: ['Copenhagen', 'København'] },
+  { label: 'Helsinki, Finland', names: ['Helsinki'] },
+  { label: 'Tallinn, Estonia', names: ['Tallinn'] },
+  { label: 'Vilnius, Lithuania', names: ['Vilnius'] },
+  { label: 'Riga, Latvia', names: ['Riga'] },
+  { label: 'Istanbul, Türkiye', names: ['Istanbul'] },
+
+  /* North America */
+  { label: 'New York, United States', names: ['New York City', 'New York', 'NYC'], needles: ['New York'] },
+  {
+    label: 'San Francisco, United States',
+    names: ['San Francisco Bay Area', 'San Francisco', 'Bay Area', 'SF'],
+    needles: ['San Francisco', 'Bay Area'],
+  },
+  { label: 'Seattle, United States', names: ['Seattle'] },
+  { label: 'Austin, United States', names: ['Austin'] },
+  { label: 'Chicago, United States', names: ['Chicago'] },
+  { label: 'Boston, United States', names: ['Boston'] },
+  { label: 'Denver, United States', names: ['Denver'] },
+  { label: 'Atlanta, United States', names: ['Atlanta'] },
+  { label: 'Los Angeles, United States', names: ['Los Angeles'] },
+  { label: 'San Diego, United States', names: ['San Diego'] },
+  { label: 'San Jose, United States', names: ['San Jose'] },
+  { label: 'Portland, United States', names: ['Portland'] },
+  { label: 'Miami, United States', names: ['Miami'] },
+  { label: 'Dallas, United States', names: ['Dallas'] },
+  { label: 'Houston, United States', names: ['Houston'] },
+  { label: 'Philadelphia, United States', names: ['Philadelphia'] },
+  { label: 'Pittsburgh, United States', names: ['Pittsburgh'] },
+  { label: 'Minneapolis, United States', names: ['Minneapolis'] },
+  { label: 'Detroit, United States', names: ['Detroit'] },
+  { label: 'Nashville, United States', names: ['Nashville'] },
+  { label: 'Raleigh, United States', names: ['Raleigh'] },
+  { label: 'Charlotte, United States', names: ['Charlotte'] },
+  { label: 'Salt Lake City, United States', names: ['Salt Lake City'] },
+  { label: 'Toronto, Canada', names: ['Toronto'] },
+  { label: 'Vancouver, Canada', names: ['Vancouver'] },
+  { label: 'Montreal, Canada', names: ['Montreal', 'Montréal'] },
+  { label: 'Ottawa, Canada', names: ['Ottawa'] },
+  { label: 'Mexico City, Mexico', names: ['Mexico City', 'CDMX'], needles: ['Mexico City'] },
+
+  /* South America */
+  { label: 'São Paulo, Brazil', names: ['São Paulo', 'Sao Paulo'] },
+  { label: 'Rio de Janeiro, Brazil', names: ['Rio de Janeiro'] },
+  { label: 'Buenos Aires, Argentina', names: ['Buenos Aires'] },
+  { label: 'Bogotá, Colombia', names: ['Bogotá', 'Bogota'] },
+  { label: 'Santiago, Chile', names: ['Santiago'] },
+  { label: 'Lima, Peru', names: ['Lima'] },
+  { label: 'Montevideo, Uruguay', names: ['Montevideo'] },
+
+  /* Asia and the Pacific */
+  { label: 'Bengaluru, India', names: ['Bengaluru', 'Bangalore'] },
+  { label: 'Mumbai, India', names: ['Mumbai', 'Bombay'] },
+  { label: 'New Delhi, India', names: ['New Delhi', 'Delhi'] },
+  { label: 'Hyderabad, India', names: ['Hyderabad'] },
+  { label: 'Chennai, India', names: ['Chennai'] },
+  { label: 'Pune, India', names: ['Pune'] },
+  { label: 'Kolkata, India', names: ['Kolkata'] },
+  { label: 'Gurugram, India', names: ['Gurugram', 'Gurgaon'] },
+  { label: 'Noida, India', names: ['Noida'] },
+  { label: 'Ahmedabad, India', names: ['Ahmedabad'] },
+  { label: 'Singapore', names: ['Singapore'] },
+  { label: 'Hong Kong', names: ['Hong Kong'] },
+  { label: 'Tokyo, Japan', names: ['Tokyo'] },
+  { label: 'Osaka, Japan', names: ['Osaka'] },
+  { label: 'Seoul, South Korea', names: ['Seoul'] },
+  { label: 'Shanghai, China', names: ['Shanghai'] },
+  { label: 'Beijing, China', names: ['Beijing'] },
+  { label: 'Shenzhen, China', names: ['Shenzhen'] },
+  { label: 'Taipei, Taiwan', names: ['Taipei'] },
+  { label: 'Bangkok, Thailand', names: ['Bangkok'] },
+  { label: 'Kuala Lumpur, Malaysia', names: ['Kuala Lumpur'] },
+  { label: 'Manila, Philippines', names: ['Manila'] },
+  { label: 'Ho Chi Minh City, Vietnam', names: ['Ho Chi Minh City', 'Saigon'] },
+  { label: 'Hanoi, Vietnam', names: ['Hanoi'] },
+  { label: 'Sydney, Australia', names: ['Sydney'] },
+  { label: 'Melbourne, Australia', names: ['Melbourne'] },
+  { label: 'Brisbane, Australia', names: ['Brisbane'] },
+  { label: 'Perth, Australia', names: ['Perth'] },
+  { label: 'Auckland, New Zealand', names: ['Auckland'] },
+  { label: 'Wellington, New Zealand', names: ['Wellington'] },
+
+  /* Middle East and Africa */
+  { label: 'Dubai, United Arab Emirates', names: ['Dubai'] },
+  { label: 'Abu Dhabi, United Arab Emirates', names: ['Abu Dhabi'] },
+  { label: 'Tel Aviv, Israel', names: ['Tel Aviv'] },
+  { label: 'Cairo, Egypt', names: ['Cairo'] },
+  { label: 'Nairobi, Kenya', names: ['Nairobi'] },
+  { label: 'Lagos, Nigeria', names: ['Lagos'] },
+  { label: 'Cape Town, South Africa', names: ['Cape Town'] },
+  { label: 'Johannesburg, South Africa', names: ['Johannesburg'] },
+
+  /* US states, because postings write "Austin, Texas" as often as "Austin" */
+  { label: 'California', names: ['California'] },
+  { label: 'Texas', names: ['Texas'] },
+  { label: 'Illinois', names: ['Illinois'] },
+  { label: 'Massachusetts', names: ['Massachusetts'] },
+  { label: 'Colorado', names: ['Colorado'] },
+  { label: 'Oregon', names: ['Oregon'] },
+  { label: 'Arizona', names: ['Arizona'] },
+  { label: 'Utah', names: ['Utah'] },
+  { label: 'Florida', names: ['Florida'] },
+  { label: 'Pennsylvania', names: ['Pennsylvania'] },
+  { label: 'New Jersey', names: ['New Jersey'] },
+  { label: 'North Carolina', names: ['North Carolina'] },
+  { label: 'Minnesota', names: ['Minnesota'] },
+  { label: 'Michigan', names: ['Michigan'] },
+  { label: 'Ohio', names: ['Ohio'] },
+  { label: 'Tennessee', names: ['Tennessee'] },
+
+  /* Countries. A country only matches a posting whose own location names the
+     country — "in Germany" will not find a posting that says only "Berlin".
+     That is the honest reading of a free-text column, and it under-matches
+     rather than over-matches, which is the direction this parser leans. */
+  { label: 'Germany', names: ['Germany', 'Deutschland'] },
+  { label: 'United Kingdom', names: ['United Kingdom', 'UK', 'Britain'], needles: ['United Kingdom'] },
+  { label: 'Ireland', names: ['Ireland'] },
+  { label: 'France', names: ['France'] },
+  { label: 'Spain', names: ['Spain'] },
+  { label: 'Portugal', names: ['Portugal'] },
+  { label: 'Italy', names: ['Italy'] },
+  { label: 'Netherlands', names: ['Netherlands', 'Holland'], needles: ['Netherlands'] },
+  { label: 'Belgium', names: ['Belgium'] },
+  { label: 'Switzerland', names: ['Switzerland'] },
+  { label: 'Austria', names: ['Austria'] },
+  { label: 'Poland', names: ['Poland'] },
+  { label: 'Czechia', names: ['Czechia', 'Czech Republic'] },
+  { label: 'Sweden', names: ['Sweden'] },
+  { label: 'Norway', names: ['Norway'] },
+  { label: 'Denmark', names: ['Denmark'] },
+  { label: 'Finland', names: ['Finland'] },
+  { label: 'Estonia', names: ['Estonia'] },
+  { label: 'Romania', names: ['Romania'] },
+  { label: 'Bulgaria', names: ['Bulgaria'] },
+  { label: 'Hungary', names: ['Hungary'] },
+  { label: 'Greece', names: ['Greece'] },
+  { label: 'Türkiye', names: ['Türkiye', 'Turkiye', 'Turkey'] },
+  { label: 'United States', names: ['United States', 'USA'], needles: ['United States'] },
+  { label: 'Canada', names: ['Canada'] },
+  { label: 'Mexico', names: ['Mexico'] },
+  { label: 'Brazil', names: ['Brazil'] },
+  { label: 'Argentina', names: ['Argentina'] },
+  { label: 'Chile', names: ['Chile'] },
+  { label: 'Colombia', names: ['Colombia'] },
+  { label: 'India', names: ['India'] },
+  { label: 'Japan', names: ['Japan'] },
+  { label: 'South Korea', names: ['South Korea'] },
+  { label: 'China', names: ['China'] },
+  { label: 'Taiwan', names: ['Taiwan'] },
+  { label: 'Thailand', names: ['Thailand'] },
+  { label: 'Vietnam', names: ['Vietnam'] },
+  { label: 'Malaysia', names: ['Malaysia'] },
+  { label: 'Philippines', names: ['Philippines'] },
+  { label: 'Australia', names: ['Australia'] },
+  { label: 'New Zealand', names: ['New Zealand'] },
+  { label: 'Israel', names: ['Israel'] },
+  { label: 'United Arab Emirates', names: ['United Arab Emirates', 'UAE'], needles: ['United Arab Emirates'] },
+  { label: 'Egypt', names: ['Egypt'] },
+  { label: 'Kenya', names: ['Kenya'] },
+  { label: 'Nigeria', names: ['Nigeria'] },
+  { label: 'South Africa', names: ['South Africa'] },
+
+  /* Hiring regions, which postings really do write into the location column
+     ("Remote (EMEA)", "Remote (Europe)"). */
+  { label: 'Europe', names: ['Europe'] },
+  { label: 'EMEA', names: ['EMEA'] },
+  { label: 'APAC', names: ['APAC'] },
+  { label: 'LATAM', names: ['LATAM'] },
+];
+
+const LOCATION_BY_NAME = new Map<string, KnownLocation>();
+const LOCATION_BY_LABEL = new Map<string, KnownLocation>();
+
+for (const entry of KNOWN_LOCATIONS) {
+  LOCATION_BY_LABEL.set(entry.label.toLowerCase(), entry);
+  for (const name of entry.names) LOCATION_BY_NAME.set(name.toLowerCase(), entry);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Every known spelling as one alternation, longest first.
+ *
+ * Length order is what makes "New York City" win over "New York", and
+ * "San Francisco Bay Area" over "Bay Area" — a regex alternation takes the
+ * first alternative that matches, not the longest, so the ordering has to do
+ * that work.
+ */
+const PLACE = [...LOCATION_BY_NAME.keys()]
+  .sort((a, b) => b.length - a.length)
+  .map(escapeRegExp)
+  .join('|');
+
+/**
+ * A place, optionally qualified by a second known place: "Berlin, Germany",
+ * "Austin, Texas". The qualifier is swallowed so it does not survive into the
+ * remainder as a stray word, but it is not read — the city is the filter.
+ */
+const PLACE_PHRASE = String.raw`(${PLACE})(?:\s*,\s*(?:${PLACE}))?`;
+
+/**
+ * How a query says where it wants to work, most explicit first.
+ *
+ * Every one of these anchors the place against `PLACE_PHRASE`, never against a
+ * generic word, which is the whole false-positive defence: "Engineer in Test",
+ * "work in finance" and "roles in AI" cannot match because Test, finance and
+ * AI are not places this module has heard of.
+ */
+const LOCATION_PATTERNS: RegExp[] = [
+  new RegExp(
+    String.raw`\b(?:based\s+in|located\s+in|relocat(?:e|ing)\s+to|in|near|around)\s+(?:the\s+)?${PLACE_PHRASE}\b`,
+    'i'
+  ),
+  new RegExp(String.raw`\b${PLACE_PHRASE}[\s-]based\b`, 'i'),
+  // A bare trailing place: "React developer Berlin".
+  new RegExp(String.raw`\b${PLACE_PHRASE}\s*$`, 'i'),
+];
+
+function findLocation(text: string): { entry: KnownLocation; index: number; text: string } | null {
+  for (const pattern of LOCATION_PATTERNS) {
+    const match = pattern.exec(text);
+    if (!match) continue;
+
+    const entry = LOCATION_BY_NAME.get(match[1].toLowerCase());
+    // Unreachable while `PLACE` is built from the same map, but a lookup miss
+    // must not become an undefined filter label.
+    if (!entry) continue;
+
+    return { entry, index: match.index, text: match[0] };
+  }
+
+  return null;
+}
+
 /** How the parsed value reads back to the user, in the chip. */
 function salaryLabel(amount: number): string {
   return amount >= 1000 ? `${Math.round(amount / 1000)}k+` : `${amount}+`;
@@ -154,8 +501,17 @@ function salaryLabel(amount: number): string {
  * corpus has to be reproducible, testable, and identical for every user typing
  * the same words. The vocabulary here is closed — `SENIORITY_LEVELS`,
  * `JOB_TYPES`, remote/on-site, a number — which is precisely the case where a
- * model adds variance rather than coverage. If the query language ever grows an
- * open-ended dimension, that is the point to revisit it.
+ * model adds variance rather than coverage.
+ *
+ * Location is the dimension that reads as open-ended, and it is handled by
+ * closing it: `KNOWN_LOCATIONS` is a gazetteer, and a place the gazetteer does
+ * not carry is simply not parsed. That is the deliberate shape of the failure.
+ * A model call would cover more places and would also, on some unlucky
+ * phrasing, decide "Test" is a city and silently return an empty result set
+ * for "Engineer in Test" — a failure the user cannot see, cannot reproduce and
+ * cannot undo, because the chip would name a filter they never asked for.
+ * Missing a city leaves the words in the remainder and ranks the query exactly
+ * as it is ranked today, which is a failure that costs nothing.
  */
 export function parseQuery(query: string): ParsedQuery {
   const source = query.trim().replace(/\s+/g, ' ');
@@ -192,6 +548,20 @@ export function parseQuery(query: string): ParsedQuery {
       chips.push({ key: 'remote', label: 'Remote', token: remote[0] });
       consume(remote.index, remote[0].length);
     }
+  }
+
+  /* ---- Location ----
+   *
+   * After remote/on-site, which owns the other half of "where": `in-office`
+   * and `in-person` both start with the word `in`, and letting the location
+   * rule read that `in` first would leave "roles in-office" hunting for a
+   * place called "office". Blanking the on-site span first makes that
+   * impossible rather than unlikely. */
+  const location = findLocation(working);
+  if (location) {
+    filters.location = location.entry.label;
+    chips.push({ key: 'location', label: location.entry.label, token: location.text.trim() });
+    consume(location.index, location.text.length);
   }
 
   /* ---- Employment type ---- */
@@ -271,7 +641,8 @@ export function hasFilters(filters: SearchFilters): boolean {
     filters.remote !== undefined ||
     filters.seniority !== undefined ||
     filters.type !== undefined ||
-    filters.minSalary !== undefined
+    filters.minSalary !== undefined ||
+    filters.location !== undefined
   );
 }
 
@@ -342,6 +713,45 @@ function salaryPredicate(minSalary: number): Prisma.Sql {
 }
 
 /**
+ * Location predicate.
+ *
+ * `Job.location` is free text — "Berlin, Germany", "Remote (EMEA)",
+ * "Singapore (on-site)" — so the match is a case-insensitive substring rather
+ * than an equality test: a filter of "Berlin, Germany" has to find a posting
+ * that says only "Berlin", and vice versa. Every spelling the gazetteer knows
+ * for the place is tried, which is what lets a query for "Bengaluru" find a
+ * posting advertised in "Bangalore".
+ *
+ * Note what this predicate cannot use: the `pg_trgm` GIN index is on
+ * `Job.title` and the full-text one is an expression index over the prose
+ * columns, so neither is available to a leading-wildcard ILIKE on `location`.
+ * This is a sequential scan over a column of short strings, which is the right
+ * trade at this corpus size; a `gin (lower("location") gin_trgm_ops)` index is
+ * the migration to write if it ever stops being.
+ *
+ * A value the gazetteer does not carry — which is what an explicit Location
+ * select on the feed, or a saved search, would hand it — degrades to a single
+ * substring match on the value itself rather than being ignored. LIKE
+ * metacharacters in that value are escaped, so a user-supplied `%` filters for
+ * a literal percent sign instead of matching everything.
+ *
+ * Postings with no location are excluded. Unlike `salary`, where silence means
+ * "not advertised" and the codebase's convention is that missing data is
+ * neutral, a row that does not say where it is cannot satisfy "in Berlin".
+ */
+function locationPredicate(location: string): Prisma.Sql {
+  const entry = LOCATION_BY_LABEL.get(location.trim().toLowerCase());
+  const needles = entry ? (entry.needles ?? entry.names) : [location.trim()];
+
+  const clauses = needles.map(
+    (needle) =>
+      Prisma.sql`coalesce(j."location", '') ILIKE ${`%${needle.replace(/[\\%_]/g, '\\$&')}%`}`
+  );
+
+  return Prisma.sql`(${Prisma.join(clauses, ' OR ')})`;
+}
+
+/**
  * The parsed filters as SQL. Every value is a bound parameter — user text never
  * reaches the statement itself.
  */
@@ -391,6 +801,10 @@ function filterPredicates(filters: SearchFilters): Prisma.Sql[] {
 
   if (typeof filters.minSalary === 'number') {
     conditions.push(salaryPredicate(filters.minSalary));
+  }
+
+  if (filters.location) {
+    conditions.push(locationPredicate(filters.location));
   }
 
   return conditions;

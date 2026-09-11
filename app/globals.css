@@ -206,6 +206,22 @@ nav {
   transition-duration: 200ms;
 }
 
+/*
+ * The element/pseudo-element rules in this section stay deliberately UNLAYERED.
+ * They are not component classes competing with utilities, and demoting them to
+ * `@layer base` would put them *below* `@layer components`, which regresses
+ * real behaviour:
+ *   - `.field:focus { outline: none }` below would start beating this
+ *     `:focus-visible` ring, leaving every input with no keyboard focus
+ *     indicator at all;
+ *   - the ~40 call sites that carry `focus:outline-none` would start winning
+ *     against it too;
+ *   - `:root` / `.dark` above must keep overriding the `--color-*` custom
+ *     properties that `@theme` emits into the `theme` layer — that override is
+ *     what makes `text-gray-500` resolve differently per theme.
+ * Unlayered is the correct precedence for all of it.
+ */
+
 /* A visible focus ring everywhere, for keyboard users. */
 :focus-visible {
   outline: 2px solid #4f46e5;
@@ -563,150 +579,181 @@ nav {
     }
   }
 
-}
+  /* ==========================================================================
+     Responsive container
 
-/* ==========================================================================
-   Responsive container
-   ========================================================================== */
+     Everything from here down used to sit *outside* this layer, at the bottom
+     of the file. In Tailwind v4 unlayered CSS beats every utility, so a
+     `px-*`, `max-w-*`, `min-h-*` or `line-clamp-none` on the same element was
+     silently ignored — the same trap that bit the component classes above,
+     which is why they live in here. No call site currently pairs
+     `.container-responsive` with a padding-inline, width or max-width utility
+     (every one of them only adds `py-*`), so layering it changes nothing today
+     and makes it overridable tomorrow.
+     ========================================================================== */
 
-.container-responsive {
-  width: 100%;
-  margin-left: auto;
-  margin-right: auto;
-  padding-left: 1rem;
-  padding-right: 1rem;
-}
-
-@media (min-width: 640px) {
   .container-responsive {
-    max-width: 640px;
-    padding-left: 1.5rem;
-    padding-right: 1.5rem;
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 1rem;
+    padding-right: 1rem;
   }
-}
 
-@media (min-width: 768px) {
-  .container-responsive {
-    max-width: 768px;
-    padding-left: 2rem;
-    padding-right: 2rem;
+  @media (min-width: 640px) {
+    .container-responsive {
+      max-width: 640px;
+      padding-left: 1.5rem;
+      padding-right: 1.5rem;
+    }
   }
-}
 
-@media (min-width: 1024px) {
-  .container-responsive {
-    max-width: 1024px;
-    padding-left: 2.5rem;
-    padding-right: 2.5rem;
+  @media (min-width: 768px) {
+    .container-responsive {
+      max-width: 768px;
+      padding-left: 2rem;
+      padding-right: 2rem;
+    }
   }
-}
 
-@media (min-width: 1280px) {
-  .container-responsive {
-    max-width: 1280px;
-    padding-left: 3rem;
-    padding-right: 3rem;
+  @media (min-width: 1024px) {
+    .container-responsive {
+      max-width: 1024px;
+      padding-left: 2.5rem;
+      padding-right: 2.5rem;
+    }
   }
-}
 
-@media (min-width: 1536px) {
-  .container-responsive {
-    max-width: 1536px;
-    padding-left: 4rem;
-    padding-right: 4rem;
+  @media (min-width: 1280px) {
+    .container-responsive {
+      max-width: 1280px;
+      padding-left: 3rem;
+      padding-right: 3rem;
+    }
   }
-}
 
-/* ==========================================================================
-   Animations
-   ========================================================================== */
-
-@keyframes fade-in-up {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
+  @media (min-width: 1536px) {
+    .container-responsive {
+      max-width: 1536px;
+      padding-left: 4rem;
+      padding-right: 4rem;
+    }
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+
+  /* ==========================================================================
+     Animations
+
+     Heads-up: tailwind.config.js also declares `fade-in-up`, `fade-in-down` and
+     `slide-in-right` under `theme.extend.{animation,keyframes}`, and Tailwind
+     emits those `@keyframes` *unlayered, after* this file. Unlayered keyframes
+     beat layered ones, so the config's geometry (20px, not the 16px written
+     below) is what actually plays — and that was already true before this move,
+     since a later unlayered `@keyframes` also beats an earlier one. Moving
+     these into the layer therefore changes nothing. The only live call site is
+     `motion-safe:animate-fade-in-up` (app/components/Toast.tsx); that is a
+     generated utility running the config's `0.6s ease-out`, and it never
+     matched the bare classes below in the first place. The bare `.animate-*`
+     and `.delay-*` classes have no call sites at all; they are kept as the
+     design system's own vocabulary, now correctly layered so a utility can win.
+     If the two definitions are ever reconciled, tailwind.config.js is the one
+     that currently decides the geometry.
+     ========================================================================== */
+
+  @keyframes fade-in-up {
+    from {
+      opacity: 0;
+      transform: translateY(16px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
-}
 
-@keyframes fade-in-down {
-  from {
-    opacity: 0;
-    transform: translateY(-16px);
+  @keyframes fade-in-down {
+    from {
+      opacity: 0;
+      transform: translateY(-16px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+
+  @keyframes slide-in-right {
+    from {
+      opacity: 0;
+      transform: translateX(16px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
   }
-}
 
-@keyframes slide-in-right {
-  from {
-    opacity: 0;
-    transform: translateX(16px);
+  .animate-fade-in-up {
+    animation: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
-  to {
-    opacity: 1;
-    transform: translateX(0);
+
+  .animate-fade-in-down {
+    animation: fade-in-down 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
-}
 
-.animate-fade-in-up {
-  animation: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
+  .animate-slide-in-right {
+    animation: slide-in-right 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
 
-.animate-fade-in-down {
-  animation: fade-in-down 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
+  .delay-100 {
+    animation-delay: 100ms;
+  }
 
-.animate-slide-in-right {
-  animation: slide-in-right 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
+  .delay-200 {
+    animation-delay: 200ms;
+  }
 
-.delay-100 {
-  animation-delay: 100ms;
-}
+  .delay-300 {
+    animation-delay: 300ms;
+  }
 
-.delay-200 {
-  animation-delay: 200ms;
-}
+  /* ==========================================================================
+     Helpers
 
-.delay-300 {
-  animation-delay: 300ms;
-}
+     `.line-clamp-2` / `.line-clamp-3` duplicate Tailwind v4's own line-clamp
+     utilities declaration-for-declaration, so with them layered the generated
+     utility simply wins with the identical result — and `line-clamp-none` now
+     works, which it could not while these were unlayered. `.btn-touch` has no
+     Tailwind counterpart; no element that carries it also carries a
+     `min-h-*`/`min-w-*` utility, so nothing changes except that one could now
+     override it.
+     ========================================================================== */
 
-/* ==========================================================================
-   Utilities
-   ========================================================================== */
-
-/* Touch-friendly hit area on small screens, tightened up on pointer devices. */
-.btn-touch {
-  min-height: 44px;
-  min-width: 44px;
-}
-
-@media (min-width: 768px) {
+  /* Touch-friendly hit area on small screens, tightened up on pointer devices. */
   .btn-touch {
-    min-height: 40px;
-    min-width: 40px;
+    min-height: 44px;
+    min-width: 44px;
   }
-}
 
-.line-clamp-2 {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
+  @media (min-width: 768px) {
+    .btn-touch {
+      min-height: 40px;
+      min-width: 40px;
+    }
+  }
 
-.line-clamp-3 {
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
 }
 
 /* ==========================================================================

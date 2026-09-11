@@ -816,8 +816,12 @@ function reportQueryUnderstanding(): void {
     if (expected.minSalaryUsd !== undefined && parsed.filters.minSalary !== expected.minSalaryUsd) {
       problems.push(`minSalary: expected ${expected.minSalaryUsd}, got ${String(parsed.filters.minSalary)}`);
     }
-    if (expected.location !== undefined) {
-      problems.push(`location: expected ${expected.location}, but parseQuery has no location rule`);
+    // Compared against the parse like every other expectation. It used to push
+    // this problem unconditionally, on the assumption that `parseQuery` had no
+    // location rule — which made the check a hardcoded failure that no amount of
+    // correct code could satisfy. An assertion that cannot pass measures nothing.
+    if (expected.location !== undefined && parsed.filters.location !== expected.location) {
+      problems.push(`location: expected ${expected.location}, got ${String(parsed.filters.location)}`);
     }
 
     say(`  ${pad(query.id, 34)}${problems.length === 0 ? 'ok' : 'MISMATCH'}`);

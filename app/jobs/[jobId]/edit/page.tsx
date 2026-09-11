@@ -7,11 +7,18 @@ import Navbar from "@/app/components/Navbar";
 import { useToast } from "@/app/components/Toast";
 import { useAuthGuard } from "@/app/hooks/useAuthGuard";
 import { apiFetch, authHeaders } from "@/lib/clientAuth";
-import { JOB_TYPES, isJobType } from "@/lib/validation";
+import {
+  JOB_TYPES,
+  MAX_SKILLS,
+  MAX_SKILL_LENGTH,
+  cleanTagList,
+  isJobType,
+} from "@/lib/validation";
 import {
   Alert,
   Card,
   CardHeader,
+  Chip,
   Eyebrow,
   Icon,
   JobStateBadge,
@@ -35,6 +42,8 @@ interface JobDetail {
   experience?: string | null;
   location?: string | null;
   type?: string | null;
+  /** A `Job` scalar; the detail route returns it alongside the rest. */
+  skills?: string[] | null;
   companyId: string;
   isActive: boolean;
   createdAt: string;
@@ -51,6 +60,7 @@ interface JobFormState {
   experience: string;
   location: string;
   type: string;
+  skills: string[];
   isActive: boolean;
 }
 
@@ -68,7 +78,23 @@ const MAX_EXPERIENCE = 60;
 const MAX_SALARY = 100;
 const MAX_LOCATION = 120;
 
-/** Single source of truth for form shape, so the dirty check compares like with like. */
+/*
+ * The skill caps are deliberately *not* re-declared here. `MAX_SKILLS` (25) and
+ * `MAX_SKILL_LENGTH` (40) are imported from `lib/validation`, which is the same
+ * module `cleanTagList` lives in and the same one `PUT /api/jobs/:jobId` calls
+ * — so the counter, the input's `maxLength` and the server's truncation point
+ * cannot drift apart the way the `experience` cap once did.
+ */
+
+/**
+ * Single source of truth for form shape, so the dirty check compares like with
+ * like.
+ *
+ * `skills` is copied out of the loaded posting verbatim rather than re-cleaned:
+ * the baseline has to be exactly what the row holds, or a posting stored under
+ * an older rule would render as "unsaved" the instant it loaded, and the
+ * employer would be nagged into a write they never asked for.
+ */
 function toForm(job: JobDetail): JobFormState {
   return {
     title: job.title ?? "",
@@ -77,6 +103,9 @@ function toForm(job: JobDetail): JobFormState {
     experience: job.experience ?? "",
     location: job.location ?? "",
     type: job.type ?? "",
+    skills: Array.isArray(job.skills)
+      ? job.skills.filter((skill): skill is string => typeof skill === "string")
+      : [],
     isActive: job.isActive,
   };
 }
@@ -84,6 +113,11 @@ function toForm(job: JobDetail): JobFormState {
 /* -------------------------------------------------------------------------- */
 /* AI requests                                                                 */
 /* -------------------------------------------------------------------------- */
+
+/** The whole of what `POST /api/ai/assist { mode: 'job-skills' }` answers with. */
+interface SkillsDraft {
+  skills: string[];
+}
 
 type AiOutcome<T> =
   | { ok: true; data: T }
@@ -346,6 +380,21 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
   // answers 503 once, then hidden for the session. They all share one key.
   const [aiAvailable, setAiAvailable] = useState(true);
 
+  /* ------------------------------ skill tags ------------------------------ */
+
+  const [skillInput, setSkillInput] = useState("");
+  /** Announced politely, so the tag list is usable without seeing it. */
+  const [skillNotice, setSkillNotice] = useState("");
+  const [suggestingSkills, setSuggestingSkills] = useState(false);
+
+  /**
+   * The live tag list. A suggestion request can resolve after the employer has
+   * typed another tag, and the copy captured when the request went out would be
+   * stale by then — so every write goes through `applySkills`, which updates
+   * this ref first and the form second. Seeded from the posting on load.
+   */
+  const skillsRef = useRef<string[]>([]);
+
   /* --------------------------- inclusivity check -------------------------- */
 
   const [reviewing, setReviewing] = useState(false);
@@ -378,8 +427,12 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
         setLoadError("");
         const data = await apiFetch<JobDetail>(`/api/jobs/${jobId}`);
         if (cancelled) return;
+        const form = toForm(data);
         setJob(data);
-        setFormData(toForm(data));
+        setFormData(form);
+        // The ref is the tag editor's source of truth; seed it with whatever
+        // this posting already stores, so an untouched editor is a no-op.
+        skillsRef.current = form.skills;
       } catch (err) {
         if (cancelled) return;
         setLoadError(err instanceof Error ? err.message : "Failed to load this job");
@@ -432,6 +485,20 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
     return JSON.stringify(formData) !== JSON.stringify(toForm(job));
   }, [job, formData]);
 
+  /**
+   * Whether the employer has actually touched the tag list.
+   *
+   * `PUT /api/jobs/:jobId` is presence-gated on `'skills' in body`, so the key
+   * is what hands this page ownership of the column. It is added to the payload
+   * only when this is true: an employer who rewrites the description and never
+   * opens the tag editor sends no `skills` key at all, and the stored tags are
+   * left exactly as they were rather than round-tripped through `cleanTagList`.
+   */
+  const skillsChanged = useMemo(() => {
+    if (!job || !formData) return false;
+    return JSON.stringify(formData.skills) !== JSON.stringify(toForm(job).skills);
+  }, [job, formData]);
+
   const questionsDirty = useMemo(
     () => JSON.stringify(toQuestionPayload(questions)) !== questionsBaseline,
     [questions, questionsBaseline]
@@ -468,6 +535,106 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
       target instanceof HTMLInputElement && target.type === "checkbox" ? target.checked : target.value;
     setFormData((current) => (current ? { ...current, [target.name]: value } : current));
     setSaved(false);
+  };
+
+  /* ------------------------------ skill tags ------------------------------ */
+
+  const applySkills = (next: string[]) => {
+    skillsRef.current = next;
+    setFormData((current) => (current ? { ...current, skills: next } : current));
+    setSaved(false);
+  };
+
+  /**
+   * Merges tags in without ever removing one the employer typed, and caps the
+   * list where the server does so nothing is silently dropped on save.
+   * Returns how many actually landed, for the announcement.
+   */
+  const mergeSkills = (incoming: string[]): number => {
+    const current = skillsRef.current;
+    const seen = new Set(current.map((skill) => skill.toLowerCase()));
+    const room = Math.max(0, MAX_SKILLS - current.length);
+    const additions: string[] = [];
+
+    // `cleanTagList` is the server's own cleaner: it trims, collapses runs of
+    // whitespace, cuts each tag at MAX_SKILL_LENGTH and drops duplicates. What
+    // goes into the list is therefore already what the route would store.
+    for (const tag of cleanTagList(incoming, MAX_SKILLS)) {
+      if (additions.length >= room) break;
+      const key = tag.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      additions.push(tag);
+    }
+
+    if (additions.length > 0) applySkills([...current, ...additions]);
+    return additions.length;
+  };
+
+  const commitSkillInput = (raw: string) => {
+    if (!raw.trim()) {
+      setSkillInput("");
+      return;
+    }
+    const wasFull = skillsRef.current.length >= MAX_SKILLS;
+    const added = mergeSkills(raw.split(","));
+    setSkillInput("");
+    setSkillNotice(
+      added > 0
+        ? `${added === 1 ? "Skill added" : `${added} skills added`}. ${skillsRef.current.length} of ${MAX_SKILLS}. Not saved yet.`
+        : wasFull
+          ? `Skill limit reached — ${MAX_SKILLS} of ${MAX_SKILLS}.`
+          : "That skill is already on the list."
+    );
+  };
+
+  const removeSkill = (tag: string) => {
+    const next = skillsRef.current.filter((skill) => skill !== tag);
+    applySkills(next);
+    setSkillNotice(`${tag} removed. ${next.length} of ${MAX_SKILLS}. Not saved yet.`);
+  };
+
+  const handleSkillKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      // Never let the tag editor submit the whole posting.
+      event.preventDefault();
+      commitSkillInput(skillInput);
+      return;
+    }
+    if (event.key === "Backspace" && skillInput === "" && skillsRef.current.length > 0) {
+      event.preventDefault();
+      removeSkill(skillsRef.current[skillsRef.current.length - 1]);
+    }
+  };
+
+  /** Same affordance as the post form: reads the description as it stands now. */
+  const handleSuggestSkills = async () => {
+    const title = formData?.title.trim() ?? "";
+    const description = formData?.description.trim() ?? "";
+    if (!title || !description || suggestingSkills) return;
+
+    setSuggestingSkills(true);
+    const outcome = await requestAi<SkillsDraft>("/api/ai/assist", {
+      mode: "job-skills",
+      title,
+      description,
+    });
+    setSuggestingSkills(false);
+
+    if (outcome.ok) {
+      const added = mergeSkills(outcome.data.skills);
+      setSkillNotice(
+        added > 0
+          ? `${added} suggested ${added === 1 ? "skill" : "skills"} added. Remove any that do not fit, then save.`
+          : "No new skills to suggest — the list already covers the posting."
+      );
+      return;
+    }
+    if (outcome.unavailable) {
+      setAiAvailable(false);
+      return;
+    }
+    toast.error(outcome.message);
   };
 
   /* --------------------------- inclusivity check -------------------------- */
@@ -723,6 +890,26 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
       return;
     }
 
+    // Recomputed from the ref rather than read off the memo above: a tag
+    // committed by the input's own blur as the save button went down is already
+    // in the ref, and this is the check that decides whether it is sent at all.
+    const storedSkills = job ? toForm(job).skills : skillsRef.current;
+    const skillsTouched = JSON.stringify(skillsRef.current) !== JSON.stringify(storedSkills);
+
+    // Everything the editor adds has already been through `cleanTagList`, so
+    // this only bites on a posting that was stored over the caps. Refusing is
+    // the point: sending it anyway would have the route quietly drop the tail,
+    // and the form would then claim a list the row does not hold.
+    if (
+      skillsTouched &&
+      JSON.stringify(cleanTagList(skillsRef.current)) !== JSON.stringify(skillsRef.current)
+    ) {
+      setFormError(
+        `Skills: keep to ${MAX_SKILLS} tags of at most ${MAX_SKILL_LENGTH} characters each. Remove the extras — saving would drop them without telling you.`
+      );
+      return;
+    }
+
     const payload = {
       title,
       description,
@@ -731,6 +918,11 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
       location: formData.location.trim() || null,
       type: formData.type,
       isActive: formData.isActive,
+      // Presence-gated on the route. The key only appears once the tag editor
+      // has been used, so an untouched editor cannot clear the stored tags —
+      // and when it does appear it carries the ref, which already holds a tag
+      // committed by the input's own blur as the save button went down.
+      ...(skillsTouched ? { skills: skillsRef.current } : {}),
     };
 
     setSaving(true);
@@ -745,11 +937,15 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
       // check resets against exactly what we sent.
       const updated: JobDetail | null = job ? { ...job, ...payload } : null;
       if (updated) {
+        const form = toForm(updated);
         setJob(updated);
-        setFormData(toForm(updated));
+        setFormData(form);
+        // The tags we sent were already in the shape `cleanTagList` produces,
+        // so what the route stored is what this baseline now holds.
+        skillsRef.current = form.skills;
       }
       setSaved(true);
-      toast.success("Changes saved.");
+      toast.success("Job details saved.");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to update job";
       setFormError(message);
@@ -812,6 +1008,19 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
   const atDescriptionLimit = descriptionLength >= MAX_DESCRIPTION;
   const descriptionFilled = (formData?.description.trim().length ?? 0) > 0;
   const questionsFull = questions.length >= MAX_QUESTIONS;
+
+  const skills = formData?.skills ?? [];
+  const skillsFull = skills.length >= MAX_SKILLS;
+  // The assistant reads *from* the posting; with no description it has nothing
+  // to extract, which on this page can only happen mid-rewrite.
+  const canSuggestSkills = (formData?.title.trim().length ?? 0) > 0 && descriptionFilled;
+  /**
+   * A posting stored before these caps existed can be over them. Saying so is
+   * the whole point: the alternative is `cleanTagList` quietly dropping the tail
+   * on the next save and the employer finding out by re-reading the posting.
+   */
+  const skillsOverCap =
+    skills.length > MAX_SKILLS || skills.some((skill) => skill.length > MAX_SKILL_LENGTH);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -895,7 +1104,7 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
 
             {saved && !isDirty && (
               <Alert variant="success" className="mb-6">
-                Changes saved.{" "}
+                Job details saved.{" "}
                 <Link href={`/jobs/${job.id}`} className="font-medium underline underline-offset-2">
                   View the posting
                 </Link>
@@ -906,7 +1115,7 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
               <CardHeader
                 eyebrow="Draft"
                 title="Job details"
-                description="Changes go live as soon as you save."
+                description="Everything on this card, skill tags included, saves together on one button and goes live at once."
               />
 
               <form onSubmit={handleSubmit} className="px-4 py-5 sm:px-6 sm:py-6" noValidate>
@@ -1197,6 +1406,124 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
                         className={inputClass}
                       />
                     </div>
+
+                    {/* Skills are a facet of the match score in their own right
+                        (`scoreSkills`, weighted 0.18), so a posting that gets
+                        rewritten without them keeps scoring against the role it
+                        used to be. Same editor as the post form, and it saves on
+                        the same button as the rest of the job details. */}
+                    <div className="sm:col-span-2">
+                      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+                        <Label
+                          htmlFor="skill-input"
+                          hint="Optional. Press Enter or type a comma to add a tag."
+                        >
+                          Skills
+                        </Label>
+                        {aiAvailable && (
+                          <button
+                            type="button"
+                            onClick={() => void handleSuggestSkills()}
+                            disabled={!canSuggestSkills || suggestingSkills || skillsFull}
+                            aria-describedby={canSuggestSkills ? undefined : "skills-ai-hint"}
+                            className={`${buttonGhost} mb-2 disabled:cursor-not-allowed disabled:opacity-50`}
+                          >
+                            {suggestingSkills ? (
+                              <>
+                                <Spinner className="h-4 w-4" />
+                                Reading the posting…
+                              </>
+                            ) : (
+                              <>
+                                <Icon.spark className="h-4 w-4" />
+                                Suggest skills
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </div>
+
+                      {skills.length > 0 && (
+                        <ul className="mb-2 flex flex-wrap gap-1.5">
+                          {skills.map((skill) => (
+                            <li key={skill}>
+                              <Chip>
+                                {skill}
+                                {/* Named for the tag it removes, and 24px
+                                    square so it is hittable on a phone without
+                                    inflating the chip. */}
+                                <button
+                                  type="button"
+                                  onClick={() => removeSkill(skill)}
+                                  aria-label={`Remove ${skill}`}
+                                  className="-my-1 -mr-1.5 inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-gray-400 hover:text-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:hover:text-gray-100"
+                                >
+                                  <Icon.x className="h-3 w-3" />
+                                </button>
+                              </Chip>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+
+                      <input
+                        type="text"
+                        id="skill-input"
+                        value={skillInput}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          // Handles both the comma key and a pasted list.
+                          if (value.includes(",")) commitSkillInput(value);
+                          else setSkillInput(value);
+                        }}
+                        onKeyDown={handleSkillKeyDown}
+                        onBlur={() => commitSkillInput(skillInput)}
+                        disabled={skillsFull}
+                        maxLength={MAX_SKILL_LENGTH}
+                        placeholder={
+                          skillsFull ? "Skill limit reached" : "e.g. TypeScript, Postgres, Figma"
+                        }
+                        className={`${inputClass} disabled:cursor-not-allowed disabled:opacity-60`}
+                      />
+
+                      <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-2">
+                        <p id="skills-ai-hint" className="eyebrow">
+                          {aiAvailable && !canSuggestSkills
+                            ? "Write a description to suggest skills from"
+                            : "Backspace on an empty field removes the last tag"}
+                        </p>
+                        <Readout
+                          className={`text-xs ${
+                            skillsFull
+                              ? "text-amber-700 dark:text-amber-400"
+                              : "text-gray-500 dark:text-gray-400"
+                          }`}
+                        >
+                          {skills.length}/{MAX_SKILLS}
+                        </Readout>
+                      </div>
+
+                      {skillsOverCap && (
+                        <p className="mt-1.5 text-xs leading-relaxed text-amber-700 dark:text-amber-400">
+                          This posting stores more than {MAX_SKILLS} tags, or a tag longer than{" "}
+                          {MAX_SKILL_LENGTH} characters — more than the posting can hold. Editing
+                          the tags is fine, but the save will ask you to trim the list first rather
+                          than cut it for you.
+                        </p>
+                      )}
+
+                      {skillsChanged && (
+                        <p className="mt-1.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                          Saved with the job details, on the button below. Changing the tags
+                          re-indexes this posting for matching, so give it a moment to settle before
+                          judging the candidate list.
+                        </p>
+                      )}
+
+                      <p aria-live="polite" className="eyebrow mt-1 normal-case tracking-normal">
+                        {skillNotice}
+                      </p>
+                    </div>
                   </div>
                 </section>
 
@@ -1247,8 +1574,11 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
                 </div>
 
                 <div className="mt-8 flex flex-col-reverse gap-3 border-t border-gray-200 pt-5 dark:border-gray-700 sm:flex-row sm:items-center sm:justify-end">
+                  {/* Scoped deliberately. With the questions saving on their own
+                      button below, "everything is saved" was a claim this line
+                      had no way of making good on. */}
                   <p className="eyebrow text-center sm:mr-auto sm:text-left" aria-live="polite">
-                    {isDirty ? "Unsaved changes" : "Everything is saved"}
+                    {isDirty ? "Unsaved job details" : "Job details are saved"}
                   </p>
                   <Link
                     href="/company/dashboard"
@@ -1263,7 +1593,7 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
                     aria-describedby={formError ? "edit-job-error" : undefined}
                     className={`${buttonPrimary} w-full sm:w-auto`}
                   >
-                    {saving ? "Saving…" : "Save changes"}
+                    {saving ? "Saving…" : "Save job details"}
                   </button>
                 </div>
               </form>
@@ -1271,13 +1601,14 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
 
             {/* Screening questions live on their own route, so they save on
                 their own button. Folding them into the form above would make
-                one "Save changes" mean two independent writes, either of which
-                can fail without the other. */}
+                one "Save job details" mean two independent writes, either of
+                which can fail without the other. The skill tags, by contrast,
+                are columns on the job row and go out with that same PUT. */}
             <Card className="mt-6">
               <CardHeader
                 eyebrow="Screening"
                 title="Screening questions"
-                description={`Applicants answer these when they apply, and you see the answers on the application. Up to ${MAX_QUESTIONS}.`}
+                description={`Applicants answer these when they apply, and you see the answers on the application. Up to ${MAX_QUESTIONS}. They save on their own button, separately from the job details above.`}
                 action={
                   aiAvailable ? (
                     <button
