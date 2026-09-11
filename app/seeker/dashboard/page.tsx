@@ -954,7 +954,7 @@ export default function SeekerDashboardPage() {
                 <div
                   role="group"
                   aria-label="Filter applications by status"
-                  className="flex flex-wrap gap-1 rounded-lg border border-gray-200 p-1 dark:border-gray-700"
+                  className="segmented"
                 >
                   {FILTERS.map((filter) => {
                     const active = statusFilter === filter;
@@ -965,16 +965,10 @@ export default function SeekerDashboardPage() {
                         type="button"
                         onClick={() => setStatusFilter(filter)}
                         aria-pressed={active}
-                        className={`mono inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11px] uppercase tracking-wider transition-colors ${
-                          active
-                            ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
-                            : "text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
-                        }`}
+                        className="mono segment interactive hit-24"
                       >
                         {FILTER_LABELS[filter]}
-                        <span className={active ? "opacity-70" : "opacity-60"}>
-                          {applicationsLoading ? "—" : count}
-                        </span>
+                        <span className="segment-count">{applicationsLoading ? "—" : count}</span>
                       </button>
                     );
                   })}
@@ -1217,7 +1211,7 @@ export default function SeekerDashboardPage() {
                             aria-describedby={
                               uploadError ? "resume-upload-error resume-hint" : "resume-hint"
                             }
-                            className="block w-full cursor-pointer rounded-lg border border-gray-300 bg-white text-sm text-gray-600 file:mr-4 file:cursor-pointer file:rounded-l-md file:border-0 file:border-r file:border-gray-200 file:bg-gray-50 file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-gray-900 hover:file:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400 dark:file:border-gray-700 dark:file:bg-gray-700 dark:file:text-white dark:hover:file:bg-gray-600"
+                            className="block w-full cursor-pointer rounded-lg border border-gray-300 bg-white text-sm text-gray-600 file:mr-4 file:cursor-pointer file:rounded-l-md file:border-0 file:border-r file:border-gray-200 file:bg-gray-50 file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-gray-900 hover:file:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400 dark:file:border-gray-700 dark:file:bg-gray-700 dark:file:text-white dark:hover:file:bg-gray-600"
                           />
                           <p
                             id="resume-hint"
@@ -1493,13 +1487,13 @@ function ApplicationRow({
   const fitAtApply = readNumber(application.matchScore);
 
   return (
-    <li className="p-4 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50 sm:p-5">
+    <li className="interactive p-4 sm:p-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 flex-1">
           <h3 className="text-base font-semibold text-gray-900 dark:text-white sm:text-lg">
             <Link
               href={`/jobs/${application.job.id}`}
-              className="rounded transition-colors hover:text-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:hover:text-blue-400"
+              className="rounded transition-colors hover:text-blue-700 dark:hover:text-blue-400"
             >
               {application.job.title}
             </Link>
@@ -1610,7 +1604,7 @@ function MatchedJobCard({ job }: { job: RecommendedJob }) {
           <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
             <Link
               href={`/jobs/${job.id}`}
-              className="rounded transition-colors hover:text-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:hover:text-blue-400"
+              className="rounded transition-colors hover:text-blue-700 dark:hover:text-blue-400"
             >
               {job.title}
             </Link>

@@ -478,7 +478,7 @@ export default function CompanyDashboard() {
                           onClick={() => toggleExpanded(job.id)}
                           aria-expanded={expanded}
                           aria-controls={`applications-${job.id}`}
-                          className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-medium text-blue-600 transition-colors hover:bg-blue-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-blue-400 dark:hover:bg-blue-950/30"
+                          className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-medium text-blue-600 transition-colors hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/30"
                         >
                           <Icon.arrowRight
                             className={`h-4 w-4 transition-transform ${expanded ? "rotate-90" : ""}`}
@@ -524,7 +524,7 @@ export default function CompanyDashboard() {
                                           href={resume.url}
                                           target="_blank"
                                           rel="noopener noreferrer"
-                                          className="inline-flex items-center gap-1.5 rounded text-xs font-medium text-blue-600 underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-blue-400"
+                                          className="inline-flex items-center gap-1.5 rounded text-xs font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
                                         >
                                           <Icon.document className="h-4 w-4" />
                                           View r&eacute;sum&eacute;
@@ -547,7 +547,7 @@ export default function CompanyDashboard() {
                                         onClick={() => void messageApplicant(application.userId)}
                                         disabled={busyMessaging}
                                         aria-busy={busyMessaging}
-                                        className="inline-flex items-center gap-1.5 rounded text-xs font-medium text-gray-600 underline-offset-2 transition-colors hover:text-gray-900 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-400 dark:hover:text-white"
+                                        className="inline-flex items-center gap-1.5 rounded text-xs font-medium text-gray-600 underline-offset-2 transition-colors hover:text-gray-900 hover:underline disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-400 dark:hover:text-white"
                                       >
                                         <Icon.chat className="h-4 w-4" />
                                         {busyMessaging ? "Opening…" : "Message"}
@@ -634,7 +634,7 @@ export default function CompanyDashboard() {
                       href={user.website}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="mono break-all text-sm font-medium text-blue-600 underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-blue-400"
+                      className="mono break-all text-sm font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
                     >
                       {user.website}
                     </a>
@@ -690,7 +690,7 @@ function QuickAction({
       href={href}
       // Hairline panel, no shadow and no coloured tile: the accent stays
       // reserved for signal, so navigation reads as neutral instrumentation.
-      className="panel group flex items-center gap-3 p-4 transition-colors hover:border-gray-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:hover:border-gray-600"
+      className="panel group flex items-center gap-3 p-4 transition-colors hover:border-gray-300 dark:hover:border-gray-600"
     >
       <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-gray-500 transition-colors group-hover:text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:group-hover:text-white">
         {icon}

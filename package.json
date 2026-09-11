@@ -14,7 +14,9 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
-    "eval": "node --import ./scripts/eval/loader.mjs ./scripts/eval/run.ts"
+    "eval": "node --import ./scripts/eval/loader.mjs ./scripts/eval/run.ts",
+    "audit:contrast": "node ./scripts/contrast-audit.mjs",
+    "test:e2e": "node ./scripts/e2e.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.21.0",

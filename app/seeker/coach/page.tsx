@@ -487,7 +487,7 @@ export default function SeekerCoachPage() {
                         aria-selected={mode === tool}
                         aria-controls={`coach-panel-${tool}`}
                         onClick={() => setMode(tool)}
-                        className={`px-2 py-3 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 ${
+                        className={`px-2 py-3 text-sm font-medium transition-colors focus-inset ${
                           mode === tool
                             ? "border-b-2 border-green-500 text-gray-900 dark:text-white"
                             : "border-b-2 border-transparent text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
@@ -607,10 +607,8 @@ function RoleRow({
       type="button"
       onClick={onSelect}
       aria-pressed={selected}
-      className={`w-full border-b border-gray-200 px-4 py-3 text-left transition-colors last:border-b-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 dark:border-gray-700 ${
-        selected
-          ? "bg-green-50 dark:bg-green-950/25"
-          : "hover:bg-gray-50 dark:hover:bg-gray-800/60"
+      className={`interactive w-full border-b border-gray-200 px-4 py-3 text-left last:border-b-0 focus-inset dark:border-gray-700 ${
+        selected ? "bg-green-50 dark:bg-green-950/25" : ""
       }`}
     >
       <div className="flex items-start justify-between gap-2">

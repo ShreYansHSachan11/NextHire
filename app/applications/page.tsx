@@ -927,7 +927,7 @@ function ApplicationRow({
               Applied for{" "}
               <Link
                 href={`/jobs/${application.job.id}`}
-                className="rounded font-medium text-blue-600 underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-blue-400"
+                className="rounded font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
               >
                 {application.job.title}
               </Link>

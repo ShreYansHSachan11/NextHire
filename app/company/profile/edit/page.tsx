@@ -321,7 +321,7 @@ export default function CompanyProfileEdit() {
         <Link
           href="/company/dashboard"
           onClick={confirmDiscard}
-          className="mb-5 inline-flex items-center gap-1.5 rounded text-sm font-medium text-gray-600 transition-colors hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-gray-400 dark:hover:text-white"
+          className="mb-5 inline-flex items-center gap-1.5 rounded text-sm font-medium text-gray-600 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
         >
           <Icon.arrowLeft className="h-4 w-4" />
           Back to dashboard

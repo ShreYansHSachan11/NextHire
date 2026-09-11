@@ -1610,7 +1610,7 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
                                   // gray-500, not gray-400: the lighter grey sat
                                   // at about 2.8:1 on the chip's own background
                                   // in light mode. Matches the post form.
-                                  className="-my-1 -mr-1.5 inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-gray-500 hover:text-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-gray-400 dark:hover:text-gray-100"
+                                  className="-my-1 -mr-1.5 inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-100"
                                 >
                                   <Icon.x className="h-3 w-3" />
                                 </button>
@@ -2004,7 +2004,7 @@ function SectionRail({
             <button
               type="button"
               onClick={() => onJump(section.id)}
-              className="flex w-full flex-col items-start gap-1 rounded-lg border border-gray-200 px-2.5 py-2 text-left transition-colors hover:border-gray-300 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-gray-700 dark:hover:border-gray-600 dark:hover:bg-gray-800"
+              className="interactive flex w-full flex-col items-start gap-1 rounded-lg border border-gray-200 px-2.5 py-2 text-left dark:border-gray-700"
             >
               <span className="flex w-full min-w-0 items-baseline gap-1.5">
                 <Readout className="text-xs text-gray-500 dark:text-gray-400">
@@ -2068,7 +2068,7 @@ function SectionCard({
           onClick={onToggle}
           aria-expanded={open}
           aria-controls={panelId}
-          className="flex w-full items-start gap-3 rounded-xl px-4 py-4 text-left transition-colors hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 dark:hover:bg-gray-800/60 sm:px-6"
+          className="interactive flex w-full items-start gap-3 rounded-xl px-4 py-4 text-left focus-inset sm:px-6"
         >
           <Readout className="mt-0.5 text-sm font-semibold text-gray-500 dark:text-gray-400">
             {section.number}
@@ -2316,7 +2316,7 @@ function QuestionEditor({
             id={requiredId}
             checked={question.required}
             onChange={(event) => onChange(question.key, { required: event.target.checked })}
-            className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800"
+            className="control h-4 w-4 rounded"
           />
           <span className="text-gray-700 dark:text-gray-200">Applicants must answer this</span>
         </label>
@@ -2330,7 +2330,7 @@ function QuestionEditor({
               disabled={question.expected === null}
               onChange={(event) => onChange(question.key, { knockout: event.target.checked })}
               aria-describedby={knockoutHintId}
-              className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800"
+              className="control h-4 w-4 rounded"
             />
             <span className="text-gray-700 dark:text-gray-200">
               Flag applicants who answer differently

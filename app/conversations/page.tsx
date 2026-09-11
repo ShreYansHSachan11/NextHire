@@ -552,8 +552,8 @@ function ConversationRow({
           onClick={() => onOpen(conversation)}
           aria-current={active ? "true" : undefined}
           // `.panel-signal` is the selected treatment: emerald hairline + tint.
-          className={`flex w-full items-start gap-3 p-3 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 sm:p-4 ${
-            active ? "panel-signal" : "hover:bg-gray-50 dark:hover:bg-gray-800/60"
+          className={`interactive flex w-full items-start gap-3 p-3 text-left focus-inset sm:p-4 ${
+            active ? "panel-signal" : ""
           }`}
         >
           {body}
@@ -565,7 +565,7 @@ function ConversationRow({
             type="button"
             onClick={() => void onStart(application.userId)}
             disabled={starting}
-            className="mono flex-shrink-0 self-center whitespace-nowrap rounded-md border border-gray-300 bg-white px-2 py-1 text-[11px] font-medium uppercase tracking-wider text-gray-700 transition-colors hover:border-gray-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:border-gray-500"
+            className="mono flex-shrink-0 self-center whitespace-nowrap rounded-md border border-gray-300 bg-white px-2 py-1 text-[11px] font-medium uppercase tracking-wider text-gray-700 transition-colors hover:border-gray-400 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:border-gray-500"
           >
             {starting ? "Opening" : "Start"}
           </button>
@@ -589,7 +589,7 @@ function ThreadHeader({
       <button
         type="button"
         onClick={onBack}
-        className="rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white lg:hidden"
+        className="interactive rounded-lg p-2 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white lg:hidden"
         aria-label="Back to applicant list"
       >
         <Icon.arrowLeft className="h-5 w-5" />

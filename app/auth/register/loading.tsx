@@ -19,7 +19,7 @@ export default function Loading() {
       <div className="flex min-h-screen flex-col">
         <header className="flex items-center justify-between px-4 py-4 sm:px-6 lg:px-10">
           <span className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900">
+            <span className="tile tile-ink h-9 w-9">
               <Icon.graph className="h-5 w-5" />
             </span>
             <span className="mono text-sm font-bold uppercase tracking-[0.14em] text-gray-900 dark:text-white">

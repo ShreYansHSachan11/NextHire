@@ -108,14 +108,14 @@ export default function Home() {
   const postHref = isCompany ? "/jobs/post" : "/auth/register";
 
   return (
-    <div className="min-h-screen bg-white dark:bg-gray-900">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Navbar variant="marketing" />
 
       <main id="main-content">
         {/* ---------------------------------------------------------------- */}
         {/* Hero — graph-paper field, tight display type, left aligned         */}
         {/* ---------------------------------------------------------------- */}
-        <section className="grid-field border-b border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
+        <section className="grid-field border-b border-gray-200 dark:border-gray-700">
           <div className="container-responsive py-14 sm:py-20 lg:py-24">
             <Eyebrow className="mb-4">SIGNAL-BASED MATCHING</Eyebrow>
 
@@ -146,12 +146,12 @@ export default function Home() {
               role="search"
               aria-label="Search open roles"
               onSubmit={handleSearch}
-              className="panel mt-10 flex max-w-3xl flex-col gap-1.5 p-1.5 sm:flex-row sm:items-center"
+              className="panel panel-raised mt-10 flex max-w-3xl flex-col gap-1.5 p-1.5 sm:flex-row sm:items-center"
             >
               {/* Bare inputs rather than `.field`: the two controls read as one
                   instrument, so the container carries the single hairline. */}
               <div className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2">
-                <Icon.search className="h-4 w-4 flex-shrink-0 text-gray-500 dark:text-gray-400" />
+                <Icon.search className="h-4 w-4 flex-shrink-0 text-gray-500" />
                 <label htmlFor="hero-keyword" className="sr-only">
                   Role, skill or company
                 </label>
@@ -162,17 +162,17 @@ export default function Home() {
                   value={keyword}
                   onChange={(event) => setKeyword(event.target.value)}
                   placeholder="Role, skill or company"
-                  className="w-full min-w-0 bg-transparent text-sm text-gray-900 placeholder:text-gray-500 dark:text-white dark:placeholder:text-gray-400"
+                  className="field-bare w-full min-w-0 text-sm"
                 />
               </div>
 
               <span
-                className="h-px w-full bg-gray-200 dark:bg-gray-700 sm:h-7 sm:w-px"
+                className="h-px w-full bg-[var(--line)] sm:h-7 sm:w-px"
                 aria-hidden="true"
               />
 
               <div className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2">
-                <Icon.location className="h-4 w-4 flex-shrink-0 text-gray-500 dark:text-gray-400" />
+                <Icon.location className="h-4 w-4 flex-shrink-0 text-gray-500" />
                 <label htmlFor="hero-location" className="sr-only">
                   Location
                 </label>
@@ -183,7 +183,7 @@ export default function Home() {
                   value={place}
                   onChange={(event) => setPlace(event.target.value)}
                   placeholder="Location or remote"
-                  className="w-full min-w-0 bg-transparent text-sm text-gray-900 placeholder:text-gray-500 dark:text-white dark:placeholder:text-gray-400"
+                  className="field-bare w-full min-w-0 text-sm"
                 />
               </div>
 
@@ -246,7 +246,7 @@ export default function Home() {
         {/* ---------------------------------------------------------------- */}
         {showCounters && (
           <section
-            className="border-b border-gray-200 bg-gray-50 py-10 dark:border-gray-700 dark:bg-gray-950 sm:py-14"
+            className="band-sunken border-b border-gray-200 py-10 dark:border-gray-700 sm:py-14"
             aria-labelledby="stats-heading"
           >
             <div className="container-responsive">
@@ -298,7 +298,7 @@ export default function Home() {
         {/* ---------------------------------------------------------------- */}
         {/* Capabilities                                                      */}
         {/* ---------------------------------------------------------------- */}
-        <section id="features" className="bg-white py-16 dark:bg-gray-900 sm:py-20">
+        <section id="features" className="py-16 sm:py-20">
           <div className="container-responsive">
             <div className="max-w-2xl">
               <Eyebrow className="mb-3">WHAT THE PLATFORM DOES</Eyebrow>
@@ -387,7 +387,7 @@ export default function Home() {
         {/* ---------------------------------------------------------------- */}
         {/* Audience split                                                    */}
         {/* ---------------------------------------------------------------- */}
-        <section className="bg-white py-16 dark:bg-gray-900 sm:py-20">
+        <section className="py-16 sm:py-20">
           <div className="container-responsive">
             <div className="max-w-2xl">
               <Eyebrow className="mb-3">TWO SIDES, ONE HIRE</Eyebrow>
@@ -436,7 +436,7 @@ export default function Home() {
         {/* ---------------------------------------------------------------- */}
         {/* Closing CTA — the old blue band, restated in the neutral language  */}
         {/* ---------------------------------------------------------------- */}
-        <section className="bg-white pb-16 dark:bg-gray-900 sm:pb-20">
+        <section className="pb-16 sm:pb-20">
           <div className="container-responsive">
             <Card grid className="px-6 py-10 text-center sm:px-10 sm:py-12">
               <Eyebrow className="mb-3">{signedIn ? "WELCOME BACK" : "GET STARTED"}</Eyebrow>
@@ -470,13 +470,13 @@ export default function Home() {
       {/* ------------------------------------------------------------------ */}
       {/* Footer — hairline rule, mono wordmark, real destinations only       */}
       {/* ------------------------------------------------------------------ */}
-      <footer className="border-t border-gray-200 bg-white py-12 dark:border-gray-700 dark:bg-gray-900 sm:py-14">
+      <footer className="border-t border-gray-200 bg-[var(--surface)] py-12 dark:border-gray-700 sm:py-14">
         <div className="container-responsive">
           <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-4">
             <div className="lg:col-span-2">
               <span className="flex items-center gap-2.5">
                 <span
-                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-green-600 dark:border-gray-700 dark:bg-gray-800 dark:text-green-400"
+                  className="tile tile-accent h-8 w-8"
                   aria-hidden="true"
                 >
                   <Icon.graph className="h-4 w-4" />
@@ -588,7 +588,7 @@ function Feature({
   return (
     <Card className={`p-6 ${className}`}>
       <span
-        className="mb-5 flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400"
+        className="tile mb-5 h-10 w-10"
         aria-hidden="true"
       >
         {icon}
@@ -617,7 +617,7 @@ function AudiencePanel({
     <Card className="flex h-full flex-col p-6 sm:p-8">
       <div className="mb-5 flex items-start gap-3">
         <span
-          className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400"
+          className="tile h-10 w-10 flex-shrink-0"
           aria-hidden="true"
         >
           {icon}

@@ -648,7 +648,7 @@ export default function EditSeekerProfilePage() {
                   {/* The box is the field: the chips sit inside it and the ring
                       follows focus into it, so the whole thing reads as one
                       control rather than a list next to a text input. */}
-                  <div className="rounded-lg border border-gray-300 bg-white p-2 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/30 dark:border-gray-600 dark:bg-gray-800">
+                  <div className="field-composite p-2">
                     {skills.length > 0 && (
                       <ul className="mb-2 flex list-none flex-wrap gap-1.5">
                         {skills.map((skill) => (
@@ -662,7 +662,7 @@ export default function EditSeekerProfilePage() {
                                 type="button"
                                 onClick={() => removeSkill(skill)}
                                 disabled={!signalLoaded}
-                                className="-my-1 -mr-1.5 ml-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-gray-500 transition-colors hover:bg-gray-200 hover:text-gray-900 disabled:cursor-not-allowed dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white"
+                                className="interactive -my-1 -mr-1.5 ml-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-gray-500 hover:text-gray-900 disabled:cursor-not-allowed dark:text-gray-400 dark:hover:text-white"
                               >
                                 <Icon.x className="h-3 w-3" />
                                 <span className="sr-only">Remove {skill}</span>
@@ -690,10 +690,13 @@ export default function EditSeekerProfilePage() {
                           : "Type a skill, then press Enter"
                       }
                       aria-describedby="skill-hint"
-                      // `placeholder:text-gray-400` measured 2.6:1 on white.
-                      // `gray-500` is the ramp step `globals.css` re-tunes per
-                      // theme, so one class clears 4.5:1 in both.
-                      className="w-full bg-transparent px-1.5 py-1 text-sm text-gray-900 outline-none placeholder:text-gray-500 disabled:cursor-not-allowed dark:text-white"
+                      // `.field-bare` is the ink and placeholder tokens
+                      // without the box — the `.field-composite` around it
+                      // carries the border and the focus treatment. Its
+                      // placeholder is `--ink-faint`, which the contrast audit
+                      // holds above 4.5:1 on every surface; the literal it
+                      // replaced (`placeholder:text-gray-400`) measured 2.6:1.
+                      className="field-bare w-full px-1.5 py-1 text-sm disabled:cursor-not-allowed"
                     />
                   </div>
 

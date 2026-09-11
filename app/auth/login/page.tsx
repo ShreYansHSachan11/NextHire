@@ -178,9 +178,9 @@ function LoginForm() {
         <header className="flex items-center justify-between px-4 py-4 sm:px-6 lg:px-10">
           <Link
             href="/"
-            className="flex items-center gap-2.5 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            className="flex items-center gap-2.5 rounded"
           >
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900">
+            <span className="tile tile-ink h-9 w-9">
               <Icon.graph className="h-5 w-5" />
             </span>
             <span className="mono text-sm font-bold uppercase tracking-[0.14em] text-gray-900 dark:text-white">
@@ -266,7 +266,7 @@ function LoginForm() {
                     onClick={() => setShowPassword((value) => !value)}
                     aria-label={showPassword ? "Hide password" : "Show password"}
                     aria-pressed={showPassword}
-                    className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-lg text-gray-500 transition-colors hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-gray-400 dark:hover:text-white"
+                    className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-lg text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
                   >
                     {showPassword ? <EyeOffIcon /> : <EyeIcon />}
                   </button>
@@ -326,7 +326,7 @@ function LoginForm() {
               Don&apos;t have an account?{" "}
               <Link
                 href="/auth/register"
-                className="rounded font-semibold text-blue-600 underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-blue-400"
+                className="rounded font-semibold text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
               >
                 Create one
               </Link>
@@ -387,7 +387,7 @@ function LoginForm() {
             New to NextHire?{" "}
             <Link
               href="/auth/register"
-              className="rounded font-semibold text-green-400 underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-green-400"
+              className="rounded font-semibold text-green-400 underline-offset-2 hover:underline"
             >
               Create a profile
             </Link>

@@ -208,9 +208,9 @@ export default function RegisterPage() {
         <header className="flex items-center justify-between px-4 py-4 sm:px-6 lg:px-10">
           <Link
             href="/"
-            className="flex items-center gap-2.5 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            className="flex items-center gap-2.5 rounded"
           >
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900">
+            <span className="tile tile-ink h-9 w-9">
               <Icon.graph className="h-5 w-5" />
             </span>
             <span className="mono text-sm font-bold uppercase tracking-[0.14em] text-gray-900 dark:text-white">
@@ -320,7 +320,7 @@ export default function RegisterPage() {
                     aria-label={showPassword ? "Hide both passwords" : "Show both passwords"}
                     aria-controls="password confirmPassword"
                     aria-pressed={showPassword}
-                    className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-lg text-gray-500 transition-colors hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-gray-400 dark:hover:text-white"
+                    className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-lg text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
                   >
                     {showPassword ? <EyeOffIcon /> : <EyeIcon />}
                   </button>
@@ -398,9 +398,8 @@ export default function RegisterPage() {
                       >
                         <Card
                           signal={selected}
-                          className={`flex gap-3 p-3 transition-colors focus-within:ring-2 focus-within:ring-blue-500 sm:p-4 ${
-                            selected ? "" : "hover:border-gray-300 dark:hover:border-gray-600"
-                          }`}
+                          interactive={!selected}
+                          className="flex gap-3 p-3 sm:p-4"
                         >
                           <input
                             type="radio"
@@ -485,7 +484,7 @@ export default function RegisterPage() {
               Already have an account?{" "}
               <Link
                 href="/auth/login"
-                className="rounded font-semibold text-blue-600 underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-blue-400"
+                className="rounded font-semibold text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
               >
                 Sign in
               </Link>
@@ -548,7 +547,7 @@ export default function RegisterPage() {
             Already have an account?{" "}
             <Link
               href="/auth/login"
-              className="rounded font-semibold text-green-400 underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-green-400"
+              className="rounded font-semibold text-green-400 underline-offset-2 hover:underline"
             >
               Sign in
             </Link>

@@ -556,10 +556,8 @@ function ConversationList({
                     type="button"
                     onClick={() => onSelect(conversation.id)}
                     aria-current={isSelected ? "true" : undefined}
-                    className={`flex w-full items-start gap-3 rounded-lg border px-3 py-3 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 ${
-                      isSelected
-                        ? "panel-signal"
-                        : "border-transparent hover:bg-gray-50 dark:hover:bg-gray-800/60"
+                    className={`interactive flex w-full items-start gap-3 rounded-lg border px-3 py-3 text-left focus-inset ${
+                      isSelected ? "panel-signal" : "border-transparent"
                     }`}
                   >
                     <Avatar name={conversation.company.name} />
@@ -632,7 +630,7 @@ function ChatPanel({
         <button
           type="button"
           onClick={onBack}
-          className="-ml-1 inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white lg:hidden"
+          className="interactive -ml-1 inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white lg:hidden"
           aria-label="Back to conversations"
         >
           <Icon.arrowLeft className="h-5 w-5" />
