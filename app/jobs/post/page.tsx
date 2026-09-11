@@ -16,13 +16,14 @@ import {
 import {
   Alert,
   Card,
-  CardHeader,
   Chip,
   Eyebrow,
   Icon,
   Label,
+  Meter,
   PageHeading,
   Readout,
+  Skeleton,
   Spinner,
   buttonGhost,
   buttonPrimary,
@@ -285,6 +286,67 @@ const EMPTY_FORM = {
   type: "",
 };
 
+/* -------------------------------------------------------------------------- */
+/* Step model                                                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The form is grouped into four named steps with a progress rail above them.
+ *
+ * It is deliberately *not* a wizard. Baymard's checkout research is the reason:
+ * across seven years of testing they could not show accordion or multi-page
+ * checkouts outperforming a single page, and concluded that "what users are
+ * asked to do, and how they are asked to do it" matters far more than the
+ * number of pages — with visible progress indication and logical field grouping
+ * named as the layout factors that actually move the needle.
+ *   https://baymard.com/blog/accordion-style-checkout
+ *
+ * So: real grouping, a rail that says how far along the posting is, and a
+ * review before submit (NN/g's wizard guidance — show the steps, highlight
+ * where you are, and let people leave and come back), but every field stays on
+ * one page and nothing is gated behind a "Next" button. A step can be folded
+ * away once it is done; none of them is ever hidden from the employer.
+ *   https://www.nngroup.com/articles/wizards/
+ *
+ * The headers follow the APG accordion pattern — a `button` as the only child
+ * of a heading, carrying `aria-expanded` and `aria-controls`.
+ *   https://www.w3.org/WAI/ARIA/apg/patterns/accordion/
+ */
+const STEPS = [
+  {
+    id: "role",
+    number: "01",
+    title: "The role",
+    description: "What the job is, in your own words. This is what the match engine reads.",
+  },
+  {
+    id: "particulars",
+    number: "02",
+    title: "Particulars",
+    description: "Type, location, pay and skills — the facts candidates filter and self-select on.",
+  },
+  {
+    id: "screening",
+    number: "03",
+    title: "Screening questions",
+    description: "Optional. Questions applicants answer when they apply.",
+  },
+  {
+    id: "review",
+    number: "04",
+    title: "Review and post",
+    description: "Everything as it will be stored, on one screen, before it goes live.",
+  },
+] as const;
+
+type StepId = (typeof STEPS)[number]["id"];
+
+/** `done` and `todo` are the two required states; `optional` never blocks a post. */
+type StepTone = "done" | "todo" | "optional";
+
+/** Steps 1 and 2 hold everything the API refuses a posting without. */
+const REQUIRED_STEPS = 2;
+
 export default function PostJobPage() {
   // Every hook must run before any early return. The previous version put a
   // `useEffect` *after* a conditional `return null`, so React threw
@@ -338,6 +400,40 @@ export default function PostJobPage() {
    */
   const [questionsUnsaved, setQuestionsUnsaved] = useState(false);
   const [retryingQuestions, setRetryingQuestions] = useState(false);
+
+  /* -------------------------------- steps -------------------------------- */
+
+  /**
+   * Which step panels are open. Everything starts open: folding a section away
+   * is a convenience for an employer who has finished it, never something the
+   * form does to them. A collapsed panel is `hidden`, so its fields leave the
+   * tab order — which is exactly why `jumpToStep` re-opens a step before
+   * sending anyone to it.
+   */
+  const [openSteps, setOpenSteps] = useState<Record<StepId, boolean>>({
+    role: true,
+    particulars: true,
+    screening: true,
+    review: true,
+  });
+
+  const toggleStep = (id: StepId) =>
+    setOpenSteps((current) => ({ ...current, [id]: !current[id] }));
+
+  /**
+   * Opens a step and puts focus on its header.
+   *
+   * Focus rather than `scrollIntoView`: moving focus scrolls the header into
+   * view *and* takes a keyboard or screen-reader user with it, which a scroll
+   * alone does not. The frame delay is because the panel has to be in the DOM
+   * before the browser will scroll to it.
+   */
+  const jumpToStep = (id: StepId) => {
+    setOpenSteps((current) => ({ ...current, [id]: true }));
+    requestAnimationFrame(() => {
+      document.getElementById(`step-toggle-${id}`)?.focus();
+    });
+  };
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -684,16 +780,27 @@ export default function PostJobPage() {
     const title = formData.title.trim();
     const description = formData.description.trim();
 
+    /*
+     * Every refusal below names the step that owns it and sends the employer
+     * there. A message about a field inside a folded-away panel is a dead end,
+     * and this is the form where that is most likely — so the error and the
+     * navigation to it are one action.
+     */
+    const refuse = (message: string, step: StepId) => {
+      setError(message);
+      jumpToStep(step);
+    };
+
     if (!title) {
-      setError("Job title is required");
+      refuse("Job title is required", "role");
       return;
     }
     if (!description) {
-      setError("Job description is required");
+      refuse("Job description is required", "role");
       return;
     }
     if (!isJobType(formData.type)) {
-      setError("Choose a job type");
+      refuse("Choose a job type", "particulars");
       return;
     }
 
@@ -702,7 +809,7 @@ export default function PostJobPage() {
     for (let index = 0; index < questions.length; index += 1) {
       const problem = questionProblem(questions[index], index);
       if (problem) {
-        setError(problem);
+        refuse(problem, "screening");
         return;
       }
     }
@@ -772,11 +879,26 @@ export default function PostJobPage() {
   };
 
   if (!ready || !allowed) {
-    // `useAuthGuard` is already redirecting; render a placeholder rather than
-    // flashing the form.
+    /*
+     * `useAuthGuard` is already redirecting. Hold this page's own shell rather
+     * than swapping the whole viewport for a centred spinner: the navbar
+     * staying put is the difference between "still loading" and "something
+     * went wrong", and the blocks below are the size of what replaces them, so
+     * nothing jumps. Same reasoning as the sibling `loading.tsx`.
+     */
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50 text-blue-600 dark:bg-gray-900 dark:text-blue-400">
-        <Spinner label="Loading…" />
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <Navbar />
+        <main id="main-content" className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
+          <p className="sr-only" role="status">
+            Loading the job form
+          </p>
+          <Skeleton className="h-3 w-36" />
+          <Skeleton className="mt-2.5 h-8 w-48" />
+          <Skeleton className="mt-3 h-4 w-full max-w-lg" />
+          <Skeleton className="mt-6 h-28 w-full rounded-xl" />
+          <Skeleton className="mt-4 h-72 w-full rounded-xl" />
+        </main>
       </div>
     );
   }
@@ -793,11 +915,51 @@ export default function PostJobPage() {
   const suggestedTitleIsNew =
     !!draft && draft.suggestedTitle.trim().toLowerCase() !== formData.title.trim().toLowerCase();
 
+  /* ------------------------------ step state ------------------------------ */
+
+  const typeChosen = isJobType(formData.type);
+  const roleDone = titleFilled && descriptionFilled;
+  const particularsDone = typeChosen;
+
+  /**
+   * What each step's pill says. Derived rather than stored, so it cannot drift
+   * from what `handleSubmit` actually checks — the two read the same booleans.
+   */
+  const stepStatus: Record<StepId, { tone: StepTone; label: string }> = {
+    role: roleDone
+      ? { tone: "done", label: "Ready" }
+      : { tone: "todo", label: titleFilled ? "Description needed" : "Title needed" },
+    particulars: particularsDone
+      ? { tone: "done", label: "Ready" }
+      : { tone: "todo", label: "Job type needed" },
+    screening: {
+      tone: "optional",
+      label:
+        questions.length === 0
+          ? "None — optional"
+          : `${questions.length} ${questions.length === 1 ? "question" : "questions"}`,
+    },
+    review: {
+      tone: roleDone && particularsDone ? "done" : "todo",
+      label: roleDone && particularsDone ? "Ready to post" : "Waiting on the steps above",
+    },
+  };
+
+  const requiredDone = (roleDone ? 1 : 0) + (particularsDone ? 1 : 0);
+
+  /** Everything still standing between this draft and a live posting. */
+  const blockers: { step: StepId; label: string }[] = [];
+  if (!titleFilled) blockers.push({ step: "role", label: "The posting needs a job title." });
+  if (!descriptionFilled) {
+    blockers.push({ step: "role", label: "The posting needs a description." });
+  }
+  if (!typeChosen) blockers.push({ step: "particulars", label: "Choose a job type." });
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Navbar />
 
-      <main id="main-content" className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-10">
+      <main id="main-content" className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
         <Link href="/company/dashboard" className={`${buttonGhost} -ml-2.5 mb-4`}>
           <Icon.arrowLeft className="h-4 w-4" />
           Back to dashboard
@@ -870,20 +1032,16 @@ export default function PostJobPage() {
           </Alert>
         )}
 
-        <Card>
-          <CardHeader
-            eyebrow="Draft"
-            title="Job details"
-            description="Only the title, description and job type are required — everything else helps candidates self-select."
-          />
+        <form onSubmit={handleSubmit} noValidate>
+          <StepRail status={stepStatus} requiredDone={requiredDone} onJump={jumpToStep} />
 
-          <form onSubmit={handleSubmit} className="px-4 py-5 sm:px-6 sm:py-6" noValidate>
-            {/* Section 1 — the role itself. */}
-            <section aria-labelledby="section-role">
-              <h3 id="section-role" className="eyebrow mb-4">
-                01 · The role
-              </h3>
-
+          <div className="mt-4 space-y-3">
+            <StepCard
+              step={STEPS[0]}
+              status={stepStatus.role}
+              open={openSteps.role}
+              onToggle={() => toggleStep("role")}
+            >
               <div className="space-y-6">
                 <div>
                   <Label htmlFor="title" required>
@@ -1231,17 +1389,14 @@ export default function PostJobPage() {
                   </p>
                 </div>
               </div>
-            </section>
+            </StepCard>
 
-            {/* Section 2 — the particulars, on a hairline divider. */}
-            <section
-              aria-labelledby="section-particulars"
-              className="mt-8 border-t border-gray-200 pt-6 dark:border-gray-700"
+            <StepCard
+              step={STEPS[1]}
+              status={stepStatus.particulars}
+              open={openSteps.particulars}
+              onToggle={() => toggleStep("particulars")}
             >
-              <h3 id="section-particulars" className="eyebrow mb-4">
-                02 · Particulars
-              </h3>
-
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                 <div>
                   <Label htmlFor="type" required hint="Candidates filter the feed by this.">
@@ -1413,7 +1568,16 @@ export default function PostJobPage() {
                         ? "Add a title and description to suggest skills"
                         : "Backspace on an empty field removes the last tag"}
                     </p>
-                    <Readout className="text-xs text-gray-500 dark:text-gray-400">
+                    {/* Amber at the cap, matching the editor on the other side
+                        of this pair — a counter that goes quiet at the limit is
+                        the one moment it has something to say. */}
+                    <Readout
+                      className={`text-xs ${
+                        skillsFull
+                          ? "text-amber-700 dark:text-amber-400"
+                          : "text-gray-500 dark:text-gray-400"
+                      }`}
+                    >
                       {skills.length}/{MAX_SKILLS}
                     </Readout>
                   </div>
@@ -1423,32 +1587,29 @@ export default function PostJobPage() {
                   </p>
                 </div>
               </div>
-            </section>
+            </StepCard>
 
-            {/* Section 3 — screening questions. The editor itself is plain
+            {/* Step 3 — screening questions. The editor itself is plain
                 persistence, so it is offered on every deployment; only the
                 "suggest" button depends on a model being configured. */}
-            <section
-              aria-labelledby="section-screening"
-              className="mt-8 border-t border-gray-200 pt-6 dark:border-gray-700"
+            <StepCard
+              step={STEPS[2]}
+              status={stepStatus.screening}
+              open={openSteps.screening}
+              onToggle={() => toggleStep("screening")}
             >
               <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
-                <div className="min-w-0">
-                  <h3 id="section-screening" className="eyebrow mb-1">
-                    03 · Screening questions
-                  </h3>
-                  <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                    Optional. Applicants answer these when they apply, and you see the answers on
-                    the application. Up to {MAX_QUESTIONS}.
-                  </p>
-                </div>
+                <p className="min-w-0 flex-1 text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+                  Applicants answer these when they apply, and you see the answers on the
+                  application. Up to {MAX_QUESTIONS}.
+                </p>
                 {aiAvailable && (
                   <button
                     type="button"
                     onClick={() => void handleSuggestQuestions()}
                     disabled={!titleFilled || suggestingQuestions || questionsFull}
                     aria-describedby="screening-ai-hint"
-                    className={`${buttonGhost} disabled:cursor-not-allowed disabled:opacity-50`}
+                    className={`${buttonGhost} flex-shrink-0 disabled:cursor-not-allowed disabled:opacity-50`}
                   >
                     {suggestingQuestions ? (
                       <>
@@ -1513,30 +1674,165 @@ export default function PostJobPage() {
               <p aria-live="polite" className="eyebrow mt-2 normal-case tracking-normal">
                 {questionNotice}
               </p>
-            </section>
+            </StepCard>
 
-            <div className="mt-8 flex flex-col-reverse gap-3 border-t border-gray-200 pt-5 dark:border-gray-700 sm:flex-row sm:justify-end">
-              <Link href="/company/dashboard" className={`${buttonSecondary} w-full sm:w-auto`}>
-                Cancel
-              </Link>
-              <button
-                type="submit"
-                disabled={loading || !hasCompany}
-                aria-describedby={error ? "post-job-error" : undefined}
-                className={`${buttonPrimary} w-full sm:w-auto`}
-              >
-                {loading ? (
-                  "Posting…"
+            {/* Step 4 — the review. NN/g's wizard guidance asks for a place to
+                check the whole thing before it commits; this is it, and it
+                prints the values as they will be *stored* rather than as they
+                look in the boxes above. */}
+            <StepCard
+              step={STEPS[3]}
+              status={stepStatus.review}
+              open={openSteps.review}
+              onToggle={() => toggleStep("review")}
+            >
+              {blockers.length > 0 ? (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/40 sm:p-4">
+                  <Eyebrow as="h3">Before this can be posted</Eyebrow>
+                  <ul className="mt-2 space-y-2">
+                    {blockers.map((blocker) => (
+                      <li
+                        key={blocker.label}
+                        className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-amber-900 dark:text-amber-100"
+                      >
+                        <span className="flex min-w-0 items-center gap-2">
+                          <Icon.warning className="h-4 w-4 flex-shrink-0" />
+                          {blocker.label}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => jumpToStep(blocker.step)}
+                          className={buttonGhost}
+                        >
+                          Go to step {STEPS.findIndex((s) => s.id === blocker.step) + 1}
+                          <Icon.arrowRight className="h-4 w-4" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p className="flex items-start gap-2 text-sm leading-relaxed text-gray-700 dark:text-gray-200">
+                  <Icon.checkCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-600 dark:text-green-400" />
+                  Everything required is filled in. Read it through below — the posting goes live
+                  the moment you submit.
+                </p>
+              )}
+
+              <dl className="mt-5 grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+                <ReviewRow label="Job title" value={formData.title.trim()} />
+                <ReviewRow label="Job type" value={formData.type} />
+                <ReviewRow label="Location" value={formData.location.trim()} fallback="Not stated" />
+                <ReviewRow label="Salary range" value={formData.salary.trim()} fallback="Not stated" />
+                <ReviewRow
+                  label="Experience"
+                  value={formData.experience.trim()}
+                  fallback="Not stated"
+                />
+                <ReviewRow
+                  label="Skill tags"
+                  value={skills.length > 0 ? `${skills.length} of ${MAX_SKILLS}` : ""}
+                  fallback="None"
+                  mono
+                />
+              </dl>
+
+              {skills.length > 0 && (
+                <ul className="mt-3 flex flex-wrap gap-1.5">
+                  {skills.map((skill) => (
+                    <li key={skill}>
+                      <Chip>{skill}</Chip>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <div className="mt-5 border-t border-gray-200 pt-4 dark:border-gray-700">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <Eyebrow as="h3">Description</Eyebrow>
+                  <Readout className="text-xs text-gray-500 dark:text-gray-400">
+                    {descriptionLength.toLocaleString()} chars
+                  </Readout>
+                </div>
+                {descriptionFilled ? (
+                  <p className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg border border-gray-200 bg-white p-3 text-sm leading-relaxed text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    {formData.description.trim()}
+                  </p>
                 ) : (
-                  <>
-                    <Icon.plus className="h-4 w-4" />
-                    Post job
-                  </>
+                  <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                    Nothing written yet.
+                  </p>
                 )}
-              </button>
-            </div>
-          </form>
-        </Card>
+              </div>
+
+              <div className="mt-5 border-t border-gray-200 pt-4 dark:border-gray-700">
+                <Eyebrow as="h3">Screening questions</Eyebrow>
+                {questions.length === 0 ? (
+                  <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                    None. Candidates apply with a message and a résumé only.
+                  </p>
+                ) : (
+                  <ol className="mt-2 space-y-2">
+                    {questions.map((question, index) => (
+                      <li
+                        key={question.key}
+                        className="border-l-2 border-gray-200 pl-3 text-sm leading-relaxed text-gray-700 dark:border-gray-700 dark:text-gray-200"
+                      >
+                        <span className="mono mr-2 text-xs text-gray-500 dark:text-gray-400">
+                          {String(index + 1).padStart(2, "0")}
+                        </span>
+                        {question.prompt.trim() || (
+                          <span className="text-amber-700 dark:text-amber-400">
+                            No prompt written yet
+                          </span>
+                        )}
+                        {/* The flag is repeated here in the same words the
+                            editor used, so the last thing read before posting
+                            still says a knockout marks rather than rejects. */}
+                        {question.knockout && question.expected && (
+                          <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">
+                            Answers other than “{question.expected}” are marked for your attention.
+                            Nobody is filtered out.
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </div>
+
+              <div className="mt-6 flex flex-col-reverse gap-3 border-t border-gray-200 pt-5 dark:border-gray-700 sm:flex-row sm:items-center sm:justify-end">
+                <p className="eyebrow text-center sm:mr-auto sm:text-left">
+                  {hasCompany
+                    ? "Posting goes live immediately"
+                    : "Your account is not linked to a company"}
+                </p>
+                <Link href="/company/dashboard" className={`${buttonSecondary} w-full sm:w-auto`}>
+                  Cancel
+                </Link>
+                <button
+                  type="submit"
+                  disabled={loading || !hasCompany}
+                  aria-busy={loading || undefined}
+                  aria-describedby={error ? "post-job-error" : undefined}
+                  className={`${buttonPrimary} w-full sm:w-auto`}
+                >
+                  {loading ? (
+                    <>
+                      <Spinner className="h-4 w-4" decorative />
+                      Posting…
+                    </>
+                  ) : (
+                    <>
+                      <Icon.plus className="h-4 w-4" />
+                      Post job
+                    </>
+                  )}
+                </button>
+              </div>
+            </StepCard>
+          </div>
+        </form>
       </main>
     </div>
   );
@@ -1545,6 +1841,214 @@ export default function PostJobPage() {
 /* -------------------------------------------------------------------------- */
 /* Local pieces                                                                */
 /* -------------------------------------------------------------------------- */
+
+/*
+ * The three components below are defined here rather than in `ui.tsx`: a
+ * stepped authoring form is this page's problem and the posting editor's, not
+ * the design system's, and the kit is owned elsewhere. If a third surface ever
+ * needs them, that is the moment to promote them.
+ */
+
+/** Tone map for a step's state pill. Not colour alone — each carries a word. */
+const STEP_PILL_STYLES: Record<StepTone, string> = {
+  done: "border-green-300 bg-green-50 text-green-800 dark:border-green-700 dark:bg-green-950/40 dark:text-green-200",
+  todo: "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200",
+  optional:
+    "border-gray-300 bg-gray-100 text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300",
+};
+
+function StepPill({ tone, label }: { tone: StepTone; label: string }) {
+  return (
+    <span
+      className={`mono inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-1 text-[11px] font-medium uppercase tracking-wider ${STEP_PILL_STYLES[tone]}`}
+    >
+      {tone === "done" && <Icon.check className="h-3 w-3 flex-shrink-0" />}
+      {tone === "todo" && <Icon.warning className="h-3 w-3 flex-shrink-0" />}
+      {label}
+    </span>
+  );
+}
+
+/**
+ * Progress rail for the four steps.
+ *
+ * Sticky from `sm` up, where there is vertical room to spare: progress that
+ * scrolls off the top is not progress indication. It stays below the navbar's
+ * `z-40` so it can never cover the primary navigation.
+ */
+function StepRail({
+  status,
+  requiredDone,
+  onJump,
+}: {
+  status: Record<StepId, { tone: StepTone; label: string }>;
+  requiredDone: number;
+  onJump: (id: StepId) => void;
+}) {
+  return (
+    <div className="panel p-3 sm:sticky sm:top-16 sm:z-20 sm:p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <Eyebrow as="h2">Post a job · {STEPS.length} steps</Eyebrow>
+        <Eyebrow as="span">
+          <Readout>{requiredDone}</Readout>
+          {" / "}
+          <Readout>{REQUIRED_STEPS}</Readout> required steps ready
+        </Eyebrow>
+      </div>
+
+      <Meter
+        value={requiredDone}
+        max={REQUIRED_STEPS}
+        strongAt={100}
+        label={`${requiredDone} of ${REQUIRED_STEPS} required steps ready`}
+        className="mt-2"
+      />
+
+      <ol className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {STEPS.map((step) => (
+          <li key={step.id}>
+            <button
+              type="button"
+              onClick={() => onJump(step.id)}
+              className="flex w-full flex-col items-start gap-1 rounded-lg border border-gray-200 px-2.5 py-2 text-left transition-colors hover:border-gray-300 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-gray-700 dark:hover:border-gray-600 dark:hover:bg-gray-800"
+            >
+              <span className="flex w-full min-w-0 items-baseline gap-1.5">
+                <Readout className="text-xs text-gray-500 dark:text-gray-400">
+                  {step.number}
+                </Readout>
+                <span className="min-w-0 flex-1 truncate text-xs font-semibold text-gray-900 dark:text-white">
+                  {step.title}
+                </span>
+              </span>
+              {/* Repeats the panel's own pill so the state is legible from the
+                  rail without opening anything. */}
+              <span
+                className={`mono truncate text-[10px] uppercase tracking-wider ${
+                  status[step.id].tone === "todo"
+                    ? "text-amber-700 dark:text-amber-400"
+                    : status[step.id].tone === "done"
+                      ? "text-green-700 dark:text-green-400"
+                      : "text-gray-500 dark:text-gray-400"
+                }`}
+              >
+                {status[step.id].label}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+/**
+ * One collapsible step.
+ *
+ * APG accordion shape: the toggle is a `button` and the only child of the
+ * heading, it carries `aria-expanded` and `aria-controls`, and the panel is
+ * `hidden` rather than unmounted so `aria-controls` always points at a real
+ * element and the browser's in-page search can still find a folded field.
+ */
+function StepCard({
+  step,
+  status,
+  open,
+  onToggle,
+  children,
+}: {
+  step: (typeof STEPS)[number];
+  status: { tone: StepTone; label: string };
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  const panelId = `step-panel-${step.id}`;
+
+  return (
+    // `scroll-mt` clears the sticky navbar, and the sticky rail on top of it
+    // from `sm` up — without it a jumped-to step lands underneath both.
+    <section id={`step-${step.id}`} className="panel scroll-mt-20 sm:scroll-mt-44">
+      <h2>
+        <button
+          type="button"
+          id={`step-toggle-${step.id}`}
+          onClick={onToggle}
+          aria-expanded={open}
+          aria-controls={panelId}
+          className="flex w-full items-start gap-3 rounded-xl px-4 py-4 text-left transition-colors hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 dark:hover:bg-gray-800/60 sm:px-6"
+        >
+          <Readout className="mt-0.5 text-sm font-semibold text-gray-500 dark:text-gray-400">
+            {step.number}
+          </Readout>
+
+          <span className="min-w-0 flex-1">
+            <span className="block text-base font-semibold text-gray-900 dark:text-white sm:text-lg">
+              {step.title}
+            </span>
+            <span className="mt-1 block text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+              {step.description}
+            </span>
+          </span>
+
+          <span className="flex flex-shrink-0 items-center gap-2">
+            <span className="hidden sm:block">
+              <StepPill tone={status.tone} label={status.label} />
+            </span>
+            <Icon.arrowRight
+              className={`h-4 w-4 text-gray-500 transition-transform dark:text-gray-400 ${
+                open ? "rotate-90" : ""
+              }`}
+            />
+          </span>
+        </button>
+      </h2>
+
+      {/* The pill moves below the header on phones, where it would otherwise
+          squeeze the title into two or three words per line. */}
+      <div className="px-4 pb-3 sm:hidden">
+        <StepPill tone={status.tone} label={status.label} />
+      </div>
+
+      <div
+        id={panelId}
+        hidden={!open}
+        className="border-t border-gray-200 px-4 py-5 dark:border-gray-700 sm:px-6 sm:py-6"
+      >
+        {children}
+      </div>
+    </section>
+  );
+}
+
+/** One label/value pair in the review step. */
+function ReviewRow({
+  label,
+  value,
+  fallback = "—",
+  mono = false,
+}: {
+  label: string;
+  value: string;
+  /** Shown when the field is empty, in a quieter colour than a real value. */
+  fallback?: string;
+  mono?: boolean;
+}) {
+  const filled = value.trim().length > 0;
+  return (
+    <div className="min-w-0">
+      <Eyebrow as="dt">{label}</Eyebrow>
+      <dd
+        className={`mt-1 break-words text-sm ${mono ? "mono " : ""}${
+          filled
+            ? "font-medium text-gray-900 dark:text-white"
+            : "text-gray-500 dark:text-gray-400"
+        }`}
+      >
+        {filled ? value : fallback}
+      </dd>
+    </div>
+  );
+}
 
 /**
  * One screening question, fully editable.

@@ -84,74 +84,381 @@
   --color-green-900: #064e3b;
 }
 
+/* ==========================================================================
+   SURFACE & ELEVATION
+   --------------------------------------------------------------------------
+   Four tiers, named for what they *are* rather than for a shadow size:
+
+     canvas   → the page itself; nothing sits behind it
+     surface  → the default panel/card. One step of separation from the canvas
+     raised   → a panel that sits on another panel, or a card under the pointer
+     overlay  → popovers, dropdowns, toasts — things that float over everything
+
+   plus `sunken`, which goes the other way: wells, inset lists, empty-state
+   fields. Five values, one direction, used the same way on every page.
+
+   The two themes reach that hierarchy by different means, which is the whole
+   point of separating the tokens from the shadows:
+
+   * LIGHT — every surface is white, so depth is carried by shadow and border
+     strength. This follows Refactoring UI's "use shadows to convey elevation"
+     and Primer/Polaris, whose cards are white-on-grey with a resting shadow.
+   * DARK  — shadows are nearly invisible on navy, so depth is carried by
+     LIGHTNESS. This is Material 3's tonal elevation ("increasing tonal
+     elevation uses a more prominent tone" — surface-container-low → -high) and
+     IBM Carbon's layering model, where "the dark themes lighten with every
+     layer: Gray100 → Gray90 → Gray80". Atlassian states the mental model best:
+     "imagine that the surfaces are distantly lit from the front — the higher
+     the elevation, the lighter the surface looks."
+
+     The step size is calibrated against the systems that publish theirs:
+     Atlassian dark runs #161A1D → #1D2125 → #22272B → #282E33 (+5–7 per
+     channel), M3's dark surface tones run 4 → 10 → 12 → 17, Carbon's g100 runs
+     #161616 → #262626 → #393939 (+16–25). Ours sits mid-range at about +7 per
+     channel per tier. Shadow is kept rather than dropped, because Atlassian's
+     rule is that the lighter surface and its shadow are always paired — the
+     pairing is what reads as depth.
+
+     M2's guidance against pure black (#121212, not #000 — "light text on a
+     dark gray surface has less contrast than light text on a black surface")
+     is why the dark canvas is #0b111c, and its rule that dark accents move
+     toward the 200 tone of their hue is why --accent is emerald-400 in dark
+     and emerald-600 in light.
+
+   Refs: https://m3.material.io/styles/elevation/overview
+         https://m2.material.io/design/color/dark-theme.html
+         https://carbondesignsystem.com/elements/color/usage/ (layering model)
+         https://atlassian.design/foundations/elevation
+   ========================================================================== */
+
 :root {
+  /* --- Surfaces ---------------------------------------------------------- */
   --canvas: #f7f8fa;
   --surface: #ffffff;
   --surface-raised: #ffffff;
+  --surface-overlay: #ffffff;
+  /* The only tier that is *darker* than the canvas in light mode. */
+  --surface-sunken: #eff1f5;
+
+  /* --- Ink --------------------------------------------------------------- */
   --ink: #0b111c;
   --ink-muted: #4e5a6b;
   /* The faintest text tier still has to clear 4.5:1 — `.eyebrow` is 11px, so it
      never qualifies for the large-text exemption. */
   --ink-faint: #5c6878;
+  /* Ink for use *on* an accent fill (badge counters, filled buttons). */
+  --ink-on-accent: #ffffff;
+
+  /* --- Hairlines ---------------------------------------------------------
+     Carbon's three-way split: subtle for dividers inside one surface, the
+     default for a surface's own outline, strong for anything a user can grab
+     (fields, outline buttons). Refactoring UI's "don't use a border when a
+     shadow or a background change will do" is why `--line-subtle` exists at
+     all — it is the divider you reach for instead of a full border. */
+  --line-subtle: #eff1f5;
   --line: #e2e6ec;
   --line-strong: #cbd2dc;
-  /* `--accent` paints graphics (meter fills, live dots) where 3:1 is the bar;
+  /*
+   * The boundary of an interactive control — a text field, an outline button,
+   * the unreached half of a pipeline track. Separated from the decorative
+   * hairline ramp above because WCAG 1.4.11 asks for 3:1 on "visual information
+   * required to identify user interface components", and a 1.5:1 hairline is the
+   * right weight for a card edge and the wrong weight for the only thing telling
+   * you where an input begins. Carbon draws exactly this distinction with
+   * border-subtle vs border-strong and lands in the same place: its White theme
+   * border-strong-01 is Gray 50, 3.5:1 on white.
+   */
+  --line-control: #7f8d9f;
+
+  /* --- Accent ------------------------------------------------------------
+     `--accent` paints graphics (meter fills, live dots) where 3:1 is the bar;
      `--accent-text` is the same hue pulled far enough down to set words in. */
   --accent: #059669;
   --accent-text: #036249;
+  /* A solid accent that white type can sit on. `--accent` itself only reaches
+     3.8:1 against white, which is an icon colour, not a label colour. */
+  --accent-fill: #036249;
   --accent-soft: #ecfdf5;
+  --accent-line: #a7f3d0;
   --rail: linear-gradient(90deg, #4f46e5 0%, #6366f1 45%, #10b981 100%);
 
+  /* --- Elevation ---------------------------------------------------------
+     Three steps, each larger *and* softer than the last, all cast straight
+     down — Refactoring UI's rule that a shadow scale should read as one light
+     source above the page rather than as three unrelated blurs. The ambient
+     (large, faint) and direct (small, tighter) pair per level is Primer's
+     two-part resting/floating shadow construction. */
+  --shadow-raised: 0 1px 2px 0 rgb(11 17 28 / 0.05), 0 1px 3px -1px rgb(11 17 28 / 0.06);
+  --shadow-floating: 0 2px 4px -2px rgb(11 17 28 / 0.06), 0 8px 20px -6px rgb(11 17 28 / 0.1);
+  --shadow-overlay: 0 4px 8px -4px rgb(11 17 28 / 0.08), 0 18px 40px -12px rgb(11 17 28 / 0.18);
+  /* Dark mode adds a 1px top highlight so a raised surface catches the light
+     from above; in light mode there is nothing to catch, so it is `none` and
+     the same declaration works in both themes. */
+  --shadow-lip: 0 0 #0000;
+
+  /* --- Interaction state layers ------------------------------------------
+     Material 3 models hover/pressed/selected as a translucent overlay of the
+     *content* colour laid over the component, not as a separate background per
+     component — which is exactly why those states had drifted here: every call
+     site picked its own `hover:bg-gray-100`. One ramp, composited over whatever
+     is underneath, so the same class works on the canvas, on a panel, on a
+     tinted row and inside a popover.
+
+     M3's published state-layer opacities are hover 8%, focus 12%, pressed 12%,
+     dragged 16%. Material's older ripple tokens add the detail that matters most
+     here: the *light-ink* set (a white film on a dark surface) is exactly twice
+     the *dark-ink* set at every state — hover 0.08 vs 0.04, selected 0.16 vs
+     0.08 — because a white film reads far quieter over dark than a dark film
+     does over light. The two blocks below keep that asymmetry, pulled back from
+     a strict 2:1 because our light neutral is a saturated navy rather than
+     Material's near-black and lands heavier at the same alpha.
+     Ref: https://m3.material.io/foundations/interaction/states/state-layers */
+  --wash-hover: rgb(11 17 28 / 0.05);
+  --wash-active: rgb(11 17 28 / 0.1);
+  --wash-selected: rgb(11 17 28 / 0.07);
+  /* Kept as the original name so existing call sites keep working. */
+  --hover-wash: var(--wash-hover);
+  /* M3 puts disabled content at 38%; 50% keeps our mono labels readable enough
+     to tell *which* control is disabled, which matters more on a dense panel. */
+  --disabled-opacity: 0.5;
+
+  /* --- Focus -------------------------------------------------------------
+     WCAG 2.2 SC 2.4.13 wants an indicator at least the area of a 2px perimeter
+     with a 3:1 change of contrast, and SC 1.4.11 wants it to contrast with what
+     is next to it. A 2px ring at a 2px offset satisfies the area rule and the
+     offset lets the surface behind show through, which is the cheap version of
+     GOV.UK's two-colour indicator: the gap guarantees a light/dark boundary on
+     either side of the ring whatever it lands on.
+     Ref: https://www.w3.org/WAI/WCAG22/Understanding/focus-appearance.html */
+  --focus-ring: #4f46e5;
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+
+  /* --- Radius ------------------------------------------------------------
+     One scale so a chip inside a card inside a dialog reads as nested rather
+     than as three unrelated corner treatments. */
+  --radius-xs: 0.25rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-pill: 999px;
+
+  /* --- Density -----------------------------------------------------------
+     The house style is deliberately dense — an instrument panel, not a
+     brochure. That is a decision, so it gets tokens rather than a per-component
+     guess. Everything is a multiple of 2px on top of Tailwind's 4px grid, the
+     same construction as Carbon's $spacing-01…13 and Material's 4dp grid.
+
+       --space-1  2px   hairline gaps, icon-to-label in a chip
+       --space-2  4px   inside a badge
+       --space-3  6px   dense row gap
+       --space-4  8px   default gap between siblings
+       --space-5 12px   label-to-control
+       --space-6 16px   panel padding (compact), gap between cards
+       --space-7 24px   panel padding (comfortable), section gap
+       --space-8 32px   between major blocks
+       --space-9 48px   page section rhythm
+
+     Control heights are a separate, shorter scale because a 32/40/48 triple is
+     what actually keeps a button, a select and an input on the same baseline. */
+  --space-1: 0.125rem;
+  --space-2: 0.25rem;
+  --space-3: 0.375rem;
+  --space-4: 0.5rem;
+  --space-5: 0.75rem;
+  --space-6: 1rem;
+  --space-7: 1.5rem;
+  --space-8: 2rem;
+  --space-9: 3rem;
+
+  --control-h-sm: 2rem;
+  --control-h-md: 2.5rem;
+  --control-h-lg: 3rem;
+
+  /* Panel padding, so `p-4`/`px-6 py-5`/`p-5` stop appearing on three cards in
+     the same row. */
+  --pad-tight: 0.75rem;
+  --pad-panel: 1rem;
+  --pad-roomy: 1.5rem;
+  /* One dense list row: tall enough for a 24px target, short enough to fit a
+     feed on one screen. */
+  --row-py: 0.625rem;
+  --row-px: 0.875rem;
+
+  /* --- Misc --------------------------------------------------------------- */
   /* Primary button inverts between themes so it always reads as the loudest
      element on the page. */
   --btn-bg: #0b111c;
   --btn-fg: #ffffff;
   --btn-bg-hover: #27313f;
+  --btn-bg-active: #131b2a;
 
   /* Graph-paper rule colour used by .grid-field. */
-  --grid-line: rgba(11, 17, 28, 0.06);
+  --grid-line: rgb(11 17 28 / 0.06);
 
-  /* Hover tint for borderless controls. Translucent, so it works on the canvas,
-     on a panel and on a tinted row without a variant for each. */
-  --hover-wash: rgba(11, 17, 28, 0.06);
+  /* The sticky header. Previously `bg-white/85` in light and `bg-gray-900/85`
+     in dark — i.e. a *surface* in one theme and the *canvas* in the other, which
+     is why the bar looked detached on one and welded on the other. Both are the
+     surface tier now. */
+  --header-bg: rgb(255 255 255 / 0.86);
+
+  /* Skeleton placeholder fill. A token rather than `bg-gray-200
+     dark:bg-gray-700` per call site, because three surfaces were hand-rolling
+     their own and they had drifted apart. */
+  --skeleton: #e6e9ef;
 }
 
 .dark {
+  /* --- Surfaces ----------------------------------------------------------
+     Carbon's rule, applied literally: each layer is one step lighter than the
+     one it sits on. The steps are ~4–6 ΔL apart, which is enough to separate
+     two abutting panels without turning the page grey. */
   --canvas: #0b111c;
   --surface: #131b2a;
-  --surface-raised: #182130;
+  --surface-raised: #1a2433;
+  --surface-overlay: #1e2839;
+  /* Sunken goes *below* the canvas, the same direction as in light mode. */
+  --surface-sunken: #070d17;
+
+  /* --- Ink --------------------------------------------------------------- */
   --ink: #f2f5f9;
-  --ink-muted: #94a0b0;
-  /* #6b7889 measured 3.8:1 on the dark surface. Dark themes need the quiet tier
-     lighter, not darker, so it moves the other way from its light counterpart. */
-  --ink-faint: #8896a8;
+  /*
+   * Both quiet tiers move one step lighter than they used to (#94a0b0 / #8896a8).
+   * The reason is the new elevation ladder: the faint tier now has to clear 4.5:1
+   * on the *lightest* thing it can land on, which is a hovered row inside an
+   * overlay — `--surface-overlay` plus the hover state layer — not just on
+   * `--surface`. At the old values that composite measured 4.45:1. The step
+   * between muted and faint is the same size it always was; the pair has simply
+   * shifted up the ramp together.
+   */
+  --ink-muted: #a4b0c0;
+  --ink-faint: #99a7b9;
+  --ink-on-accent: #0b111c;
+
+  /* --- Hairlines ---------------------------------------------------------
+     Dark borders are a touch lighter than the surface they outline rather than
+     darker, because a darker line on navy reads as a gap rather than an edge. */
+  --line-subtle: #1c2534;
   --line: #27313f;
-  --line-strong: #37424f;
+  --line-strong: #3a4657;
+  /* 3:1 against every surface tier including the overlay, the same job the
+     light value does. */
+  --line-control: #6f7d8f;
+
+  /* --- Accent ------------------------------------------------------------- */
   --accent: #34d399;
   --accent-text: #34d399;
-  --accent-soft: rgba(16, 185, 129, 0.12);
+  --accent-fill: #34d399;
+  --accent-soft: rgb(16 185 129 / 0.12);
+  --accent-line: rgb(52 211 153 / 0.38);
 
+  /* --- Elevation ---------------------------------------------------------
+     Darker and deeper than the light values, because on navy a 6%-black shadow
+     is invisible — but deliberately still secondary to the lightness step
+     above. M3: in dark themes "shadows can appear harsh"; tone does the work.
+     `--shadow-lip` is the 1px top highlight that makes a raised surface look
+     lit from above; it is the dark-mode equivalent of a light-mode shadow. */
+  --shadow-raised: 0 1px 2px 0 rgb(0 0 0 / 0.45);
+  --shadow-floating: 0 2px 6px -2px rgb(0 0 0 / 0.5), 0 10px 24px -8px rgb(0 0 0 / 0.55);
+  --shadow-overlay: 0 6px 14px -6px rgb(0 0 0 / 0.55), 0 26px 52px -16px rgb(0 0 0 / 0.65);
+  --shadow-lip: inset 0 1px 0 0 rgb(255 255 255 / 0.05);
+
+  /* --- Interaction state layers ------------------------------------------
+     Same ramp, flipped to a white film: M3 derives the state layer from the
+     *content* colour, which in a dark theme is the light one. Hover (0.08) and
+     pressed (0.12) are M3's published values exactly; against the light theme
+     above they keep Material's light-ink-reads-quieter asymmetry without going
+     all the way to its 2× factor.
+
+     The ceiling on these is not taste, it is contrast: every one of them lightens
+     the surface underneath, and an 11px `.eyebrow` sitting on a *selected row
+     inside an overlay* — the lightest persistent composite the kit can produce —
+     still has to clear 4.5:1. That composite is what sets 0.09 for selected, and
+     it is why the states do not stack (see `.interactive`). 0.12 for pressed is
+     above what the 11px tier would survive, which is acceptable only because a
+     pressed state lasts as long as the pointer is down; the two body tiers are
+     held to 4.5:1 on it and are verified there. */
+  --wash-hover: rgb(255 255 255 / 0.08);
+  --wash-active: rgb(255 255 255 / 0.12);
+  --wash-selected: rgb(255 255 255 / 0.09);
+
+  /* --- Focus -------------------------------------------------------------
+     blue-300 rather than blue-400: #818cf8 measures 3.7:1 on the navy canvas
+     but only 2.9:1 on `--surface-overlay`, so a focused control inside a
+     popover fell under SC 1.4.11. #a5b4fc clears 3:1 on every surface tier. */
+  --focus-ring: #a5b4fc;
+
+  /* --- Misc --------------------------------------------------------------- */
   --btn-bg: #f2f5f9;
   --btn-fg: #0b111c;
   --btn-bg-hover: #ffffff;
+  --btn-bg-active: #cbd2dc;
 
-  --grid-line: rgba(148, 160, 176, 0.09);
-  --hover-wash: rgba(255, 255, 255, 0.07);
+  --grid-line: rgb(148 160 176 / 0.09);
+  --header-bg: rgb(19 27 42 / 0.86);
+  --skeleton: #232e3e;
 
-  /* Re-tuning one step of the Tailwind ramp for this theme only. `text-gray-500`
-     is the "quieter than secondary" class used for timestamps and meta; the light
-     value is too dark to read on navy, so the same class resolves lighter here.
-     This works only because the colour `@theme` above is not `inline`. */
-  --color-gray-500: #8896a8;
+  /*
+   * Re-tuning two steps of the Tailwind ramp for this theme only. `text-gray-400`
+   * and `text-gray-500` are the app's secondary and tertiary text classes; the
+   * light values are too dark to read on navy, so the same classes resolve lighter
+   * here. This works only because the colour `@theme` above is not `inline`.
+   * They track `--ink-muted` and `--ink-faint` exactly — the same two tiers
+   * reached by two routes. Keeping them in step is what stops a page picking one
+   * and a kit component picking the other for the same job.
+   */
+  --color-gray-400: #a4b0c0;
+  --color-gray-500: #99a7b9;
 }
 
 html {
   color-scheme: light;
   scroll-behavior: smooth;
+  /*
+   * WCAG 2.2 SC 2.4.11 Focus Not Obscured. `Navbar` is `sticky top-0` over an
+   * `h-16` (64px) bar, so an in-page jump — or a Tab onto a link below the fold
+   * — could land behind the header. 64px of header + 16px of clearance.
+   * The Understanding doc names scroll padding as the fix, and this also
+   * replaces the local `scroll-mt-24` workaround on the seeker dashboard.
+   * https://www.w3.org/WAI/WCAG22/Understanding/focus-not-obscured-minimum.html
+   */
+  scroll-padding-top: 5rem;
 }
 
 html.dark {
   color-scheme: dark;
+}
+
+/*
+ * Material 3 ships a four-point ContrastCurve for every surface role — under a
+ * raised contrast setting its dark containers widen from tone 12/17/22 to
+ * 20/25/30 and its light ones narrow from 94/92/90 to 90/85/80. Same idea in
+ * two blocks: when the user asks for more contrast, widen the elevation ladder
+ * and promote every hairline one step rather than shipping them the same design.
+ * Unlayered, like the token blocks it overrides.
+ */
+@media (prefers-contrast: more) {
+  :root {
+    --surface-sunken: #e6eaf0;
+    --line-subtle: #e2e6ec;
+    --line: #cbd2dc;
+    --line-strong: #94a0b0;
+    --line-control: #66748a;
+    --ink-faint: var(--ink-muted);
+  }
+
+  .dark {
+    --surface: #182231;
+    --surface-raised: #212c3d;
+    --surface-overlay: #293449;
+    --surface-sunken: #04080f;
+    --line-subtle: #27313f;
+    --line: #3a4657;
+    --line-strong: #55637a;
+    --line-control: #8b99ad;
+    --ink-faint: var(--ink-muted);
+  }
 }
 
 body {
@@ -169,6 +476,7 @@ h1,
 h2,
 h3 {
   letter-spacing: -0.025em;
+  text-wrap: balance;
 }
 
 h1 {
@@ -224,16 +532,36 @@ nav {
 
 /* A visible focus ring everywhere, for keyboard users. */
 :focus-visible {
-  outline: 2px solid #4f46e5;
-  outline-offset: 2px;
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
 }
 
-.dark :focus-visible {
-  outline-color: #818cf8;
+/*
+ * Windows High Contrast / forced-colors throws away background and box-shadow
+ * but keeps `outline`, and it repaints `outline-color` with the system highlight.
+ * A transparent outline on plain `:focus` is the standard way to make sure a
+ * control that draws its focus some other way still gets *an* outline to repaint
+ * there. Costs nothing in normal rendering.
+ */
+@media (forced-colors: active) {
+  :focus {
+    outline: 2px solid transparent;
+    outline-offset: var(--focus-ring-offset);
+  }
 }
+
+/*
+ * Was `.dark :focus-visible { outline-color: #818cf8 }`. The colour is a token
+ * now, so the dark value travels with the rest of the theme instead of being a
+ * second place to remember.
+ */
 
 ::selection {
-  background: rgba(79, 70, 229, 0.18);
+  background: rgb(79 70 229 / 0.18);
+}
+
+.dark ::selection {
+  background: rgb(129 140 248 / 0.28);
 }
 
 @layer components {
@@ -282,23 +610,99 @@ nav {
 
   /* ==========================================================================
      Surfaces
+
+     `.panel` → `.panel-raised` → `.panel-overlay` is the elevation ladder; see
+     the token block at the top of the file for why each theme climbs it by a
+     different mechanism. `.panel-sunken` is the one rung below the canvas.
+
+     Every tier sets background, border AND shadow together. That is deliberate:
+     the old `.panel` set only background + border, so "make this one stand out"
+     was answered per call site with `shadow-lg`, `hover:border-gray-300`,
+     `dark:hover:border-gray-600` and friends, none of which agreed.
      ========================================================================== */
 
   .panel {
     background: var(--surface);
     border: 1px solid var(--line);
-    border-radius: 0.75rem;
+    border-radius: var(--radius-lg);
+    /* The resting shadow is what separates a white card from a near-white
+       canvas in light mode; in dark mode the lightness step has already done
+       that and this is barely visible, which is correct. */
+    box-shadow: var(--shadow-raised);
   }
 
+  /* Same surface, no corner radius — for a panel that meets the viewport edge
+     or is stacked flush with its neighbours. */
   .panel-flush {
     background: var(--surface);
     border: 1px solid var(--line);
+    box-shadow: var(--shadow-raised);
+  }
+
+  /* One step up: a panel on a panel, a summary card that leads a page, or a
+     `.panel-interactive` under the pointer. */
+  .panel-raised {
+    background: var(--surface-raised);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-floating), var(--shadow-lip);
+  }
+
+  /* Floating layer: dropdowns, popovers, toasts, dialogs. */
+  /*
+   * The border is --line-strong, not --line, on this tier alone. Primer and
+   * Atlassian both reach the same place by a different route: their floating
+   * shadows carry a `0 0 0 1px` ring whose alpha is 0 in light and opaque in
+   * dark (Primer #d1d9e000 → #3d444d; Atlassian #00000000 → #39424a), because
+   * on a dark background it is the ring, not the blur, that separates a popover
+   * from the page behind it. One stronger border says the same thing once
+   * instead of once per shadow.
+   */
+  .panel-overlay {
+    background: var(--surface-overlay);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-overlay), var(--shadow-lip);
+  }
+
+  /* Below the canvas: wells, inset lists, the field an empty state sits in.
+     No shadow — a recessed surface is not lit from above. */
+  .panel-sunken {
+    background: var(--surface-sunken);
+    border: 1px solid var(--line-subtle);
+    border-radius: var(--radius-lg);
+    box-shadow: none;
   }
 
   /* Highlighted/selected state: emerald hairline plus the faintest tint. */
   .panel-signal {
-    border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+    border-color: var(--accent-line);
     background: color-mix(in srgb, var(--accent) 4%, var(--surface));
+  }
+
+  /*
+   * A card the whole of which is a target (a job card, a stat tile). Rest is
+   * `.panel`; hover lifts one tier; press settles back down. Borrowed wholesale
+   * from Material's "elevation changes on interaction" and Polaris's card
+   * hover, and it replaces the four different hover treatments that had grown
+   * on the four card-shaped things in the app.
+   */
+  .panel-interactive {
+    transition-property: background-color, border-color, box-shadow, transform;
+    transition-duration: 150ms;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* `background-color`, not the `background` shorthand: the shorthand would
+     reset `background-image` and wipe out `.grid-field`'s rules on hover. */
+  .panel-interactive:hover {
+    background-color: var(--surface-raised);
+    border-color: var(--line-strong);
+    box-shadow: var(--shadow-floating), var(--shadow-lip);
+  }
+
+  .panel-interactive:active {
+    box-shadow: var(--shadow-raised);
   }
 
   /* Graph-paper field, used behind AI/telemetry panels. */
@@ -318,6 +722,134 @@ nav {
     background: #060a12;
   }
 
+  /* The sticky header's own surface, so the bar is the same tier in both
+     themes rather than white-over-grey in one and canvas-over-canvas in the
+     other. */
+  .header-surface {
+    background: var(--header-bg);
+    backdrop-filter: saturate(1.4) blur(12px);
+    -webkit-backdrop-filter: saturate(1.4) blur(12px);
+  }
+
+  /* Small square tile that holds an icon — the accent one leads SignalPanel,
+     the neutral one leads an empty state. Two classes so those two stop
+     writing six colour utilities each and drifting apart. */
+  .tile {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--ink-muted);
+  }
+
+  .tile-accent {
+    border-color: var(--accent-line);
+    background: var(--accent-soft);
+    color: var(--accent-text);
+  }
+
+  /* ==========================================================================
+     Interaction state layers
+
+     One overlay ramp for every interactive primitive that is not a button:
+     list rows, icon buttons, popover items, chips. Implemented as a
+     `background-image` gradient rather than a `background-color` so it
+     *composites over* whatever background the element already has — which is
+     the property that lets the same class work on the canvas, on a panel, on an
+     accent-tinted row and inside an overlay. That is Material 3's state-layer
+     model; the alternative (a `hover:bg-gray-100 dark:hover:bg-gray-800` pair
+     per call site) is what the app had, and it disagreed with itself in nine
+     places.
+
+     One layer at a time, not a stack. M3's rule is that "only one state layer is
+     applied at a time" — hovering a selected row swaps the selected film for the
+     hover film rather than adding to it. That is also what keeps the composite
+     bounded, which is what keeps small text on a selected row inside an overlay
+     above 4.5:1. Selection therefore carries a second, non-additive cue instead:
+     `.row-selected` adds a leading accent rule, which is how Carbon marks a
+     selected row and is the part that survives greyscale.
+     Ref: https://m3.material.io/foundations/interaction/states/state-layers
+     ========================================================================== */
+
+  .interactive {
+    transition-property: background-color, background-image, border-color, color, box-shadow;
+    transition-duration: 150ms;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .interactive:hover:not(:disabled):not([aria-disabled="true"]) {
+    background-image: linear-gradient(var(--wash-hover), var(--wash-hover));
+  }
+
+  .interactive:active:not(:disabled):not([aria-disabled="true"]) {
+    background-image: linear-gradient(var(--wash-active), var(--wash-active));
+  }
+
+  .interactive[aria-selected="true"],
+  .interactive[aria-current="page"],
+  .interactive[aria-current="true"],
+  .interactive[data-selected="true"] {
+    background-image: linear-gradient(var(--wash-selected), var(--wash-selected));
+    color: var(--ink);
+  }
+
+  /*
+   * Selected *and* hovered shows the hover layer alone, not both. Declared after
+   * the selected rule so it wins at equal specificity, and it still reads as a
+   * response because the leading accent rule from `.row-selected` stays put.
+   */
+  .interactive[aria-selected="true"]:hover:not(:disabled),
+  .interactive[aria-current="page"]:hover:not(:disabled),
+  .interactive[aria-current="true"]:hover:not(:disabled),
+  .interactive[data-selected="true"]:hover:not(:disabled) {
+    background-image: linear-gradient(var(--wash-hover), var(--wash-hover));
+  }
+
+  .interactive:disabled,
+  .interactive[aria-disabled="true"] {
+    opacity: var(--disabled-opacity);
+    cursor: not-allowed;
+    background-image: none;
+  }
+
+  /* A dense list row: the app's most repeated shape. Density is a token so a
+     feed, a notification panel and a message list agree on row height. */
+  .row {
+    display: flex;
+    width: 100%;
+    align-items: flex-start;
+    gap: var(--space-5);
+    padding: var(--row-py) var(--row-px);
+    text-align: left;
+  }
+
+  /* Selected rows get a rule as well as a wash, so the state survives
+     greyscale — Carbon marks a selected row with a leading accent bar for the
+     same reason. */
+  .row-selected {
+    box-shadow: inset 2px 0 0 0 var(--accent);
+  }
+
+  /* Square, borderless control that holds a single glyph: the theme toggle,
+     the notification bell, the mobile menu trigger. All three had their own
+     hover colours and two of them disagreed in dark mode. */
+  .btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: var(--control-h-md);
+    width: var(--control-h-md);
+    flex-shrink: 0;
+    border-radius: var(--radius-md);
+    color: var(--ink-muted);
+  }
+
+  .btn-icon:hover:not(:disabled) {
+    color: var(--ink);
+  }
+
   /* ==========================================================================
      Meters — flat, hairline progress bars for match strength.
      ========================================================================== */
@@ -327,22 +859,94 @@ nav {
     height: 4px;
     width: 100%;
     overflow: hidden;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: var(--line);
+  }
+
+  /* Two more heights, because a meter under a headline score and a meter in a
+     list row are not the same object. */
+  .meter-sm {
+    height: 3px;
+  }
+
+  .meter-lg {
+    height: 6px;
   }
 
   .meter-fill {
     display: block;
     height: 100%;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: var(--accent);
     transition: width 500ms cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   /* Below the "strong match" threshold the bar goes neutral, so colour still
-     carries meaning at a glance without being the only signal. */
+     carries meaning at a glance without being the only signal. The neutral is
+     the faint *ink* tier rather than a hairline colour: this fill is a
+     measurement, and 1.4.11 wants a measurement to clear 3:1 against the track
+     it sits in. A hairline grey does not — the old value measured 1.2:1, which
+     made a weak match very nearly invisible. */
   .meter-fill-muted {
-    background: var(--line-strong);
+    background: var(--ink-faint);
+  }
+
+  /* Segmented track for an ordinal pipeline (PENDING → … → ACCEPTED). Same
+     hairline grammar as `.meter`, so a stage indicator belongs beside a score.
+     GOV.UK's task-list reasoning: inside a multi-stage process, position in the
+     sequence is the information the user wants. */
+  .track {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .track-seg {
+    display: block;
+    height: 3px;
+    width: 1.125rem;
+    border-radius: var(--radius-pill);
+    background: var(--line-control);
+    transition: background-color 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .track-seg-done {
+    background: var(--accent);
+  }
+
+  .track-seg-void {
+    background: var(--line);
+  }
+
+  /* ==========================================================================
+     Skeletons
+
+     One fill token instead of `bg-gray-200 dark:bg-gray-700` repeated in three
+     hand-rolled skeletons that had drifted to three different greys. The pulse
+     is opacity-only so it does not repaint a large area, and the global
+     `prefers-reduced-motion` block above already flattens it.
+     ========================================================================== */
+
+  .skeleton {
+    display: block;
+    border-radius: var(--radius-sm);
+    background: var(--skeleton);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .skeleton {
+      animation: skeleton-pulse 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+  }
+
+  @keyframes skeleton-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.55;
+    }
   }
 
   /* ==========================================================================
@@ -352,11 +956,11 @@ nav {
   .chip {
     display: inline-flex;
     align-items: center;
-    gap: 0.375rem;
+    gap: var(--space-3);
     border: 1px solid var(--line);
-    border-radius: 0.5rem;
+    border-radius: var(--radius-md);
     background: var(--canvas);
-    padding: 0.25rem 0.5rem;
+    padding: var(--space-2) var(--space-4);
     font-size: 0.75rem;
     line-height: 1.25;
     color: var(--ink-muted);
@@ -364,66 +968,129 @@ nav {
   }
 
   .dark .chip {
-    background: rgba(255, 255, 255, 0.03);
+    /* A translucent film rather than a flat grey, so a chip reads correctly on
+       the canvas, on a panel and inside an overlay — the same reason the state
+       layers are translucent. */
+    background: rgb(255 255 255 / 0.035);
   }
 
   .chip-accent {
-    border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+    border-color: var(--accent-line);
     background: var(--accent-soft);
     color: var(--accent-text);
   }
 
+  /* Denser chip for inside a dense row. */
+  .chip-sm {
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-3);
+    font-size: 0.6875rem;
+  }
+
+  /* A chip that is itself a control (a filter toggle). */
+  .chip-interactive {
+    cursor: pointer;
+  }
+
+  .chip-interactive:hover:not(:disabled) {
+    border-color: var(--line-strong);
+    color: var(--ink);
+  }
+
+  /* Carbon's dismissible tag: the chip keeps its compact size and the close
+     control carries its own 24px target via `.hit-24`, rather than the chip
+     growing to fit one.
+     Ref: https://carbondesignsystem.com/components/tag/usage/ */
+  .chip-dismiss {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-inline-start: var(--space-1);
+    margin-inline-end: calc(var(--space-2) * -1);
+    border-radius: var(--radius-xs);
+    padding: var(--space-1);
+    color: currentcolor;
+    opacity: 0.7;
+  }
+
+  .chip-dismiss:hover:not(:disabled) {
+    opacity: 1;
+    background-image: linear-gradient(var(--wash-active), var(--wash-active));
+  }
+
   /* ==========================================================================
      Buttons
+
+     Rest / hover / active / disabled / busy for every variant, from tokens.
+     The `:active` step is new — every variant previously went straight from
+     hover to nothing, so a press had no feedback at all.
      ========================================================================== */
 
   .btn-ink {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
-    border-radius: 0.5rem;
+    gap: var(--space-4);
+    min-height: var(--control-h-md);
+    border-radius: var(--radius-md);
     background: var(--btn-bg);
     color: var(--btn-fg);
-    padding: 0.625rem 1rem;
+    padding: 0.625rem var(--space-6);
     font-size: 0.875rem;
     font-weight: 600;
     letter-spacing: -0.01em;
-    transition: background-color 150ms ease;
+    box-shadow: var(--shadow-raised);
+    transition-property: background-color, box-shadow, color;
+    transition-duration: 150ms;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .btn-ink:hover:not(:disabled) {
     background: var(--btn-bg-hover);
+    box-shadow: var(--shadow-floating);
+  }
+
+  .btn-ink:active:not(:disabled) {
+    background: var(--btn-bg-active);
+    box-shadow: none;
   }
 
   .btn-ink:disabled {
-    opacity: 0.5;
+    opacity: var(--disabled-opacity);
     cursor: not-allowed;
+    box-shadow: none;
   }
 
   .btn-outline {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
-    border-radius: 0.5rem;
-    border: 1px solid var(--line-strong);
+    gap: var(--space-4);
+    min-height: var(--control-h-md);
+    border: 1px solid var(--line-control);
+    border-radius: var(--radius-md);
     background: var(--surface);
     color: var(--ink);
-    padding: 0.625rem 1rem;
+    padding: 0.625rem var(--space-6);
     font-size: 0.875rem;
     font-weight: 600;
     letter-spacing: -0.01em;
-    transition: background-color 150ms ease, border-color 150ms ease;
+    transition-property: background-color, background-image, border-color, color;
+    transition-duration: 150ms;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .btn-outline:hover:not(:disabled) {
-    background: var(--canvas);
-    border-color: var(--ink-faint);
+    background-image: linear-gradient(var(--wash-hover), var(--wash-hover));
+    border-color: var(--ink-muted);
+  }
+
+  .btn-outline:active:not(:disabled) {
+    background-image: linear-gradient(var(--wash-active), var(--wash-active));
   }
 
   .btn-outline:disabled {
-    opacity: 0.5;
+    opacity: var(--disabled-opacity);
     cursor: not-allowed;
   }
 
@@ -434,34 +1101,47 @@ nav {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
-    border-radius: 0.5rem;
+    gap: var(--space-4);
+    min-height: var(--control-h-md);
     border: 1px solid #fca5a5;
+    border-radius: var(--radius-md);
     background: #fef2f2;
     color: #b91c1c;
-    padding: 0.625rem 1rem;
+    padding: 0.625rem var(--space-6);
     font-size: 0.875rem;
     font-weight: 600;
     letter-spacing: -0.01em;
-    transition: background-color 150ms ease, border-color 150ms ease;
+    transition-property: background-color, border-color, color;
+    transition-duration: 150ms;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .btn-danger:hover:not(:disabled) {
     background: #fee2e2;
+    border-color: #f87171;
+  }
+
+  .btn-danger:active:not(:disabled) {
+    background: #fecaca;
   }
 
   .dark .btn-danger {
-    border-color: #991b1b;
-    background: rgba(69, 10, 10, 0.4);
+    border-color: #9f2b2b;
+    background: rgb(69 10 10 / 0.45);
     color: #fca5a5;
   }
 
   .dark .btn-danger:hover:not(:disabled) {
-    background: rgba(69, 10, 10, 0.7);
+    background: rgb(69 10 10 / 0.7);
+    border-color: #c74a4a;
+  }
+
+  .dark .btn-danger:active:not(:disabled) {
+    background: rgb(69 10 10 / 0.85);
   }
 
   .btn-danger:disabled {
-    opacity: 0.5;
+    opacity: var(--disabled-opacity);
     cursor: not-allowed;
   }
 
@@ -469,25 +1149,32 @@ nav {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.375rem;
-    border-radius: 0.375rem;
-    padding: 0.375rem 0.625rem;
+    gap: var(--space-3);
+    min-height: var(--control-h-sm);
+    border-radius: var(--radius-sm);
+    padding: var(--space-3) 0.625rem;
     font-size: 0.875rem;
     font-weight: 500;
     color: var(--ink-muted);
-    transition: background-color 150ms ease, color 150ms ease;
+    transition-property: background-color, background-image, color;
+    transition-duration: 150ms;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  /* A token rather than `color-mix`: the generated fallback for a `color-mix`
-     background is the *solid* colour, which on a no-support browser would paint
-     near-black text on a near-black fill. */
+  /* A translucent film rather than `color-mix`: the generated fallback for a
+     `color-mix` background is the *solid* colour, which on a no-support browser
+     would paint near-black text on a near-black fill. */
   .btn-ghost:hover:not(:disabled) {
-    background: var(--hover-wash);
+    background-image: linear-gradient(var(--wash-hover), var(--wash-hover));
     color: var(--ink);
   }
 
+  .btn-ghost:active:not(:disabled) {
+    background-image: linear-gradient(var(--wash-active), var(--wash-active));
+  }
+
   .btn-ghost:disabled {
-    opacity: 0.5;
+    opacity: var(--disabled-opacity);
     cursor: not-allowed;
   }
 
@@ -495,8 +1182,16 @@ nav {
      so a `px-*` utility would win but a same-layer class declared after them
      does too — and this keeps the size a token rather than an inline style. */
   .btn-lg {
-    padding: 0.875rem 1.5rem;
+    min-height: var(--control-h-lg);
+    padding: 0.875rem var(--space-7);
     font-size: 0.9375rem;
+  }
+
+  /* And one size down, for toolbars and card footers. */
+  .btn-sm {
+    min-height: var(--control-h-sm);
+    padding: var(--space-3) var(--space-5);
+    font-size: 0.8125rem;
   }
 
   /* Loading state shared by every button: the control stays its own size and
@@ -516,33 +1211,63 @@ nav {
 
   .field {
     width: 100%;
-    border: 1px solid var(--line-strong);
-    border-radius: 0.5rem;
+    min-height: var(--control-h-md);
+    border: 1px solid var(--line-control);
+    border-radius: var(--radius-md);
     background: var(--surface);
     color: var(--ink);
     padding: 0.625rem 0.875rem;
     font-size: 0.9375rem;
-    transition: border-color 150ms ease, box-shadow 150ms ease;
+    transition-property: border-color, box-shadow, background-color;
+    transition-duration: 150ms;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .field::placeholder {
     color: var(--ink-faint);
+    opacity: 1;
+  }
+
+  /* Rest → hover was missing entirely; a field looked identical whether or not
+     the pointer was on it. */
+  .field:hover:not(:disabled):not(:focus) {
+    border-color: var(--ink-muted);
   }
 
   .field:focus {
     outline: none;
-    border-color: #4f46e5;
-    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+    border-color: var(--focus-ring);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 18%, transparent);
   }
 
-  .dark .field:focus {
-    border-color: #818cf8;
-    box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.15);
+  /*
+   * A keyboard focus already gets the unlayered 2px `:focus-visible` outline at
+   * a 2px offset. Painting the soft 3px halo underneath it as well produced a
+   * doubled, muddy indicator, so the halo is for pointer focus only.
+   */
+  .field:focus-visible {
+    box-shadow: none;
+  }
+
+  .field[aria-invalid="true"] {
+    border-color: #dc2626;
+  }
+
+  .dark .field[aria-invalid="true"] {
+    border-color: #f87171;
   }
 
   .field:disabled {
-    opacity: 0.6;
+    opacity: var(--disabled-opacity);
+    background: var(--surface-sunken);
     cursor: not-allowed;
+  }
+
+  /* Dense variant, for filter bars and inline editors. */
+  .field-sm {
+    min-height: var(--control-h-sm);
+    padding: var(--space-3) var(--space-5);
+    font-size: 0.875rem;
   }
 
   /* ==========================================================================
@@ -554,7 +1279,7 @@ nav {
     display: inline-block;
     height: 0.5rem;
     width: 0.5rem;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: var(--accent);
   }
 
@@ -562,7 +1287,7 @@ nav {
     content: "";
     position: absolute;
     inset: 0;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: var(--accent);
     animation: signal-ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
   }
@@ -728,7 +1453,9 @@ nav {
      override it.
      ========================================================================== */
 
-  /* Touch-friendly hit area on small screens, tightened up on pointer devices. */
+  /* Touch-friendly hit area on small screens, tightened up on pointer devices.
+     This is the *comfortable* target (SC 2.5.5 Target Size (Enhanced) territory
+     at 44px); `.hit-24` below is the *minimum*. */
   .btn-touch {
     min-height: 44px;
     min-width: 44px;
@@ -739,6 +1466,27 @@ nav {
       min-height: 40px;
       min-width: 40px;
     }
+  }
+
+  /*
+   * WCAG 2.2 SC 2.5.8 Target Size (Minimum) floor for controls that must stay
+   * visually small — the close button inside a chip, an inline dismiss. The
+   * pseudo-element grows the hit area to 24×24 around the control's centre
+   * without changing its layout box or the spacing around it, so the chip keeps
+   * its size and the target stops depending on the spacing exception.
+   * https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html
+   */
+  .hit-24 {
+    position: relative;
+  }
+
+  .hit-24::before {
+    content: "";
+    position: absolute;
+    inset: 50% 50%;
+    width: 24px;
+    height: 24px;
+    transform: translate(-50%, -50%);
   }
 
   .line-clamp-2 {
@@ -770,7 +1518,7 @@ nav {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--line-strong);
+  background: var(--line-control);
   border: 3px solid var(--canvas);
   border-radius: 999px;
 }

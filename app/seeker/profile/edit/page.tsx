@@ -20,6 +20,7 @@ import {
 import { updateProfile } from "@/store/authSlice";
 import {
   Alert,
+  Button,
   Card,
   CardHeader,
   Chip,
@@ -28,11 +29,12 @@ import {
   Label,
   PageHeading,
   Readout,
-  Spinner,
-  buttonPrimary,
+  buttonGhost,
   buttonSecondary,
   inputClass,
 } from "@/app/components/ui";
+
+import ProfileEditLoading from "./loading";
 
 /** Shape returned by `PUT /api/users/:id` — the user row plus a freshly signed token. */
 interface UpdateProfileResponse {
@@ -400,13 +402,9 @@ export default function EditSeekerProfilePage() {
     }
   };
 
-  if (!ready) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <Spinner label="Loading your profile" />
-      </div>
-    );
-  }
+  // The same skeleton the route's `loading.tsx` shows, so the rehydration wait
+  // and the navigation wait are one state rather than two (DESIGN-NOTES §1.4).
+  if (!ready) return <ProfileEditLoading />;
 
   if (!allowed) return null;
 
@@ -416,11 +414,16 @@ export default function EditSeekerProfilePage() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Navbar />
 
-      <main id="main-content" className="mx-auto max-w-3xl px-4 py-8 sm:px-6 lg:px-8">
+      {/* `container-responsive` rather than a bespoke `px-4 sm:px-6 lg:px-8`: it
+          is what the other seeker routes use, so the gutter is identical at
+          360px. `max-w-3xl` narrows it — the class is layered in `globals.css`
+          precisely so a width utility can win — because a single-column form
+          has no business being 1280px wide. */}
+      <main id="main-content" className="container-responsive max-w-3xl py-6 sm:py-8">
         <Link
           href="/seeker/dashboard"
           onClick={confirmDiscard}
-          className="mb-5 inline-flex items-center gap-1.5 rounded text-sm font-medium text-blue-600 transition-colors hover:text-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-blue-400 dark:hover:text-blue-300"
+          className={`${buttonGhost} -ml-2.5 mb-5`}
         >
           <Icon.arrowLeft className="h-4 w-4" />
           Back to dashboard
@@ -687,7 +690,10 @@ export default function EditSeekerProfilePage() {
                           : "Type a skill, then press Enter"
                       }
                       aria-describedby="skill-hint"
-                      className="w-full bg-transparent px-1.5 py-1 text-sm text-gray-900 outline-none placeholder:text-gray-400 disabled:cursor-not-allowed dark:text-white dark:placeholder:text-gray-500"
+                      // `placeholder:text-gray-400` measured 2.6:1 on white.
+                      // `gray-500` is the ramp step `globals.css` re-tunes per
+                      // theme, so one class clears 4.5:1 in both.
+                      className="w-full bg-transparent px-1.5 py-1 text-sm text-gray-900 outline-none placeholder:text-gray-500 disabled:cursor-not-allowed dark:text-white"
                     />
                   </div>
 
@@ -710,28 +716,26 @@ export default function EditSeekerProfilePage() {
               </div>
             </section>
 
-            <div
-              className="flex flex-col gap-3 border-t border-gray-200 pt-5 dark:border-gray-700 sm:flex-row"
-              aria-live="polite"
-            >
-              <button
+            {/* The `aria-live="polite"` that used to sit on this row wrapped
+                both controls. A live region must not contain interactive
+                content: the submit button was re-announced on every render of
+                the row, and its own `aria-busy` state changes fought the
+                region (DESIGN-NOTES §2.2). The button already announces itself
+                through `aria-busy`; the sentence below is the separate,
+                text-only announcement. */}
+            <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+              {saving ? "Saving your profile" : ""}
+            </p>
+
+            <div className="flex flex-col gap-3 border-t border-gray-200 pt-5 dark:border-gray-700 sm:flex-row">
+              <Button
                 type="submit"
-                disabled={saving}
-                aria-busy={saving}
-                className={buttonPrimary}
+                loading={saving}
+                loadingLabel="Saving your profile"
+                icon={<Icon.check className="h-4 w-4" />}
               >
-                {saving ? (
-                  <>
-                    <Spinner className="h-4 w-4" />
-                    Saving…
-                  </>
-                ) : (
-                  <>
-                    <Icon.check className="h-4 w-4" />
-                    Save changes
-                  </>
-                )}
-              </button>
+                {saving ? "Saving…" : "Save changes"}
+              </Button>
               {/* The beforeunload guard only covers reloads and tab closes, so
                   in-app navigation has to ask for itself — this link was the
                   one exit that dropped unsaved edits without a word. */}

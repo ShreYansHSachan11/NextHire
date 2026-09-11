@@ -17,7 +17,6 @@ import {
 import {
   Alert,
   Card,
-  CardHeader,
   Chip,
   Eyebrow,
   Icon,
@@ -25,6 +24,7 @@ import {
   Label,
   PageHeading,
   Readout,
+  Skeleton,
   Spinner,
   buttonDanger,
   buttonGhost,
@@ -342,6 +342,54 @@ function storedToDraft(stored: StoredQuestion): QuestionDraft {
   });
 }
 
+/* -------------------------------------------------------------------------- */
+/* Section model                                                               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The same four numbered, collapsible sections the post form uses, so the two
+ * halves of the authoring pair read as one editor. See the long note on `STEPS`
+ * in `app/jobs/post/page.tsx` for the research behind the shape.
+ *
+ * The rail here reports *save state* rather than completeness: an existing
+ * posting is already valid, and the only question worth answering at a glance
+ * is which part of it has edits that have not gone out yet. That matters more
+ * on this page than on the post form, because the screening questions save on
+ * their own button — so "unsaved" was previously a single line at the bottom of
+ * the page that could not tell the employer which of the two writes it meant.
+ */
+const SECTIONS = [
+  {
+    id: "role",
+    number: "01",
+    title: "The role",
+    description: "Title and description — what the match engine reads.",
+  },
+  {
+    id: "particulars",
+    number: "02",
+    title: "Particulars",
+    description: "Type, location, pay and skills. Saves with the role above.",
+  },
+  {
+    id: "availability",
+    number: "03",
+    title: "Availability",
+    description: "Whether the posting is open to new applications.",
+  },
+  {
+    id: "screening",
+    number: "04",
+    title: "Screening questions",
+    description: "Saved separately, on their own button.",
+  },
+] as const;
+
+type SectionId = (typeof SECTIONS)[number]["id"];
+
+/** `dirty` is the one state that asks for action; the rest are informational. */
+type SectionTone = "saved" | "dirty" | "neutral";
+
 function suggestionToDraft(suggestion: Suggestion): QuestionDraft {
   return normaliseQuestion({
     key: nextQuestionKey(),
@@ -504,7 +552,57 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
     [questions, questionsBaseline]
   );
 
+  /**
+   * Dirtiness broken out per section, for the rail.
+   *
+   * Derived from the same `toForm(job)` baseline the whole-form check uses, so
+   * a section can never claim to be saved while `isDirty` says otherwise.
+   */
+  const sectionDirty: Record<SectionId, boolean> = useMemo(() => {
+    if (!job || !formData) {
+      return { role: false, particulars: false, availability: false, screening: questionsDirty };
+    }
+    const stored = toForm(job);
+    return {
+      role: formData.title !== stored.title || formData.description !== stored.description,
+      particulars:
+        formData.type !== stored.type ||
+        formData.location !== stored.location ||
+        formData.salary !== stored.salary ||
+        formData.experience !== stored.experience ||
+        JSON.stringify(formData.skills) !== JSON.stringify(stored.skills),
+      availability: formData.isActive !== stored.isActive,
+      screening: questionsDirty,
+    };
+  }, [job, formData, questionsDirty]);
+
   const anythingUnsaved = isDirty || questionsDirty;
+
+  /* ------------------------------- sections ------------------------------- */
+
+  /**
+   * Which section panels are open. All open by default — folding one away is a
+   * convenience for an employer who has finished with it, never something the
+   * page does to them. A collapsed panel is `hidden`, so its fields leave the
+   * tab order, which is why `jumpToSection` re-opens before sending anyone.
+   */
+  const [openSections, setOpenSections] = useState<Record<SectionId, boolean>>({
+    role: true,
+    particulars: true,
+    availability: true,
+    screening: true,
+  });
+
+  const toggleSection = (id: SectionId) =>
+    setOpenSections((current) => ({ ...current, [id]: !current[id] }));
+
+  const jumpToSection = (id: SectionId) => {
+    setOpenSections((current) => ({ ...current, [id]: true }));
+    // The panel has to be in the DOM before the browser will scroll to it.
+    requestAnimationFrame(() => {
+      document.getElementById(`section-toggle-${id}`)?.focus();
+    });
+  };
 
   // A reload or a tab close with edits pending used to lose them silently.
   // In-app navigation is covered by the confirm on Cancel and Back below.
@@ -877,16 +975,26 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
     const title = formData.title.trim();
     const description = formData.description.trim();
 
+    /*
+     * Every refusal names the section that owns it and sends the employer
+     * there. A message about a field inside a folded-away panel is a dead end —
+     * the same treatment the post form gives its own blockers.
+     */
+    const refuse = (message: string, section: SectionId) => {
+      setFormError(message);
+      jumpToSection(section);
+    };
+
     if (!title) {
-      setFormError("Job title is required");
+      refuse("Job title is required", "role");
       return;
     }
     if (!description) {
-      setFormError("Job description is required");
+      refuse("Job description is required", "role");
       return;
     }
     if (!isJobType(formData.type)) {
-      setFormError("Choose a job type");
+      refuse("Choose a job type", "particulars");
       return;
     }
 
@@ -904,8 +1012,9 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
       skillsTouched &&
       JSON.stringify(cleanTagList(skillsRef.current)) !== JSON.stringify(skillsRef.current)
     ) {
-      setFormError(
-        `Skills: keep to ${MAX_SKILLS} tags of at most ${MAX_SKILL_LENGTH} characters each. Remove the extras — saving would drop them without telling you.`
+      refuse(
+        `Skills: keep to ${MAX_SKILLS} tags of at most ${MAX_SKILL_LENGTH} characters each. Remove the extras — saving would drop them without telling you.`,
+        "particulars"
       );
       return;
     }
@@ -996,9 +1105,26 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
   /* ---------------------------------------------------------------------- */
 
   if (!ready || !allowed) {
+    /*
+     * `useAuthGuard` is already redirecting. Hold this page's own shell rather
+     * than swapping the whole viewport for a centred spinner: the navbar
+     * staying put is the difference between "still loading" and "something went
+     * wrong", and the blocks below are the size of what replaces them, so
+     * nothing jumps. Same reasoning as the sibling `loading.tsx`.
+     */
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50 text-blue-600 dark:bg-gray-900 dark:text-blue-400">
-        <Spinner label="Loading…" />
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <Navbar />
+        <main id="main-content" className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
+          <p className="sr-only" role="status">
+            Loading this posting
+          </p>
+          <Skeleton className="h-3 w-36" />
+          <Skeleton className="mt-2.5 h-8 w-40" />
+          <Skeleton className="mt-3 h-4 w-full max-w-sm" />
+          <Skeleton className="mt-6 h-28 w-full rounded-xl" />
+          <Skeleton className="mt-4 h-72 w-full rounded-xl" />
+        </main>
       </div>
     );
   }
@@ -1022,11 +1148,39 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
   const skillsOverCap =
     skills.length > MAX_SKILLS || skills.some((skill) => skill.length > MAX_SKILL_LENGTH);
 
+  /* ----------------------------- section state ---------------------------- */
+
+  /** What each section's pill says. Derived, so it cannot drift from the saves. */
+  const sectionStatus: Record<SectionId, { tone: SectionTone; label: string }> = {
+    role: sectionDirty.role ? { tone: "dirty", label: "Unsaved" } : { tone: "saved", label: "Saved" },
+    particulars: sectionDirty.particulars
+      ? { tone: "dirty", label: "Unsaved" }
+      : { tone: "saved", label: "Saved" },
+    availability: sectionDirty.availability
+      ? { tone: "dirty", label: "Unsaved" }
+      : { tone: "neutral", label: formData?.isActive ? "Open" : "Closed" },
+    screening: questionsLoading
+      ? { tone: "neutral", label: "Loading" }
+      : sectionDirty.screening
+        ? { tone: "dirty", label: "Unsaved" }
+        : {
+            tone: "neutral",
+            label:
+              questions.length === 0
+                ? "None"
+                : `${questions.length} ${questions.length === 1 ? "question" : "questions"}`,
+          },
+  };
+
+  const unsavedSections = (Object.keys(sectionDirty) as SectionId[]).filter(
+    (id) => sectionDirty[id]
+  ).length;
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Navbar />
 
-      <main id="main-content" className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-10">
+      <main id="main-content" className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
         <Link
           href="/company/dashboard"
           onClick={confirmDiscard}
@@ -1111,20 +1265,20 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
               </Alert>
             )}
 
-            <Card>
-              <CardHeader
-                eyebrow="Draft"
-                title="Job details"
-                description="Everything on this card, skill tags included, saves together on one button and goes live at once."
-              />
+            <SectionRail
+              status={sectionStatus}
+              unsaved={unsavedSections}
+              onJump={jumpToSection}
+            />
 
-              <form onSubmit={handleSubmit} className="px-4 py-5 sm:px-6 sm:py-6" noValidate>
-                {/* Section 1 — the role itself. */}
-                <section aria-labelledby="section-role">
-                  <h3 id="section-role" className="eyebrow mb-4">
-                    01 · The role
-                  </h3>
-
+            <form onSubmit={handleSubmit} noValidate>
+              <div className="mt-4 space-y-3">
+                <SectionCard
+                  section={SECTIONS[0]}
+                  status={sectionStatus.role}
+                  open={openSections.role}
+                  onToggle={() => toggleSection("role")}
+                >
                   <div className="space-y-6">
                     <div>
                       <Label htmlFor="title" required>
@@ -1317,17 +1471,14 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
                       </p>
                     </div>
                   </div>
-                </section>
+                </SectionCard>
 
-                {/* Section 2 — the particulars, on a hairline divider. */}
-                <section
-                  aria-labelledby="section-particulars"
-                  className="mt-8 border-t border-gray-200 pt-6 dark:border-gray-700"
+                <SectionCard
+                  section={SECTIONS[1]}
+                  status={sectionStatus.particulars}
+                  open={openSections.particulars}
+                  onToggle={() => toggleSection("particulars")}
                 >
-                  <h3 id="section-particulars" className="eyebrow mb-4">
-                    02 · Particulars
-                  </h3>
-
                   <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                     <div>
                       <Label htmlFor="type" required hint="Candidates filter the feed by this.">
@@ -1456,7 +1607,10 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
                                   type="button"
                                   onClick={() => removeSkill(skill)}
                                   aria-label={`Remove ${skill}`}
-                                  className="-my-1 -mr-1.5 inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-gray-400 hover:text-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:hover:text-gray-100"
+                                  // gray-500, not gray-400: the lighter grey sat
+                                  // at about 2.8:1 on the chip's own background
+                                  // in light mode. Matches the post form.
+                                  className="-my-1 -mr-1.5 inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-gray-500 hover:text-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-gray-400 dark:hover:text-gray-100"
                                 >
                                   <Icon.x className="h-3 w-3" />
                                 </button>
@@ -1479,7 +1633,16 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
                         onKeyDown={handleSkillKeyDown}
                         onBlur={() => commitSkillInput(skillInput)}
                         disabled={skillsFull}
-                        maxLength={MAX_SKILL_LENGTH}
+                        // Sized for a pasted *list*, not for one tag — the same
+                        // fix the post form carries, which had not been brought
+                        // across. `MAX_SKILL_LENGTH` here meant the browser
+                        // applied the cap to the paste itself, so pasting
+                        // "React, TypeScript, Node.js, PostgreSQL, Kubernetes"
+                        // was clipped to 40 characters before `onChange` ever
+                        // saw a comma to split on. Each individual tag is still
+                        // cut to `MAX_SKILL_LENGTH` by `cleanTagList` when it is
+                        // committed, which is the same code the API runs.
+                        maxLength={MAX_SKILL_LENGTH * MAX_SKILLS}
                         placeholder={
                           skillsFull ? "Skill limit reached" : "e.g. TypeScript, Postgres, Figma"
                         }
@@ -1525,12 +1688,21 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
                       </p>
                     </div>
                   </div>
-                </section>
+                </SectionCard>
 
                 {/* A bare checkbox never explained what "active" actually does,
                     so the state badge and its consequence lead, and the control
-                    itself sits on the right as a switch. */}
-                <div className="mt-8 flex flex-wrap items-center justify-between gap-4 rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+                    itself sits on the right as a switch. It is a section of its
+                    own now: it is the one control on this page with an
+                    immediate, public consequence, and it was previously an
+                    unlabelled box between the skill editor and the save row. */}
+                <SectionCard
+                  section={SECTIONS[2]}
+                  status={sectionStatus.availability}
+                  open={openSections.availability}
+                  onToggle={() => toggleSection("availability")}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-4">
                   <div className="min-w-[14rem] flex-1">
                     <JobStateBadge isActive={formData.isActive} />
                     <p
@@ -1571,12 +1743,15 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
                       />
                     </span>
                   </label>
-                </div>
+                  </div>
+                </SectionCard>
 
-                <div className="mt-8 flex flex-col-reverse gap-3 border-t border-gray-200 pt-5 dark:border-gray-700 sm:flex-row sm:items-center sm:justify-end">
-                  {/* Scoped deliberately. With the questions saving on their own
-                      button below, "everything is saved" was a claim this line
-                      had no way of making good on. */}
+                {/* Scoped deliberately, and sitting outside the section cards
+                    so it reads as the action for the three of them together.
+                    With the questions saving on their own button below,
+                    "everything is saved" was a claim this line had no way of
+                    making good on. */}
+                <div className="panel flex flex-col-reverse gap-3 p-4 sm:flex-row sm:items-center sm:justify-end sm:px-6">
                   <p className="eyebrow text-center sm:mr-auto sm:text-left" aria-live="polite">
                     {isDirty ? "Unsaved job details" : "Job details are saved"}
                   </p>
@@ -1590,32 +1765,52 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
                   <button
                     type="submit"
                     disabled={saving || deleting || !isDirty}
+                    aria-busy={saving || undefined}
                     aria-describedby={formError ? "edit-job-error" : undefined}
                     className={`${buttonPrimary} w-full sm:w-auto`}
                   >
-                    {saving ? "Saving…" : "Save job details"}
+                    {saving ? (
+                      <>
+                        <Spinner className="h-4 w-4" decorative />
+                        Saving…
+                      </>
+                    ) : (
+                      <>
+                        <Icon.check className="h-4 w-4" />
+                        Save job details
+                      </>
+                    )}
                   </button>
                 </div>
-              </form>
-            </Card>
+              </div>
+            </form>
 
             {/* Screening questions live on their own route, so they save on
                 their own button. Folding them into the form above would make
                 one "Save job details" mean two independent writes, either of
                 which can fail without the other. The skill tags, by contrast,
-                are columns on the job row and go out with that same PUT. */}
-            <Card className="mt-6">
-              <CardHeader
-                eyebrow="Screening"
-                title="Screening questions"
-                description={`Applicants answer these when they apply, and you see the answers on the application. Up to ${MAX_QUESTIONS}. They save on their own button, separately from the job details above.`}
-                action={
-                  aiAvailable ? (
+                are columns on the job row and go out with that same PUT. That
+                is why this section sits outside the `<form>` while still
+                carrying its number in the same sequence. */}
+            <div className="mt-3">
+              <SectionCard
+                section={SECTIONS[3]}
+                status={sectionStatus.screening}
+                open={openSections.screening}
+                onToggle={() => toggleSection("screening")}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+                  <p className="min-w-0 flex-1 text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+                    Applicants answer these when they apply, and you see the answers on the
+                    application. Up to {MAX_QUESTIONS}. They save on their own button, separately
+                    from the job details above.
+                  </p>
+                  {aiAvailable && (
                     <button
                       type="button"
                       onClick={() => void handleSuggestQuestions()}
                       disabled={suggestingQuestions || questionsFull || questionsLoading}
-                      className={`${buttonGhost} disabled:cursor-not-allowed disabled:opacity-50`}
+                      className={`${buttonGhost} flex-shrink-0 disabled:cursor-not-allowed disabled:opacity-50`}
                     >
                       {suggestingQuestions ? (
                         <>
@@ -1629,21 +1824,39 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
                         </>
                       )}
                     </button>
-                  ) : undefined
-                }
-              />
+                  )}
+                </div>
 
-              <div className="px-4 py-5 sm:px-6 sm:py-6">
+                <div className="mt-4">
                 {questionsError && (
                   <Alert variant="error" className="mb-4">
                     {questionsError}
                   </Alert>
                 )}
 
+                <p className="sr-only" role="status">
+                  {questionsLoading ? "Loading screening questions" : ""}
+                </p>
+
                 {questionsLoading ? (
-                  <div className="py-8 text-center">
-                    <Spinner className="h-8 w-8" label="Loading screening questions" />
-                  </div>
+                  // Skeleton rather than a centred spinner: this block is
+                  // replaced by full question editors, and a short spinner box
+                  // growing into a tall list is the page's biggest layout shift.
+                  <ol className="space-y-4" aria-hidden="true">
+                    {Array.from({ length: 2 }, (_, index) => (
+                      <li
+                        key={index}
+                        className="rounded-lg border border-gray-200 p-3 dark:border-gray-700 sm:p-4"
+                      >
+                        <Skeleton className="h-3 w-28" />
+                        <Skeleton className="mt-3 h-16 w-full rounded-lg" />
+                        <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                          <Skeleton className="h-11 w-full rounded-lg" />
+                          <Skeleton className="h-11 w-full rounded-lg" />
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
                 ) : (
                   <>
                     {questions.length === 0 ? (
@@ -1694,15 +1907,27 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
                         type="button"
                         onClick={() => void handleSaveQuestions()}
                         disabled={savingQuestions || !questionsDirty}
+                        aria-busy={savingQuestions || undefined}
                         className={`${buttonPrimary} w-full sm:w-auto`}
                       >
-                        {savingQuestions ? "Saving…" : "Save questions"}
+                        {savingQuestions ? (
+                          <>
+                            <Spinner className="h-4 w-4" decorative />
+                            Saving…
+                          </>
+                        ) : (
+                          <>
+                            <Icon.check className="h-4 w-4" />
+                            Save questions
+                          </>
+                        )}
                       </button>
                     </div>
                   </>
                 )}
-              </div>
-            </Card>
+                </div>
+              </SectionCard>
+            </div>
           </>
         )}
       </main>
@@ -1713,6 +1938,180 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
 /* -------------------------------------------------------------------------- */
 /* Local pieces                                                                */
 /* -------------------------------------------------------------------------- */
+
+/*
+ * `SectionRail` and `SectionCard` are the post form's `StepRail` / `StepCard`
+ * with save state in place of completion state. They are defined here rather
+ * than in `ui.tsx` for the same reason they are defined there: a stepped
+ * authoring form is these two pages' problem, not the design system's, and the
+ * kit is owned elsewhere. If a third surface needs them, that is the moment to
+ * promote them.
+ */
+
+/** Tone map for a section's state pill. Not colour alone — each carries a word. */
+const SECTION_PILL_STYLES: Record<SectionTone, string> = {
+  saved:
+    "border-green-300 bg-green-50 text-green-800 dark:border-green-700 dark:bg-green-950/40 dark:text-green-200",
+  dirty:
+    "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200",
+  neutral:
+    "border-gray-300 bg-gray-100 text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300",
+};
+
+function SectionPill({ tone, label }: { tone: SectionTone; label: string }) {
+  return (
+    <span
+      className={`mono inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-1 text-[11px] font-medium uppercase tracking-wider ${SECTION_PILL_STYLES[tone]}`}
+    >
+      {tone === "saved" && <Icon.check className="h-3 w-3 flex-shrink-0" />}
+      {tone === "dirty" && <Icon.warning className="h-3 w-3 flex-shrink-0" />}
+      {label}
+    </span>
+  );
+}
+
+/**
+ * Progress rail for the four sections.
+ *
+ * Sticky from `sm` up, where there is vertical room to spare: a page that saves
+ * in two independent writes needs a persistent answer to "what have I not saved
+ * yet", and one that scrolls off the top is not one. Below the navbar's `z-40`
+ * so it can never cover the primary navigation.
+ */
+function SectionRail({
+  status,
+  unsaved,
+  onJump,
+}: {
+  status: Record<SectionId, { tone: SectionTone; label: string }>;
+  unsaved: number;
+  onJump: (id: SectionId) => void;
+}) {
+  return (
+    <div className="panel p-3 sm:sticky sm:top-16 sm:z-20 sm:p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <Eyebrow as="h2">Edit posting · {SECTIONS.length} sections</Eyebrow>
+        <Eyebrow as="span" className={unsaved > 0 ? "text-amber-700 dark:text-amber-400" : ""}>
+          {unsaved === 0
+            ? "Everything saved"
+            : `${unsaved} ${unsaved === 1 ? "section" : "sections"} unsaved`}
+        </Eyebrow>
+      </div>
+
+      <ol className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {SECTIONS.map((section) => (
+          <li key={section.id}>
+            <button
+              type="button"
+              onClick={() => onJump(section.id)}
+              className="flex w-full flex-col items-start gap-1 rounded-lg border border-gray-200 px-2.5 py-2 text-left transition-colors hover:border-gray-300 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-gray-700 dark:hover:border-gray-600 dark:hover:bg-gray-800"
+            >
+              <span className="flex w-full min-w-0 items-baseline gap-1.5">
+                <Readout className="text-xs text-gray-500 dark:text-gray-400">
+                  {section.number}
+                </Readout>
+                <span className="min-w-0 flex-1 truncate text-xs font-semibold text-gray-900 dark:text-white">
+                  {section.title}
+                </span>
+              </span>
+              <span
+                className={`mono truncate text-[10px] uppercase tracking-wider ${
+                  status[section.id].tone === "dirty"
+                    ? "text-amber-700 dark:text-amber-400"
+                    : status[section.id].tone === "saved"
+                      ? "text-green-700 dark:text-green-400"
+                      : "text-gray-500 dark:text-gray-400"
+                }`}
+              >
+                {status[section.id].label}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+/**
+ * One collapsible section.
+ *
+ * APG accordion shape: the toggle is a `button` and the only child of the
+ * heading, it carries `aria-expanded` and `aria-controls`, and the panel is
+ * `hidden` rather than unmounted so `aria-controls` always points at a real
+ * element and the browser's in-page search can still find a folded field.
+ *   https://www.w3.org/WAI/ARIA/apg/patterns/accordion/
+ */
+function SectionCard({
+  section,
+  status,
+  open,
+  onToggle,
+  children,
+}: {
+  section: (typeof SECTIONS)[number];
+  status: { tone: SectionTone; label: string };
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  const panelId = `section-panel-${section.id}`;
+
+  return (
+    // `scroll-mt` clears the sticky navbar, and the sticky rail on top of it
+    // from `sm` up — without it a jumped-to section lands underneath both.
+    <section id={`section-${section.id}`} className="panel scroll-mt-20 sm:scroll-mt-40">
+      <h2>
+        <button
+          type="button"
+          id={`section-toggle-${section.id}`}
+          onClick={onToggle}
+          aria-expanded={open}
+          aria-controls={panelId}
+          className="flex w-full items-start gap-3 rounded-xl px-4 py-4 text-left transition-colors hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 dark:hover:bg-gray-800/60 sm:px-6"
+        >
+          <Readout className="mt-0.5 text-sm font-semibold text-gray-500 dark:text-gray-400">
+            {section.number}
+          </Readout>
+
+          <span className="min-w-0 flex-1">
+            <span className="block text-base font-semibold text-gray-900 dark:text-white sm:text-lg">
+              {section.title}
+            </span>
+            <span className="mt-1 block text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+              {section.description}
+            </span>
+          </span>
+
+          <span className="flex flex-shrink-0 items-center gap-2">
+            <span className="hidden sm:block">
+              <SectionPill tone={status.tone} label={status.label} />
+            </span>
+            <Icon.arrowRight
+              className={`h-4 w-4 text-gray-500 transition-transform dark:text-gray-400 ${
+                open ? "rotate-90" : ""
+              }`}
+            />
+          </span>
+        </button>
+      </h2>
+
+      {/* The pill moves below the header on phones, where it would otherwise
+          squeeze the title into two or three words per line. */}
+      <div className="px-4 pb-3 sm:hidden">
+        <SectionPill tone={status.tone} label={status.label} />
+      </div>
+
+      <div
+        id={panelId}
+        hidden={!open}
+        className="border-t border-gray-200 px-4 py-5 dark:border-gray-700 sm:px-6 sm:py-6"
+      >
+        {children}
+      </div>
+    </section>
+  );
+}
 
 /**
  * One screening question, fully editable.

@@ -11,6 +11,40 @@ import { STATUS_LABELS, type ApplicationStatus } from "@/lib/validation";
    accent reserved for match quality and live state. The tokens and utility
    classes these compose (`.panel`, `.chip`, `.meter`, `.eyebrow`, `.btn-ink`)
    live in `app/globals.css`.
+
+   --------------------------------------------------------------------------
+   THE FOUR THINGS A PAGE NEEDS TO KNOW
+
+   1. ELEVATION. Four rungs, and a page picks one rather than adding a shadow
+      utility. `<Card elevation="…">`, or the bare strings `surfaceSunken` /
+      `surfaceFlat` / `surfaceRaised` / `surfaceOverlay`.
+
+        sunken   a well content sits *in* — an inset list, an empty field
+        flat     the default card (this is `<Card>`'s default)
+        raised   a panel on a panel, or the lead card of a page
+        overlay  popovers, dropdowns, toasts, dialogs
+
+      In dark mode each rung is a *lighter* surface, not a bigger shadow. Never
+      reach for `shadow-lg` to make something stand out — move it a rung.
+
+   2. STATES. Anything interactive that is not a button gets `interactiveSurface`
+      ("interactive"). It supplies rest / hover / press / selected / disabled
+      from one ramp, and it reads `disabled`, `aria-disabled`, `aria-selected`,
+      `aria-current` and `data-selected` straight off the element — so the state
+      a screen reader hears and the state the eye sees are the same fact. Do not
+      write `hover:bg-gray-100 dark:hover:bg-gray-800` again. For a list row,
+      `rowInteractive` adds the shared dense-row geometry, and `rowSelected` adds
+      the leading accent rule.
+
+   3. FOCUS. Already handled, globally, by one unlayered `:focus-visible` rule.
+      Do not add `focus:outline-none`, and do not add a `focus-visible:ring-*` —
+      both produce a second, differently-coloured indicator on top of the real
+      one.
+
+   4. DENSITY. The rhythm is `--space-1…9` and `--control-h-sm/md/lg` in
+      globals.css, documented there. Buttons take `size`, fields take
+      `inputSmall`, chips take `size="sm"`. Reach for those before inventing a
+      `py-[7px]`.
    ========================================================================== */
 
 /* -------------------------------------------------------------------------- */
@@ -132,6 +166,23 @@ export const Icon = {
   bookmark: make(<path {...stroke} d="M6 5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16l-6-4-6 4V5Z" />),
   /** Hamburger, so the navbar stops hand-rolling its own SVG. */
   menu: make(<path {...stroke} d="M4 7h16M4 12h16M4 17h16" />),
+  /* ---- Added for the restyle. Same 24px grid, same 1.75 stroke. ---------- */
+  chevronDown: make(<path {...stroke} d="m6 9 6 6 6-6" />),
+  chevronRight: make(<path {...stroke} d="m9 6 6 6-6 6" />),
+  /** Explanatory footnote / "how this was worked out". */
+  info: make(<path {...stroke} d="M12 16v-5m0-3h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />),
+  /** Re-run, re-score, try again — the recovery action on a dead end. */
+  refresh: make(<path {...stroke} d="M4 5v5h5M20 19v-5h-5M19.4 9A8 8 0 0 0 5.6 6.6L4 8m0 8a8 8 0 0 0 13.8 2.4L20 16" />),
+  calendar: make(<path {...stroke} d="M8 3v3m8-3v3M4 10h16M6 21h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z" />),
+  building: make(
+    <>
+      <path {...stroke} d="M4 21V6a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v15M13 10h6a1 1 0 0 1 1 1v10M3 21h18" />
+      <path {...stroke} d="M7 9h2M7 13h2M7 17h2M16 14h1M16 17h1" />
+    </>
+  ),
+  link: make(<path {...stroke} d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7L12.2 19" />),
+  /** Saved / starred, distinct from the bookmark used for alerts. */
+  star: make(<path {...stroke} d="m12 3.8 2.6 5.2 5.8.8-4.2 4.1 1 5.7-5.2-2.7-5.2 2.7 1-5.7L3.6 9.8l5.8-.8L12 3.8Z" />),
 };
 
 /* -------------------------------------------------------------------------- */
@@ -147,25 +198,63 @@ export function Eyebrow({
   accent,
   className = "",
   as: Tag = "p",
+  ...rest
 }: {
   children: React.ReactNode;
   accent?: boolean;
   className?: string;
   as?: "p" | "span" | "div" | "h2" | "h3" | "dt";
-}) {
+  // Takes the rest of the HTML attributes so an eyebrow can be the target of an
+  // `aria-describedby` — a caveat set as an eyebrow is exactly the kind of text
+  // that should be wired to the control it qualifies rather than left floating.
+} & Omit<React.HTMLAttributes<HTMLElement>, "children" | "className">) {
   return (
-    <Tag className={`eyebrow ${accent ? "eyebrow-accent" : ""} ${className}`}>{children}</Tag>
+    <Tag {...rest} className={`eyebrow ${accent ? "eyebrow-accent" : ""} ${className}`}>
+      {children}
+    </Tag>
   );
 }
 
 /** Numeric readout in mono with tabular figures, so digits don't jitter. */
-export function Readout({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <span className={`readout ${className}`}>{children}</span>;
+export function Readout({
+  children,
+  className = "",
+  ...rest
+}: {
+  children: React.ReactNode;
+  className?: string;
+} & Omit<React.HTMLAttributes<HTMLSpanElement>, "children" | "className">) {
+  return (
+    <span {...rest} className={`readout ${className}`}>
+      {children}
+    </span>
+  );
 }
 
 /* -------------------------------------------------------------------------- */
 /* Surfaces                                                                    */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * Where a surface sits on the elevation ladder. The tokens and the reasoning
+ * live in `globals.css`; in short:
+ *
+ *   sunken  — a well the content sits *in* (an inset list, an empty field)
+ *   flat    — the default card. One step of separation from the canvas
+ *   raised  — a panel on a panel, or the lead card of a page
+ *   overlay — popovers, dropdowns, toasts: things that float over everything
+ *
+ * Four rungs, because four is what Carbon ships and what Material calls
+ * "deliberately limited to just a handful of levels". Resist a fifth.
+ */
+export type Elevation = "sunken" | "flat" | "raised" | "overlay";
+
+const ELEVATION_CLASS: Record<Elevation, string> = {
+  sunken: "panel-sunken",
+  flat: "panel",
+  raised: "panel panel-raised",
+  overlay: "panel-overlay",
+};
 
 export function Card({
   children,
@@ -174,16 +263,35 @@ export function Card({
   signal = false,
   /** Lays graph-paper rules behind the content, for telemetry panels. */
   grid = false,
+  /** Where this card sits on the elevation ladder. Defaults to the base card. */
+  elevation = "flat",
+  /**
+   * The whole card is a target. Adds the shared hover/press treatment — lift a
+   * tier on hover, settle on press — instead of each surface inventing its own
+   * `hover:border-gray-300 dark:hover:border-gray-600`.
+   */
+  interactive = false,
+  /** `article`/`li`/`section` where the surrounding markup calls for it. */
+  as: Tag = "div",
+  ...rest
 }: {
   children: React.ReactNode;
   className?: string;
   signal?: boolean;
   grid?: boolean;
-}) {
+  elevation?: Elevation;
+  interactive?: boolean;
+  as?: "div" | "article" | "section" | "li" | "aside";
+} & Omit<React.HTMLAttributes<HTMLElement>, "children" | "className">) {
   return (
-    <div className={`panel ${signal ? "panel-signal" : ""} ${grid ? "grid-field" : ""} ${className}`}>
+    <Tag
+      {...rest}
+      className={`${ELEVATION_CLASS[elevation]} ${interactive ? "panel-interactive" : ""} ${
+        signal ? "panel-signal" : ""
+      } ${grid ? "grid-field" : ""} ${className}`}
+    >
       {children}
-    </div>
+    </Tag>
   );
 }
 
@@ -194,17 +302,26 @@ export function CardHeader({
   action,
   /** Lets a page keep a sane h1 → h2 → h3 order without restyling the header. */
   headingLevel = 2,
+  /** Drops to the dense row rhythm, for a header above a tight list. */
+  compact = false,
+  className = "",
 }: {
   title: string;
   description?: string;
   eyebrow?: string;
   action?: React.ReactNode;
   headingLevel?: 2 | 3 | 4;
+  compact?: boolean;
+  className?: string;
 }) {
   const Heading = `h${headingLevel}` as const;
 
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-200 px-4 py-4 dark:border-gray-700 sm:px-6">
+    <div
+      className={`flex flex-wrap items-start justify-between gap-3 border-b border-gray-200 dark:border-gray-700 ${
+        compact ? "px-4 py-2.5" : "px-4 py-4 sm:px-6"
+      } ${className}`}
+    >
       <div className="min-w-0">
         {eyebrow && <Eyebrow className="mb-1.5">{eyebrow}</Eyebrow>}
         <Heading className="text-base font-semibold text-gray-900 dark:text-white sm:text-lg">
@@ -248,7 +365,9 @@ export function SignalPanel({
 
   return (
     <div className={`panel grid-field flex flex-wrap items-center gap-4 p-3 sm:p-4 ${className}`}>
-      <span className="relative flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-green-200 bg-green-50 text-green-600 dark:border-green-800 dark:bg-green-900/25 dark:text-green-400">
+      {/* `.tile-accent` rather than six colour utilities: the empty-state tile
+          was the same shape with a different set of them, and they had drifted. */}
+      <span className="tile tile-accent relative h-10 w-10 flex-shrink-0">
         <Icon.spark className="h-5 w-5" />
         {live && <span className="dot-live absolute -right-1 -top-1" />}
       </span>
@@ -323,13 +442,175 @@ export function Spinner({
  * Placeholder block for content that has not arrived yet. Sized by the caller;
  * inert to assistive tech, so pair it with an `sr-only` "Loading …" where the
  * wait is worth announcing.
+ *
+ * The fill and the pulse are the `.skeleton` component class rather than
+ * `bg-gray-200 dark:bg-gray-700`, because three surfaces were hand-rolling that
+ * pair and had drifted to three different greys.
  */
-export function Skeleton({ className = "h-4 w-full" }: { className?: string }) {
+export function Skeleton({
+  className = "h-4 w-full",
+  /** Corner treatment, so a skeleton can stand in for an avatar or a pill. */
+  rounded = "rounded",
+}: {
+  className?: string;
+  rounded?: string;
+}) {
+  return <span className={`skeleton ${rounded} ${className}`} aria-hidden="true" />;
+}
+
+/*
+ * The shapes below exist because `<Skeleton>` had exactly one call site against
+ * 53 `<Spinner>`s, while two pages hand-rolled their own list placeholders out
+ * of raw divs. NN/g's split is the rule they are built for: spinners for short
+ * blocking actions (submitting, auth), skeletons wherever content is being
+ * fetched and layout context matters (feeds, dashboards, panels). Rettig et
+ * al. (ECCE 2018) found skeleton screens scored higher on both perceived speed
+ * and perceived ease of navigation than spinners.
+ *
+ * Each one is sized to occupy roughly the height of the real content, which is
+ * the other half of the point: a centred spinner in a `py-12` box replaced by a
+ * 600px list is a large layout shift on every load.
+ *
+ * Refs: https://www.nngroup.com/articles/skeleton-screens/
+ *       https://dl.acm.org/doi/10.1145/3232078.3232086
+ */
+
+/** n lines of text with a short last line, so it reads as a paragraph. */
+export function SkeletonText({
+  lines = 3,
+  className = "",
+}: {
+  lines?: number;
+  className?: string;
+}) {
   return (
-    <span
-      className={`block rounded bg-gray-200 motion-safe:animate-pulse dark:bg-gray-700 ${className}`}
+    <span className={`block space-y-2 ${className}`} aria-hidden="true">
+      {Array.from({ length: lines }, (_, i) => (
+        <Skeleton key={i} className={`h-3 ${i === lines - 1 ? "w-5/6" : "w-full"}`} />
+      ))}
+    </span>
+  );
+}
+
+/**
+ * Rows that occupy the same height as the real list. Use in place of a centred
+ * spinner anywhere a list is being replaced.
+ */
+export function SkeletonRows({
+  count = 5,
+  /** Matches the leading avatar/logo tile most of our rows carry. */
+  media = true,
+  className = "",
+}: {
+  count?: number;
+  media?: boolean;
+  className?: string;
+}) {
+  return (
+    <ul
+      className={`divide-y divide-gray-200 dark:divide-gray-700 ${className}`}
       aria-hidden="true"
-    />
+    >
+      {Array.from({ length: count }, (_, i) => (
+        <li key={i} className="flex items-center gap-3 px-4 py-4 sm:px-6">
+          {media && <Skeleton className="h-10 w-10 flex-shrink-0" rounded="rounded-lg" />}
+          <span className="min-w-0 flex-1 space-y-2">
+            <Skeleton className="h-4 w-1/2" />
+            <Skeleton className="h-3 w-1/3" />
+          </span>
+          <Skeleton className="hidden h-5 w-16 flex-shrink-0 sm:block" rounded="rounded-md" />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * A grid of card placeholders, for the jobs feed and the dashboard "matched to
+ * you" grid. `columns` mirrors the real grid so nothing reflows on arrival.
+ */
+export function SkeletonCards({
+  count = 4,
+  columns = 2,
+  className = "",
+}: {
+  count?: number;
+  /** 1, 2 or 3 columns from `sm` up; always one column on a phone. */
+  columns?: 1 | 2 | 3;
+  className?: string;
+}) {
+  const grid = { 1: "", 2: "sm:grid-cols-2", 3: "sm:grid-cols-2 xl:grid-cols-3" }[columns];
+
+  return (
+    <div className={`grid grid-cols-1 gap-4 ${grid} ${className}`} aria-hidden="true">
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="panel p-4">
+          <div className="flex items-start gap-3">
+            <Skeleton className="h-10 w-10 flex-shrink-0" rounded="rounded-lg" />
+            <span className="min-w-0 flex-1 space-y-2">
+              <Skeleton className="h-4 w-2/3" />
+              <Skeleton className="h-3 w-1/3" />
+            </span>
+          </div>
+          <SkeletonText lines={2} className="mt-4" />
+          <div className="mt-4 flex gap-2">
+            <Skeleton className="h-6 w-20" rounded="rounded-md" />
+            <Skeleton className="h-6 w-16" rounded="rounded-md" />
+          </div>
+          <Skeleton className="mt-4 h-1" rounded="rounded-full" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Header + body placeholder for a whole panel (a profile card, a detail pane). */
+export function SkeletonPanel({
+  lines = 4,
+  className = "",
+}: {
+  lines?: number;
+  className?: string;
+}) {
+  return (
+    <div className={`panel p-4 sm:p-6 ${className}`} aria-hidden="true">
+      <Skeleton className="h-3 w-24" />
+      <Skeleton className="mt-3 h-6 w-1/2" />
+      <SkeletonText lines={lines} className="mt-4" />
+    </div>
+  );
+}
+
+/**
+ * One polite announcer per page, rendered empty on mount.
+ *
+ * A live region that appears at the same moment as its first message frequently
+ * does not announce at all — the region has to already exist in the accessibility
+ * tree for the insertion to be noticed. Keeping it text-only and free of
+ * controls is the other half of Sara Soueidan's guidance; several pages here
+ * wrap `aria-live` around a whole list, or around a container that holds a
+ * button, and re-announce everything on every keystroke.
+ *
+ * Pair with `aria-busy` on the container that is actually changing.
+ * Ref: https://www.sarasoueidan.com/blog/accessible-notifications-with-aria-live-regions-part-2/
+ */
+export function LiveStatus({
+  message,
+  /** `assertive` only for something the user must hear now — an error. */
+  assertive = false,
+}: {
+  message: string;
+  assertive?: boolean;
+}) {
+  return (
+    <p
+      role="status"
+      aria-live={assertive ? "assertive" : "polite"}
+      aria-atomic="true"
+      className="sr-only"
+    >
+      {message}
+    </p>
   );
 }
 
@@ -374,25 +655,73 @@ export function Alert({
   );
 }
 
+/**
+ * "Nothing yet" and "nothing matched" are different surfaces and want different
+ * treatment — the first is a *teaching* moment, the second is a *dead end* the
+ * user needs a way out of. Thirteen call sites were picking by hand and several
+ * of the dead ends shipped with no recovery action at all.
+ *
+ * - `empty`      first run. Roomy, a document glyph, an action is optional.
+ * - `no-results` a filter or search returned nothing. Tighter (it sits inside a
+ *                results region that still has its controls above it), defaults
+ *                to a search glyph, and `action` is where the way out goes.
+ * - `error`      the fetch failed. Same shape, a warning glyph, `action` is the
+ *                retry.
+ *
+ * NN/g's filtering guidance is the source of the split: prevent zero-result
+ * dead ends, and where one happens, give a way out.
+ * Ref: https://www.nngroup.com/topic/search/
+ */
 export function EmptyState({
   icon,
   title,
   description,
   action,
+  variant = "empty",
+  /** Mono kicker above the title, for surfaces that already use one. */
+  eyebrow,
+  className = "",
 }: {
   icon?: React.ReactNode;
   title: string;
   description?: string;
+  /**
+   * Required in practice for `no-results` and `error`: a dead end must have an
+   * exit. It stays optional in the type so the first-run case does not have to
+   * invent one.
+   */
   action?: React.ReactNode;
+  variant?: "empty" | "no-results" | "error";
+  eyebrow?: string;
+  className?: string;
 }) {
+  const defaultIcon = {
+    empty: <Icon.document className="h-6 w-6" />,
+    "no-results": <Icon.search className="h-6 w-6" />,
+    error: <Icon.warning className="h-6 w-6" />,
+  }[variant];
+
   return (
-    <div className="grid-field px-6 py-14 text-center">
-      <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
-        {icon ?? <Icon.document className="h-6 w-6" />}
+    <div
+      className={`grid-field text-center ${
+        variant === "empty" ? "px-6 py-14" : "px-6 py-10"
+      } ${className}`}
+    >
+      <div
+        className={`tile mx-auto mb-4 h-12 w-12 ${
+          variant === "error"
+            ? "border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
+            : ""
+        }`}
+      >
+        {icon ?? defaultIcon}
       </div>
+      {eyebrow && <Eyebrow className="mb-2">{eyebrow}</Eyebrow>}
       <h3 className="mb-2 text-base font-semibold text-gray-900 dark:text-white">{title}</h3>
       {description && (
-        <p className="mx-auto mb-5 max-w-sm text-sm text-gray-600 dark:text-gray-400">{description}</p>
+        <p className="mx-auto mb-5 max-w-sm text-pretty text-sm text-gray-600 dark:text-gray-400">
+          {description}
+        </p>
       )}
       {action}
     </div>
@@ -404,9 +733,44 @@ export function EmptyState({
 /* -------------------------------------------------------------------------- */
 
 /**
- * Flat hairline progress bar. Above `strongAt` it fills emerald; below, it goes
- * neutral — so strength is legible from the bar length alone and colour is
- * reinforcement rather than the only signal.
+ * Fit bands. The underlying signal is `similarityToScore(cosine, floor 0.60,
+ * ceiling 0.80)` — a clamped linear rescale of a 0.2-wide cosine window — so one
+ * displayed point is 0.002 of cosine and the last digit is model jitter.
+ *
+ * A band is what a person can act on; the number stays as instrument detail.
+ * Microsoft's HAX guideline 2 ("match the level of precision in UI
+ * communication with the system performance") and Google PAIR's explainability
+ * chapter both point the same way: PAIR calls a raw numeric confidence the
+ * riskiest of the four display methods and recommends a categorical band
+ * instead, because it "reduces granularity confusion through clear action
+ * guidance".
+ */
+export const FIT_BANDS = [
+  { min: 80, label: "Very strong", hint: "Among the closest reads on your profile" },
+  { min: 60, label: "Strong", hint: "Clear overlap with what you list" },
+  { min: 40, label: "Partial", hint: "Some overlap — worth reading the posting" },
+  { min: 0, label: "Exploratory", hint: "Little overlap we can see" },
+] as const;
+
+export type FitBand = (typeof FIT_BANDS)[number];
+
+export function fitBand(value: number): FitBand {
+  return FIT_BANDS.find((band) => value >= band.min) ?? FIT_BANDS[FIT_BANDS.length - 1];
+}
+
+/** Rounded to 5 on list surfaces: below that the digits are model jitter. */
+export const coarseFit = (value: number) => Math.round(value / 5) * 5;
+
+/**
+ * Flat hairline bar. Above `strongAt` it fills emerald; below, it goes neutral —
+ * so strength is legible from the bar length alone and colour is reinforcement
+ * rather than the only signal.
+ *
+ * `role="meter"`, not `progressbar`. MDN is explicit that a meter is "a
+ * measurement within a known range" and that "meters should not be used to
+ * indicate progress" — this measures match strength, which is a quantity, not
+ * progress toward completion over time. Pass `progress` for the rare genuine
+ * loading bar.
  */
 export function Meter({
   value,
@@ -414,28 +778,58 @@ export function Meter({
   strongAt = 60,
   label,
   className = "",
+  /**
+   * Marks the bar `aria-hidden`. Use it wherever the label and the value are
+   * already printed as visible text right beside the bar — as in `MeterRow` —
+   * because otherwise a screen reader reads "Skills overlap, 99 percent" and
+   * then "Skills overlap, meter, 99%" for the same one fact.
+   */
+  decorative = false,
+  /** Overrides the spoken value. Defaults to the number plus its band. */
+  valueText,
+  /** Points at the caveat that qualifies the number, e.g. a "fit is a sorting aid" note. */
+  describedBy,
+  /** 3px / 4px / 6px. A bar in a dense row and a bar under a headline differ. */
+  size = "md",
+  /** Genuine loading bar rather than a measurement: restores `role="progressbar"`. */
+  progress = false,
 }: {
   value: number;
   max?: number;
   strongAt?: number;
   label?: string;
   className?: string;
+  decorative?: boolean;
+  valueText?: string;
+  describedBy?: string;
+  size?: "sm" | "md" | "lg";
+  progress?: boolean;
 }) {
   const pct = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
   const strong = pct >= strongAt;
+  const rounded = Math.round(pct);
+  const sizeClass = { sm: "meter-sm", md: "", lg: "meter-lg" }[size];
+
+  const a11y = decorative
+    ? ({ "aria-hidden": true } as const)
+    : ({
+        role: progress ? "progressbar" : "meter",
+        "aria-valuenow": rounded,
+        "aria-valuemin": 0,
+        "aria-valuemax": 100,
+        // An unnamed meter is announced as an anonymous "meter"; callers that
+        // pass no label at least get a generic one.
+        "aria-label": label ?? (progress ? "Progress" : "Measurement"),
+        // APG's range-widget practice: "there is value in communicating more
+        // information than just a number". The old value was `${pct}%`, which
+        // restated aria-valuenow and added nothing.
+        "aria-valuetext":
+          valueText ?? (progress ? `${rounded}%` : `${rounded} out of 100 — ${fitBand(pct).label.toLowerCase()}`),
+        "aria-describedby": describedBy,
+      } as const);
 
   return (
-    <div
-      className={`meter ${className}`}
-      role="progressbar"
-      aria-valuenow={Math.round(pct)}
-      aria-valuemin={0}
-      aria-valuemax={100}
-      // A progressbar with no accessible name is announced as an anonymous
-      // "progress bar"; callers that pass no label at least get a generic one.
-      aria-label={label ?? "Progress"}
-      aria-valuetext={`${Math.round(pct)}%`}
-    >
+    <div className={`meter ${sizeClass} ${className}`} {...a11y}>
       <span
         className={`meter-fill ${strong ? "" : "meter-fill-muted"}`}
         style={{ width: `${pct}%` }}
@@ -450,67 +844,231 @@ export function MeterRow({
   value,
   max = 100,
   suffix = "%",
+  /**
+   * This facet's share of the blended score, 0–1. Four identically-sized bars
+   * imply four equal inputs; where they are not equal, saying so is the
+   * difference between an explanation and a misleading one. Renders as
+   * "18% OF SCORE" beside the label.
+   */
+  weight,
+  /** A short qualifier under the label, for facets that need one. */
+  hint,
+  describedBy,
+  className = "",
 }: {
   label: string;
   value: number;
   max?: number;
   suffix?: string;
+  weight?: number;
+  hint?: string;
+  describedBy?: string;
+  className?: string;
 }) {
   return (
-    <div>
+    <div className={className}>
       <div className="mb-1.5 flex items-baseline justify-between gap-3">
-        <span className="text-sm text-gray-700 dark:text-gray-300">{label}</span>
-        <Readout className="text-xs font-medium">
+        <span className="min-w-0 text-sm text-gray-700 dark:text-gray-300">
+          {label}
+          {weight !== undefined && (
+            <Eyebrow as="span" className="ml-2 whitespace-nowrap">
+              {Math.round(weight * 100)}% of score
+            </Eyebrow>
+          )}
+        </span>
+        <Readout className="flex-shrink-0 text-xs font-medium">
           {value}
           {suffix}
         </Readout>
       </div>
-      <Meter value={value} max={max} label={label} />
+      {/* Decorative: the label and the value are already right above the bar. */}
+      <Meter value={value} max={max} decorative describedBy={describedBy} />
+      {hint && <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{hint}</p>}
     </div>
   );
 }
 
-/** Pulse glyph + mono percentage, the reference's "98% Match / VECTOR FIT". */
+/**
+ * The headline fit readout: a band, then the number as instrument detail.
+ *
+ * Was "98% match". The percent sign is the problem — next to the word "match"
+ * it reads to a candidate as a 98% chance of being hired, which is not a claim
+ * the model can support. The band leads, the raw value follows as "85/100",
+ * rounded to 5 on list surfaces. A real gauge shows a band *and* a value, so
+ * this is more on-brand than the percentage, not less.
+ */
 export function MatchScore({
   value,
-  caption = "SIGNAL FIT",
+  caption = "Profile fit",
   className = "",
+  /** Round to the nearest 5. On by default; turn it off on a detail panel. */
+  coarse = true,
+  /**
+   * Ordinal position in the list this score is sorting, e.g. `rank={3}`
+   * `rankOf={24}` → "3rd closest of 24". The score is monotone in cosine, so
+   * *rank order* is meaningful even where the magnitude is not — which makes
+   * the ordinal the more defensible framing on a list surface, and the honest
+   * description of what the feature does: sort your feed.
+   */
+  rank,
+  rankOf,
+  /** Adds the bar under the readout, for a card that has room for it. */
+  showBar = false,
+  /** Points at the caveat that qualifies the score. */
+  describedBy,
+  id,
+  align = "right",
+  /** `lg` for a detail panel where the score is the headline of the page. */
+  size = "md",
 }: {
   value: number;
   caption?: string;
   className?: string;
+  coarse?: boolean;
+  rank?: number;
+  rankOf?: number;
+  showBar?: boolean;
+  describedBy?: string;
+  id?: string;
+  align?: "left" | "right";
+  size?: "md" | "lg";
 }) {
+  const band = fitBand(value);
+  const shown = coarse ? coarseFit(value) : Math.round(value);
+  const alignment = align === "right" ? "text-right" : "text-left";
+  const justify = align === "right" ? "justify-end" : "justify-start";
+
   return (
-    <div className={`text-right ${className}`}>
-      <span className="flex items-center justify-end gap-1.5 text-green-600 dark:text-green-400">
-        <Icon.pulse className="h-4 w-4" />
-        <Readout className="text-sm font-semibold text-gray-900 dark:text-white">{value}% match</Readout>
+    <div className={`${alignment} ${className}`} id={id} aria-describedby={describedBy}>
+      <span className={`flex items-center gap-1.5 ${justify}`}>
+        <Icon.pulse
+          className={`${size === "lg" ? "h-5 w-5" : "h-4 w-4"} flex-shrink-0 text-green-600 dark:text-green-400`}
+        />
+        <span
+          className={`font-semibold text-gray-900 dark:text-white ${
+            size === "lg" ? "text-lg" : "text-sm"
+          }`}
+        >
+          {band.label} fit
+        </span>
       </span>
-      <Eyebrow className="mt-0.5">{caption}</Eyebrow>
+      <Eyebrow className="mt-1">
+        <Readout>{shown}</Readout>
+        <span aria-hidden="true">/100</span>
+        <span className="sr-only"> out of 100</span>
+        {" · "}
+        {caption}
+      </Eyebrow>
+      {rank !== undefined && rankOf !== undefined && rankOf > 0 && (
+        <Eyebrow className="mt-0.5">
+          <Readout>{ordinal(rank)}</Readout> closest of <Readout>{rankOf}</Readout>
+        </Eyebrow>
+      )}
+      {/* Decorative: the band and the readout above already say it in words. */}
+      {showBar && <Meter value={value} className="mt-2" decorative />}
     </div>
   );
+}
+
+/** 1 → "1st", 2 → "2nd", 13 → "13th". Used by `MatchScore`'s rank line. */
+export function ordinal(n: number): string {
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
+  const mod10 = n % 10;
+  if (mod10 === 1) return `${n}st`;
+  if (mod10 === 2) return `${n}nd`;
+  if (mod10 === 3) return `${n}rd`;
+  return `${n}th`;
 }
 
 /* -------------------------------------------------------------------------- */
 /* Chips and badges                                                            */
 /* -------------------------------------------------------------------------- */
 
-/** Compact metadata tag: a skill, a salary band, a location. */
+/**
+ * Compact metadata tag: a skill, a salary band, a location.
+ *
+ * Three shapes from one component, following Carbon's tag variants:
+ *
+ *  - read-only (default) — a `<span>`, not in the tab order
+ *  - dismissible (`onRemove`) — carries its own close control
+ *  - selectable (`onClick`) — a `<button>` with `aria-pressed`
+ *
+ * Carbon ships these separately because "tag with an X" has its own contract:
+ * the close control is in the tab order, and its accessible name has to include
+ * the tag's own text so a screen-reader user hears *which* filter they are
+ * removing. `app/jobs/page.tsx` had hand-rolled exactly that; it belongs here,
+ * because the next surface that needs a removable token would copy it.
+ */
 export function Chip({
   children,
   icon,
   accent,
   className = "",
+  /** Renders the close control. The label defaults to "Remove {children}". */
+  onRemove,
+  removeLabel,
+  /** Makes the whole chip a toggle. Sets `aria-pressed` from `selected`. */
+  onClick,
+  selected = false,
+  /** `sm` for chips inside a dense row. */
+  size = "md",
+  title,
 }: {
   children: React.ReactNode;
   icon?: React.ReactNode;
   accent?: boolean;
   className?: string;
+  onRemove?: () => void;
+  removeLabel?: string;
+  onClick?: () => void;
+  selected?: boolean;
+  size?: "sm" | "md";
+  title?: string;
 }) {
+  const base = `chip ${size === "sm" ? "chip-sm" : ""} ${accent || selected ? "chip-accent" : ""} ${className}`;
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        aria-pressed={selected}
+        title={title}
+        className={`${base} chip-interactive interactive hit-24`}
+      >
+        {icon}
+        {children}
+      </button>
+    );
+  }
+
+  if (!onRemove) {
+    return (
+      <span className={base} title={title}>
+        {icon}
+        {children}
+      </span>
+    );
+  }
+
   return (
-    <span className={`chip ${accent ? "chip-accent" : ""} ${className}`}>
+    <span className={base} title={title}>
       {icon}
       {children}
+      <button
+        type="button"
+        onClick={onRemove}
+        // `.hit-24` grows the target to the 24×24 floor without growing the
+        // chip, so the control clears SC 2.5.8 on its own rather than leaning
+        // on the spacing exception.
+        className="chip-dismiss hit-24"
+      >
+        <Icon.x className="h-3 w-3" />
+        <span className="sr-only">
+          {removeLabel ?? `Remove ${typeof children === "string" ? children : "this filter"}`}
+        </span>
+      </button>
     </span>
   );
 }
@@ -548,7 +1106,16 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
  * carry the meaning; the label and an icon now do too, so it survives greyscale
  * and colour-blindness.
  */
-export function StatusBadge({ status, className = "" }: { status: string; className?: string }) {
+export function StatusBadge({
+  status,
+  className = "",
+  /** Drops the glyph where the badge sits in an already-dense row. */
+  showIcon = true,
+}: {
+  status: string;
+  className?: string;
+  showIcon?: boolean;
+}) {
   const label = STATUS_LABELS[status as ApplicationStatus] ?? status;
   const styles =
     STATUS_STYLES[status] ??
@@ -556,8 +1123,61 @@ export function StatusBadge({ status, className = "" }: { status: string; classN
 
   return (
     <span className={`${BADGE_BASE} ${styles} ${className}`}>
-      {STATUS_ICONS[status] ?? null}
+      {showIcon ? STATUS_ICONS[status] ?? null : null}
       <span>{label}</span>
+    </span>
+  );
+}
+
+/**
+ * The ordinal stages an application moves through. `REJECTED` is deliberately
+ * not in the list: it is an exit from the pipeline, not a position in it.
+ */
+export const PIPELINE_STAGES = ["PENDING", "SHORTLISTED", "INTERVIEW", "ACCEPTED"] as const;
+
+/**
+ * A stage badge shows *which* stage; this shows **where that stage sits in the
+ * sequence**. A seeker looking at "Shortlisted" otherwise cannot tell that two
+ * stages remain. Same reasoning as a task-list or progress-through-a-process
+ * pattern: inside a multi-stage process, position in the sequence is the thing
+ * the user actually wants to know.
+ *
+ * Drawn as one hairline segment per stage, the same grammar as `.meter`, so it
+ * belongs beside a score rather than looking like a borrowed widget. The
+ * segments are `aria-hidden` and the position is given to assistive tech as a
+ * sentence, because a row of coloured bars is not a thing worth spelling out.
+ */
+export function PipelineTrack({
+  status,
+  className = "",
+  /** Hides the badge, for a row that already shows one elsewhere. */
+  showBadge = true,
+}: {
+  status: string;
+  className?: string;
+  showBadge?: boolean;
+}) {
+  const closed = status === "REJECTED";
+  const at = closed ? -1 : PIPELINE_STAGES.indexOf(status as (typeof PIPELINE_STAGES)[number]);
+  const label = STATUS_LABELS[status as ApplicationStatus] ?? status;
+  const position = closed
+    ? `Closed: ${label}`
+    : at >= 0
+      ? `Stage ${at + 1} of ${PIPELINE_STAGES.length}: ${label}`
+      : label;
+
+  return (
+    <span className={`inline-flex items-center gap-2 ${className}`}>
+      <span className="track" aria-hidden="true">
+        {PIPELINE_STAGES.map((stage, index) => (
+          <span
+            key={stage}
+            className={`track-seg ${closed ? "track-seg-void" : index <= at ? "track-seg-done" : ""}`}
+          />
+        ))}
+      </span>
+      {showBadge && <StatusBadge status={status} />}
+      <span className="sr-only">{position}</span>
     </span>
   );
 }
@@ -595,12 +1215,14 @@ export function StatCard({
   icon,
   tone = "blue",
   hint,
+  className = "",
 }: {
   label: string;
   value: React.ReactNode;
   icon: React.ReactNode;
   tone?: "blue" | "green" | "purple" | "amber" | "red";
   hint?: string;
+  className?: string;
 }) {
   const tones = {
     blue: "text-blue-600 dark:text-blue-400",
@@ -611,7 +1233,11 @@ export function StatCard({
   }[tone];
 
   return (
-    <div className="panel p-4 transition-colors hover:border-gray-300 dark:hover:border-gray-600">
+    // `.panel-interactive` is the shared hover treatment. This tile previously
+    // had its own (`hover:border-gray-300 dark:hover:border-gray-600`), whose
+    // dark value came from the wrong end of the ramp and read lighter than the
+    // border it was meant to strengthen.
+    <div className={`panel panel-interactive p-4 ${className}`}>
       <div className="flex items-start justify-between gap-2">
         <Eyebrow className="min-w-0 truncate">{label}</Eyebrow>
         <span className={`flex-shrink-0 ${tones}`} aria-hidden="true">
@@ -642,9 +1268,11 @@ export function PageHeading({
     <div className={`flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between ${className}`}>
       <div className="min-w-0">
         {eyebrow && <Eyebrow className="mb-2">{eyebrow}</Eyebrow>}
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white sm:text-3xl">{title}</h1>
+        <h1 className="text-balance text-2xl font-bold text-gray-900 dark:text-white sm:text-3xl">
+          {title}
+        </h1>
         {description && (
-          <p className="mt-2 max-w-2xl text-sm text-gray-600 dark:text-gray-400 sm:text-base">
+          <p className="mt-2 max-w-2xl text-pretty text-sm text-gray-600 dark:text-gray-400 sm:text-base">
             {description}
           </p>
         )}
@@ -732,6 +1360,51 @@ export const buttonGhost = "btn-ghost";
 /** One size up, for hero and closing-CTA button pairs. */
 export const buttonLarge = "btn-lg";
 
+/** And one down, for toolbars, card footers and filter bars. */
+export const buttonSmall = "btn-sm";
+
+/**
+ * A borderless square that holds one glyph — a theme toggle, a bell, a menu
+ * trigger. Three call sites each had their own hover colours and two of them
+ * disagreed in dark mode; this is the shared one.
+ */
+export const iconButton = "btn-icon interactive";
+
+/** Dense input, for filter bars and inline editors. */
+export const inputSmall = "field field-sm";
+
+/**
+ * The four elevation tiers as bare class strings, for anything that needs the
+ * markup rather than `<Card>` — a `<details>`, a `<form>`, a positioned popover.
+ */
+export const surfaceSunken = "panel-sunken";
+export const surfaceFlat = "panel";
+export const surfaceRaised = "panel panel-raised";
+export const surfaceOverlay = "panel-overlay";
+
+/**
+ * The shared rest/hover/press/selected/disabled treatment, for any interactive
+ * thing that is not one of the button variants — a list row, a popover item, a
+ * selectable tile. Reads `disabled`, `aria-disabled`, `aria-selected`,
+ * `aria-current` and `data-selected` off the element, so the state comes from
+ * the same attribute assistive tech reads rather than from a parallel class.
+ */
+export const interactiveSurface = "interactive";
+
+/** A dense list row: `.row` for the geometry, `.interactive` for the states. */
+export const rowInteractive = "row interactive";
+
+/** Marks a row as the selected one: adds the leading accent rule. */
+export const rowSelected = "row-selected";
+
+/**
+ * Grows a control's hit area to the 24×24 SC 2.5.8 floor without changing its
+ * layout box. For close buttons inside chips and other deliberately small
+ * targets; `buttonPrimary`'s `.btn-touch` is the 44px comfortable size, which
+ * is too big to put inside a chip.
+ */
+export const hitArea = "hit-24";
+
 type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
 
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
@@ -757,6 +1430,11 @@ export function Button({
   children,
   disabled,
   type = "button",
+  size = "md",
+  /** Trailing glyph — a chevron, an external-link arrow. */
+  iconEnd,
+  /** Stretches to the container. Saves a `w-full` on every mobile CTA. */
+  block = false,
   ...rest
 }: Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "children"> & {
   variant?: ButtonVariant;
@@ -766,17 +1444,24 @@ export function Button({
   loadingLabel?: string;
   icon?: React.ReactNode;
   children?: React.ReactNode;
+  /** 32 / 40 / 48px, the kit's three control heights. */
+  size?: "sm" | "md" | "lg";
+  iconEnd?: React.ReactNode;
+  block?: boolean;
 }) {
+  const sizeClass = { sm: buttonSmall, md: "", lg: buttonLarge }[size];
+
   return (
     <button
       {...rest}
       type={type}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      className={`${BUTTON_VARIANTS[variant]} ${className}`}
+      className={`${BUTTON_VARIANTS[variant]} ${sizeClass} ${block ? "w-full" : ""} ${className}`}
     >
       {loading ? <Spinner className="h-4 w-4" decorative /> : icon}
       {children}
+      {!loading && iconEnd}
       {loading && <span className="sr-only">{loadingLabel}</span>}
     </button>
   );

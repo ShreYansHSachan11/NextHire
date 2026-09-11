@@ -9,6 +9,7 @@ import { useAuthGuard } from "@/app/hooks/useAuthGuard";
 import { apiFetch } from "@/lib/clientAuth";
 import {
   Alert,
+  Button,
   Card,
   CardHeader,
   Chip,
@@ -18,7 +19,7 @@ import {
   Label,
   PageHeading,
   Readout,
-  Spinner,
+  Skeleton,
   buttonGhost,
   buttonPrimary,
   buttonSecondary,
@@ -26,6 +27,8 @@ import {
   formatRelative,
   inputClass,
 } from "@/app/components/ui";
+
+import AlertsLoading from "./loading";
 
 /* -------------------------------------------------------------------------- */
 /* Types                                                                       */
@@ -58,10 +61,17 @@ interface SavedSearchList {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Mirrors of the route's `NAME_MAX` / `QUERY_MAX`.
+ * Mirrors of `NAME_MAX` / `QUERY_MAX` in `app/api/saved-searches/route.ts:29-30`
+ * and `app/api/saved-searches/[id]/route.ts:29-30`.
  *
  * Used as `maxLength` so the field stops at the limit in front of the user,
  * rather than the server silently truncating text they already typed.
+ *
+ * These are *mirrors*, which is the shape this codebase has already been bitten
+ * by three times — a form that accepted more than the API stored. They cannot
+ * be imported because the route declares them module-privately rather than in
+ * `lib/validation.ts`, where every other shared cap lives; moving them there is
+ * the real fix, and it belongs in that file rather than this one.
  */
 const NAME_MAX = 60;
 const QUERY_MAX = 200;
@@ -255,13 +265,9 @@ export default function SeekerAlertsPage() {
     setSearches((current) => current.filter((row) => row.id !== id));
   }, []);
 
-  if (!ready) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <Spinner label="Loading your alerts" />
-      </div>
-    );
-  }
+  // The same skeleton the route's `loading.tsx` shows, so the rehydration wait
+  // and the navigation wait are one state rather than two (DESIGN-NOTES §1.4).
+  if (!ready) return <AlertsLoading />;
 
   // `useAuthGuard` is already redirecting; rendering nothing avoids a frame of
   // a page this visitor is not allowed to see.
@@ -289,54 +295,93 @@ export default function SeekerAlertsPage() {
           <Alert variant="error" className="mb-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <span>{loadError}</span>
-              <button type="button" onClick={() => void load()} className={buttonPrimary}>
+              {/* `buttonSecondary`, not primary: a retry inside an error banner
+                  is recovery, not the loudest thing on the page. Every "Try
+                  again" across the seeker surfaces now uses this weight. */}
+              <button type="button" onClick={() => void load()} className={buttonSecondary}>
                 Try again
               </button>
             </div>
           </Alert>
         )}
 
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start lg:gap-6">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start lg:gap-6">
           <section aria-labelledby="saved-searches-heading" className="min-w-0 lg:order-1">
-            <h2 id="saved-searches-heading" className="sr-only">
-              Your saved searches
-            </h2>
+            {/* Was `sr-only`. The list is the reason for the page, and it was
+                the only section on it with no visible heading — a sighted user
+                got a column of unlabelled cards while a screen-reader user got
+                the label. */}
+            <div className="mb-3 flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
+              <div className="min-w-0">
+                <Eyebrow className="mb-1.5">Running for you</Eyebrow>
+                <h2
+                  id="saved-searches-heading"
+                  className="text-lg font-semibold text-gray-900 dark:text-white sm:text-xl"
+                >
+                  Your saved searches
+                </h2>
+              </div>
+              {!loading && !loadError && searches.length > 0 && limit !== null && (
+                <Eyebrow>
+                  {searches.length} of {limit}
+                </Eyebrow>
+              )}
+            </div>
 
-            {loading ? (
-              <Card className="p-10">
-                <div className="flex justify-center">
-                  <Spinner label="Loading your saved searches" />
-                </div>
-              </Card>
-            ) : searches.length === 0 ? (
-              !loadError && (
-                <Card>
-                  <EmptyState
-                    icon={<Icon.bell className="h-6 w-6" />}
-                    title="No saved searches yet"
-                    description="A saved search is a job search you don’t have to repeat. Name one, and every new posting that fits it turns up in your notifications — daily or weekly, your choice."
-                    action={
-                      <Link href="/jobs" className={buttonPrimary}>
-                        <Icon.search className="h-4 w-4" />
-                        Find a search to save
-                      </Link>
-                    }
-                  />
-                </Card>
-              )
-            ) : (
-              <ul className="flex flex-col gap-3 sm:gap-4">
-                {searches.map((search) => (
-                  <li key={search.id}>
-                    <SavedSearchRow
-                      search={search}
-                      onUpdate={updateSearch}
-                      onDelete={deleteSearch}
+            {/* `aria-busy` on the container plus one text-only announcer, rather
+                than `aria-live` around the list — a region wrapping every row
+                has a screen reader re-read the whole set on any change
+                (DESIGN-NOTES §2.2). */}
+            <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+              {loading || loadError
+                ? ""
+                : searches.length === 0
+                  ? "You have no saved searches."
+                  : `${searches.length} saved ${searches.length === 1 ? "search" : "searches"}.`}
+            </p>
+
+            <div aria-busy={loading}>
+              {loading ? (
+                <ul className="flex flex-col gap-3 sm:gap-4">
+                  {Array.from({ length: 3 }, (_, index) => (
+                    <li key={index}>
+                      <SavedSearchRowSkeleton />
+                    </li>
+                  ))}
+                </ul>
+              ) : searches.length === 0 ? (
+                // Suppressed when the load itself failed: the banner above
+                // already says what happened, and "you have none" would be a
+                // claim we cannot make about a request that never landed.
+                !loadError && (
+                  <Card>
+                    <EmptyState
+                      icon={<Icon.bell className="h-6 w-6" />}
+                      title="No saved searches yet"
+                      description="A saved search is a job search you don’t have to repeat. Name one, and every new posting that fits it turns up in your notifications — daily or weekly, your choice."
+                      action={
+                        <Link href="/jobs" className={buttonPrimary}>
+                          <Icon.search className="h-4 w-4" />
+                          Find a search to save
+                        </Link>
+                      }
                     />
-                  </li>
-                ))}
-              </ul>
-            )}
+                  </Card>
+                )
+              ) : (
+                <ul className="flex flex-col gap-3 sm:gap-4">
+                  {searches.map((search) => (
+                    <li key={search.id}>
+                      <SavedSearchRow
+                        search={search}
+                        onUpdate={updateSearch}
+                        onDelete={deleteSearch}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </section>
 
           {/* Second in the DOM so the list — the reason for the page — leads on a
@@ -413,25 +458,15 @@ export default function SeekerAlertsPage() {
                   </Alert>
                 )}
 
-                <button type="submit" className={buttonPrimary} disabled={creating || atCap}>
-                  {creating ? (
-                    <>
-                      <Spinner className="h-4 w-4" />
-                      Saving…
-                    </>
-                  ) : (
-                    <>
-                      <Icon.plus className="h-4 w-4" />
-                      Save search
-                    </>
-                  )}
-                </button>
-
-                {!atCap && limit !== null && searches.length > 0 && (
-                  <Eyebrow className="mt-3">
-                    {searches.length} of {limit} saved
-                  </Eyebrow>
-                )}
+                <Button
+                  type="submit"
+                  disabled={atCap}
+                  loading={creating}
+                  loadingLabel="Saving your search"
+                  icon={<Icon.plus className="h-4 w-4" />}
+                >
+                  {creating ? "Saving…" : "Save search"}
+                </Button>
               </form>
             </Card>
           </section>
@@ -444,6 +479,31 @@ export default function SeekerAlertsPage() {
 /* -------------------------------------------------------------------------- */
 /* Row                                                                         */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * Placeholder in the footprint of `SavedSearchRow`.
+ *
+ * Replaces a centred spinner in a `p-10` box that was nowhere near the height
+ * of the list it stood in for, so every load ended in a jump (DESIGN-NOTES
+ * §1.4, §5.4).
+ */
+function SavedSearchRowSkeleton() {
+  return (
+    <Card className="p-4 sm:p-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1 space-y-2.5">
+          <Skeleton className="h-5 w-2/5" />
+          <Skeleton className="h-4 w-3/4" />
+        </div>
+        <Skeleton className="h-11 w-full rounded-lg sm:w-40" />
+      </div>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-3 dark:border-gray-700">
+        <Skeleton className="h-3 w-40" />
+        <Skeleton className="h-8 w-32 rounded-md" />
+      </div>
+    </Card>
+  );
+}
 
 /**
  * One saved search.
@@ -575,12 +635,12 @@ function SavedSearchRow({
                 autoFocus
               />
               <div className="flex gap-2">
-                <button type="submit" className={buttonPrimary} disabled={busy}>
+                <Button type="submit" loading={busy} loadingLabel="Renaming this search">
                   Save
-                </button>
+                </Button>
                 <button
                   type="button"
-                  className={buttonGhost}
+                  className={buttonSecondary}
                   onClick={() => {
                     setRenaming(false);
                     setError("");

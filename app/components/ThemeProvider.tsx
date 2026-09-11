@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { iconButton } from "./ui";
 
 export type Theme = "light" | "dark";
 
@@ -154,7 +155,7 @@ export function ThemeToggle({ className = "" }: { className?: string }) {
       }}
       aria-label={label}
       title={label}
-      className={`inline-flex h-10 w-10 items-center justify-center rounded-lg text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-white ${className}`}
+      className={`${iconButton} ${className}`}
     >
       <svg className={`${iconClass} hidden dark:block`} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
         {SunGlyph}

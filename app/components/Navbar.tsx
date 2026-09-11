@@ -10,7 +10,7 @@ import { logout } from "@/store/authSlice";
 import { clearToken } from "@/lib/clientAuth";
 import NotificationBell from "./NotificationBell";
 import { ThemeToggle } from "./ThemeProvider";
-import { Button, Icon } from "./ui";
+import { Button, Icon, iconButton } from "./ui";
 
 interface NavLink {
   href: string;
@@ -149,7 +149,11 @@ export default function Navbar({ variant = "app" }: { variant?: "app" | "marketi
   const isCurrent = (href: string) => pathname === href || pathname?.startsWith(`${href}/`);
 
   return (
-    <header className="sticky top-0 z-40 bg-white/85 backdrop-blur-md dark:bg-gray-900/85">
+    // `.header-surface` rather than `bg-white/85 dark:bg-gray-900/85`: the bar
+    // used to be the *surface* tier in light and the *canvas* tier in dark, which
+    // is why it read as a floating panel on one theme and as part of the page on
+    // the other. Both are the surface tier now, from one token.
+    <header className="header-surface sticky top-0 z-40">
       {/* Thin gradient rail — the app's signature edge. */}
       <div className="signal-rail" aria-hidden="true" />
 
@@ -165,7 +169,7 @@ export default function Navbar({ variant = "app" }: { variant?: "app" | "marketi
           <div className="flex min-w-0 items-center gap-5 lg:gap-7">
             <Link
               href="/"
-              className="flex flex-shrink-0 items-center gap-2.5 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              className="flex flex-shrink-0 items-center gap-2.5 rounded-md"
             >
               {/* Node-graph mark in a solid ink tile, as on the reference. */}
               <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900">
@@ -182,7 +186,7 @@ export default function Navbar({ variant = "app" }: { variant?: "app" | "marketi
                   <Link
                     href={link.href}
                     aria-current={isCurrent(link.href) ? "page" : undefined}
-                    className={`relative rounded-md px-3 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                    className={`interactive relative rounded-md px-3 py-2 text-sm font-medium ${
                       isCurrent(link.href)
                         ? "text-gray-900 dark:text-white"
                         : "text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
@@ -227,7 +231,7 @@ export default function Navbar({ variant = "app" }: { variant?: "app" | "marketi
                 <div className="hidden items-center gap-2 md:flex">
                   <Link
                     href="/auth/login"
-                    className="rounded-md px-3 py-2 text-sm font-medium text-gray-500 transition-colors hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-gray-400 dark:hover:text-white"
+                    className="interactive rounded-md px-3 py-2 text-sm font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
                   >
                     Sign in
                   </Link>
@@ -245,7 +249,7 @@ export default function Navbar({ variant = "app" }: { variant?: "app" | "marketi
               aria-expanded={menuOpen}
               aria-controls="mobile-nav"
               aria-label={menuOpen ? "Close menu" : "Open menu"}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white md:hidden"
+              className={`${iconButton} md:hidden`}
             >
               {menuOpen ? <Icon.x className="h-5 w-5" /> : <Icon.menu className="h-5 w-5" />}
             </button>
@@ -258,7 +262,7 @@ export default function Navbar({ variant = "app" }: { variant?: "app" | "marketi
           ref={panelRef}
           id="mobile-nav"
           hidden={!menuOpen}
-          className="max-h-[calc(100vh-4rem)] overflow-y-auto border-t border-gray-200 bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-900 md:hidden"
+          className="max-h-[calc(100vh-4rem)] overflow-y-auto border-t border-gray-200 bg-[var(--surface)] px-4 py-3 shadow-[var(--shadow-overlay)] dark:border-gray-700 md:hidden"
         >
           <ul className="space-y-1">
             {links.map((link) => (
@@ -266,10 +270,11 @@ export default function Navbar({ variant = "app" }: { variant?: "app" | "marketi
                 <Link
                   href={link.href}
                   aria-current={isCurrent(link.href) ? "page" : undefined}
-                  className={`flex items-center gap-3 rounded-lg px-3 py-3 text-base font-medium transition-colors ${
-                    isCurrent(link.href)
-                      ? "bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-white"
-                      : "text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+                  // The selected/hover/press treatment comes from `.interactive`,
+                  // which reads `aria-current` off the element — so the state the
+                  // screen reader hears and the state the eye sees are the same fact.
+                  className={`interactive flex items-center gap-3 rounded-lg px-3 py-3 text-base font-medium ${
+                    isCurrent(link.href) ? "text-gray-900 dark:text-white" : "text-gray-600 dark:text-gray-300"
                   }`}
                 >
                   <span className="flex-shrink-0 text-gray-500 dark:text-gray-400" aria-hidden="true">
@@ -293,7 +298,11 @@ export default function Navbar({ variant = "app" }: { variant?: "app" | "marketi
                   onClick={handleSignOut}
                   disabled={signingOut}
                   aria-busy={signingOut || undefined}
-                  className="flex w-full items-center gap-2 rounded-lg px-3 py-3 text-base font-medium text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-300 dark:hover:bg-red-950/40"
+                  // Deliberately *not* `.interactive`: a destructive action earns
+                  // a red state layer rather than the neutral one, and stacking
+                  // both would just muddy the tint. The disabled treatment uses
+                  // the same 0.5 the `--disabled-opacity` token carries.
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-3 text-base font-medium text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-950/40"
                 >
                   <Icon.logout className="h-5 w-5" />
                   {signingOut ? "Signing out…" : "Sign out"}
@@ -303,7 +312,7 @@ export default function Navbar({ variant = "app" }: { variant?: "app" | "marketi
               <>
                 <Link
                   href="/auth/login"
-                  className="block rounded-lg px-3 py-3 text-base font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+                  className="interactive block rounded-lg px-3 py-3 text-base font-medium text-gray-600 dark:text-gray-300"
                 >
                   Sign in
                 </Link>

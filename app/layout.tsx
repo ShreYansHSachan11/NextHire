@@ -59,9 +59,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           layout deliberately renders none, so that stays true rather than
           nesting a second landmark inside the first.
         */}
+        {/*
+          Uses the overlay shadow token rather than `shadow-lg`, so the one thing
+          that floats above the sticky header is lit like every other floating
+          surface. `top-4` clears the 3px signal rail; the `scroll-padding-top` in
+          globals.css handles the header for everything the link jumps *to*.
+        */}
         <a
           href="#main-content"
-          className="sr-only rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white shadow-lg focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] dark:bg-blue-400 dark:text-gray-900"
+          className="sr-only rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white shadow-[var(--shadow-overlay)] focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] dark:bg-blue-400 dark:text-gray-900"
         >
           Skip to main content
         </a>

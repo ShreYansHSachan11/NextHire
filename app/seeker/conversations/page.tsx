@@ -18,18 +18,22 @@ import { apiFetch } from "@/lib/clientAuth";
 import { useSocket } from "@/lib/socketContext";
 import {
   Alert,
+  Button,
   Card,
   EmptyState,
   Eyebrow,
   Icon,
   PageHeading,
   Readout,
-  Spinner,
+  Skeleton,
   buttonPrimary,
+  buttonSecondary,
   dayLabel,
   formatRelative,
   formatTime,
 } from "@/app/components/ui";
+
+import ConversationsLoading from "./loading";
 
 /* -------------------------------------------------------------------------- */
 /* Types                                                                       */
@@ -123,6 +127,17 @@ function SeekerConversations() {
   const [sending, setSending] = useState(false);
   /** Mobile only: the two panes share one column, so one is visible at a time. */
   const [showChat, setShowChat] = useState(false);
+  /**
+   * One short sentence when a message arrives in the thread that is open.
+   *
+   * The thread itself is deliberately *not* a live region: it is replaced
+   * wholesale whenever the selection changes, so `aria-live` on it would read
+   * an entire conversation out on every switch, and it contains the day
+   * separators and timestamps too. A small, text-only region carrying "New
+   * message from X" is the announcement that is actually wanted
+   * (DESIGN-NOTES §2.2).
+   */
+  const [threadNotice, setThreadNotice] = useState("");
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const appliedParamsRef = useRef(false);
@@ -195,6 +210,8 @@ function SeekerConversations() {
     let cancelled = false;
     setMessagesLoading(true);
     setMessages([]);
+    // A notice about the previous thread must not survive into this one.
+    setThreadNotice("");
 
     (async () => {
       try {
@@ -246,6 +263,15 @@ function SeekerConversations() {
 
       if (conversationId === selectedId) {
         setMessages((current) => mergeMessage(current, message));
+        // Only the other side's messages: the sender already knows they sent it,
+        // and their own composer cleared in front of them.
+        if (message.senderId !== user?.id) {
+          setThreadNotice(
+            `New message from ${message.sender?.name ?? "the employer"} at ${formatTime(
+              message.createdAt
+            )}`
+          );
+        }
       }
 
       // Keep the list preview and the unread badge in step with the thread.
@@ -316,13 +342,9 @@ function SeekerConversations() {
   /* Render                                                                  */
   /* ---------------------------------------------------------------------- */
 
-  if (!ready) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <Spinner label="Loading your messages" />
-      </div>
-    );
-  }
+  // The same skeleton the route's `loading.tsx` shows, so the rehydration wait
+  // and the navigation wait are one state rather than two (DESIGN-NOTES §1.4).
+  if (!ready) return <ConversationsLoading />;
 
   if (!allowed) return null;
 
@@ -365,7 +387,7 @@ function SeekerConversations() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Navbar />
 
-      <main id="main-content" className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+      <main id="main-content" className="container-responsive py-6 sm:py-8">
         <PageHeading
           eyebrow="Seeker inbox"
           title="Messages"
@@ -382,19 +404,29 @@ function SeekerConversations() {
           }
         />
 
+        {/* The thread announcer. Mounted from the first render and never
+            wrapping the thread itself — see `threadNotice`. */}
+        <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+          {threadNotice}
+        </p>
+
         {/* One markup tree for both breakpoints: two panes side by side on
             desktop, and on mobile whichever pane is in front. Rendering each
-            pane once keeps the composer's ids and refs unique. */}
-        <div className="mt-6 grid gap-6 lg:h-[calc(100vh-16rem)] lg:min-h-[30rem] lg:grid-cols-5">
+            pane once keeps the composer's ids and refs unique.
+
+            `dvh` rather than `vh`: on mobile Safari and Chrome the address bar
+            is inside `100vh`, so the composer sat under it until the user
+            scrolled. The `min-h` floor keeps the thread usable at 360×640. */}
+        <div className="mt-6 grid gap-4 sm:gap-6 lg:h-[calc(100dvh-16rem)] lg:min-h-[30rem] lg:grid-cols-5">
           <div
-            className={`h-[calc(100vh-15rem)] min-h-[24rem] lg:col-span-2 lg:h-full ${
+            className={`h-[calc(100dvh-14rem)] min-h-[22rem] lg:col-span-2 lg:h-full ${
               showChat && selectedConversation ? "hidden lg:block" : "block"
             }`}
           >
             {list}
           </div>
           <div
-            className={`h-[calc(100vh-15rem)] min-h-[24rem] lg:col-span-3 lg:h-full ${
+            className={`h-[calc(100dvh-14rem)] min-h-[22rem] lg:col-span-3 lg:h-full ${
               showChat && selectedConversation ? "block" : "hidden lg:block"
             }`}
           >
@@ -409,13 +441,9 @@ function SeekerConversations() {
 export default function SeekerConversationsPage() {
   // `useSearchParams` needs a Suspense boundary in Next 15, same as the login page.
   return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
-          <Spinner label="Loading your messages" />
-        </div>
-      }
-    >
+    // One fallback shared with `loading.tsx` and with the guard's `!ready`
+    // branch, so all three waits on this route look identical.
+    <Suspense fallback={<ConversationsLoading />}>
       <SeekerConversations />
     </Suspense>
   );
@@ -466,20 +494,38 @@ function ConversationList({
         <Readout className="text-sm font-medium">{loading ? "—" : conversations.length}</Readout>
       </div>
 
-      <div className="flex-1 overflow-y-auto" aria-live="polite">
+      {/* `aria-busy`, not `aria-live`. This container holds every thread, so a
+          live region on it had a screen reader re-read the whole inbox on any
+          change — and the rows are buttons, which a live region must never
+          wrap. The count is the part worth announcing (DESIGN-NOTES §2.2). */}
+      <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+        {loading
+          ? ""
+          : error
+            ? "Your conversations could not be loaded."
+            : `${conversations.length} ${
+                conversations.length === 1 ? "conversation" : "conversations"
+              }.`}
+      </p>
+
+      <div className="flex-1 overflow-y-auto" aria-busy={loading}>
         {loading ? (
-          <div className="px-6 py-12 text-center">
-            <Spinner label="Loading conversations" />
-          </div>
+          <ul className="space-y-1 p-2">
+            {Array.from({ length: 5 }, (_, index) => (
+              <li key={index} className="flex items-start gap-3 px-3 py-3">
+                <Skeleton className="h-10 w-10 flex-shrink-0 rounded-lg" />
+                <span className="min-w-0 flex-1 space-y-2">
+                  <Skeleton className="h-3.5 w-1/2" />
+                  <Skeleton className="h-3 w-3/4" />
+                </span>
+              </li>
+            ))}
+          </ul>
         ) : error ? (
           <div className="p-4">
             <Alert variant="error">
               <p>{error}</p>
-              <button
-                type="button"
-                onClick={onRetry}
-                className="mt-2 font-semibold underline underline-offset-2"
-              >
+              <button type="button" onClick={onRetry} className={`${buttonSecondary} mt-3`}>
                 Try again
               </button>
             </Alert>
@@ -522,12 +568,16 @@ function ConversationList({
                         <span className="truncate text-sm font-semibold text-gray-900 dark:text-white">
                           {conversation.company.name}
                         </span>
-                        <span className="mono flex-shrink-0 text-[11px] text-gray-400 dark:text-gray-500">
+                        {/* `text-gray-400` measured 2.6:1 on white here.
+                            `gray-500` is the one ramp step `globals.css`
+                            re-tunes per theme, so a single class clears 4.5:1
+                            in both — no `dark:` variant needed. */}
+                        <span className="mono flex-shrink-0 text-[11px] text-gray-500">
                           {formatRelative(latest?.createdAt ?? conversation.createdAt)}
                         </span>
                       </span>
                       <span className="mt-1 flex items-center justify-between gap-2">
-                        <span className="truncate text-sm text-gray-500 dark:text-gray-400">
+                        <span className="truncate text-sm text-gray-600 dark:text-gray-400">
                           {latest ? latest.content : "No messages yet"}
                         </span>
                         {conversation.unreadCount > 0 && (
@@ -603,13 +653,27 @@ function ChatPanel({
         </div>
       </div>
 
-      <div className={`flex-1 space-y-5 overflow-y-auto p-3 sm:p-6 ${THREAD_SURFACE}`}>
+      <div
+        className={`flex-1 space-y-5 overflow-y-auto p-3 sm:p-6 ${THREAD_SURFACE}`}
+        aria-busy={loading}
+      >
         {loading ? (
-          <div className="py-10 text-center">
-            <Spinner label="Loading messages" />
+          // Alternating bubbles rather than a centred spinner: the thread has a
+          // shape, and reproducing it is what keeps the composer still (§5.4).
+          <div className="space-y-3">
+            <p role="status" className="sr-only">
+              Loading messages
+            </p>
+            {[false, true, false, true].map((mine, index) => (
+              <div key={index} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+                <Skeleton
+                  className={`h-14 rounded-xl ${index % 3 === 0 ? "w-3/5" : "w-4/5"} sm:max-w-md`}
+                />
+              </div>
+            ))}
           </div>
         ) : messages.length === 0 ? (
-          <p className="py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+          <p className="py-10 text-center text-sm text-gray-600 dark:text-gray-400">
             No messages yet — say hello to {conversation.company.name}.
           </p>
         ) : (
@@ -647,10 +711,12 @@ function ChatPanel({
                         {message.content}
                       </p>
                       <p
+                        // Own-side timestamps are set in an alpha of the bubble
+                        // text so they recede without a second colour; the
+                        // other side uses the AA-verified quiet ramp step
+                        // rather than `gray-400`, which was 2.6:1 on white.
                         className={`mono mt-1 text-right text-[11px] ${
-                          mine
-                            ? "text-white/55 dark:text-gray-900/55"
-                            : "text-gray-400 dark:text-gray-500"
+                          mine ? "text-white/70 dark:text-gray-900/70" : "text-gray-500"
                         }`}
                       >
                         <span className="sr-only">Sent at </span>
@@ -671,6 +737,19 @@ function ChatPanel({
   );
 }
 
+/**
+ * Mirror of `cleanText(body.content, 5000)` in `app/api/messages/route.ts:130`.
+ *
+ * It was 4000 here, which is the safer of the two directions — the client
+ * refused what the server would have stored — but it is still a second number
+ * for one rule. Like the saved-search caps, the real fix is for the shared
+ * limit to live in `lib/validation.ts` beside `RESUME_MAX_BYTES`.
+ */
+const MESSAGE_MAX = 5000;
+
+/** Where the counter appears. Below this it is noise; above it, it is a warning. */
+const MESSAGE_COUNTER_AT = MESSAGE_MAX - 500;
+
 function Composer({
   draft,
   sending,
@@ -683,6 +762,7 @@ function Composer({
   onSend: () => void;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const remaining = MESSAGE_MAX - draft.length;
 
   // Grow with the text up to a few lines, then scroll inside the box.
   useEffect(() => {
@@ -715,24 +795,34 @@ function Composer({
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Type your message…"
-          maxLength={4000}
+          maxLength={MESSAGE_MAX}
           aria-describedby="message-hint"
           className="field max-h-36 min-h-[2.75rem] flex-1 resize-none"
         />
-        <button
-          type="button"
+        <Button
+          className="h-11 flex-shrink-0"
+          disabled={!draft.trim()}
+          loading={sending}
+          loadingLabel="Sending your message"
+          icon={<Icon.send className="h-4 w-4" />}
           onClick={onSend}
-          disabled={sending || !draft.trim()}
-          className="btn-ink h-11 flex-shrink-0"
         >
-          {sending ? <Spinner className="h-4 w-4" /> : <Icon.send className="h-4 w-4" />}
           <span className="hidden sm:inline">{sending ? "Sending…" : "Send"}</span>
-          <span className="sr-only sm:hidden">{sending ? "Sending" : "Send message"}</span>
-        </button>
+          <span className="sr-only sm:hidden">Send message</span>
+        </Button>
       </div>
-      <p id="message-hint" className="eyebrow mt-2">
-        Enter sends · Shift + Enter adds a new line
-      </p>
+      <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <p id="message-hint" className="eyebrow">
+          Enter sends · Shift + Enter adds a new line
+        </p>
+        {/* Silent until it matters, so the composer stays quiet for the 99% of
+            messages nowhere near the cap. */}
+        {draft.length >= MESSAGE_COUNTER_AT && (
+          <Eyebrow as="span">
+            <Readout className="text-[11px] font-medium">{remaining}</Readout> characters left
+          </Eyebrow>
+        )}
+      </div>
     </div>
   );
 }

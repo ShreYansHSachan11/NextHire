@@ -5,7 +5,7 @@ import { useSelector } from "react-redux";
 import { useRouter } from "next/navigation";
 import type { RootState } from "@/store/store";
 import { apiFetch } from "@/lib/clientAuth";
-import { Icon, formatRelative } from "./ui";
+import { Icon, formatRelative, iconButton } from "./ui";
 
 interface Notification {
   id: string;
@@ -168,7 +168,7 @@ export default function NotificationBell() {
         aria-expanded={open}
         aria-controls="notification-panel"
         aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
-        className="relative inline-flex h-10 w-10 items-center justify-center rounded-lg text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-white"
+        className={`${iconButton} relative`}
       >
         <Icon.bell className="h-5 w-5" />
         {unreadCount > 0 && (
@@ -177,7 +177,7 @@ export default function NotificationBell() {
           // rather than relying on the emerald fill to mean "unread".
           <span
             aria-hidden="true"
-            className="mono absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full border border-white bg-green-700 px-1 text-[10px] font-semibold leading-none text-white dark:border-gray-900 dark:bg-green-500 dark:text-gray-900"
+            className="mono absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full border border-[var(--surface)] bg-[var(--accent-fill)] px-1 text-[10px] font-semibold leading-none text-[var(--ink-on-accent)]"
           >
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
@@ -193,7 +193,7 @@ export default function NotificationBell() {
           // notification list unnavigable in menu mode on some screen readers.
           role="group"
           aria-label="Notifications"
-          className="panel absolute right-0 z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden shadow-lg"
+          className="panel-overlay absolute right-0 z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden"
         >
           <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-700">
             <div>
@@ -211,7 +211,7 @@ export default function NotificationBell() {
               <button
                 type="button"
                 onClick={markAllRead}
-                className="eyebrow rounded px-2 py-1 transition-colors hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:hover:text-white"
+                className="eyebrow interactive btn-touch rounded px-2 py-1 hover:text-gray-900 dark:hover:text-white"
               >
                 Mark all read
               </button>
@@ -237,8 +237,8 @@ export default function NotificationBell() {
                     <button
                       type="button"
                       onClick={() => handleClick(notification)}
-                      className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-50 focus:outline-none focus-visible:bg-gray-50 dark:hover:bg-gray-700 dark:focus-visible:bg-gray-700 ${
-                        notification.read ? "" : "bg-green-50/60 dark:bg-green-900/15"
+                      className={`row interactive ${
+                        notification.read ? "" : "bg-[var(--accent-soft)] row-selected"
                       }`}
                     >
                       <span
@@ -278,7 +278,7 @@ export default function NotificationBell() {
                 router.push(messagesHref);
                 setOpen(false);
               }}
-              className="btn-outline w-full"
+              className="btn-outline btn-sm w-full"
             >
               View all messages
             </button>

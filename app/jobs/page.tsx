@@ -1,8 +1,8 @@
 "use client";
 
-import React, { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import { setJobs } from "@/store/jobsSlice";
 import type { RootState, AppDispatch } from "@/store/store";
@@ -19,9 +19,11 @@ import {
   MatchScore,
   Meter,
   PageHeading,
+  Skeleton,
   Spinner,
   buttonGhost,
   buttonPrimary,
+  buttonSecondary,
   formatCount,
   formatDate,
   inputClass,
@@ -146,10 +148,17 @@ interface JobFeedResponse {
  *
  * The select used to show "Best relevance" while holding `newest`, which was
  * true about the order and false about the control: there was then no way to ask
- * for date order during a search. The URL contract is untouched — this page has
- * never put `sort` in the URL, and the server's own `?sort=match` is unchanged.
+ * for date order during a search. The server's own `?sort=match` is unchanged.
  */
 type SortKey = "relevance" | "newest" | "applicants" | "match";
+
+const SORT_KEYS: readonly SortKey[] = ["relevance", "newest", "applicants", "match"];
+
+/** `?sort=` is attacker-controllable text; only the four real orders are read. */
+function parseSort(value: string | null): SortKey | null {
+  const key = value?.trim() as SortKey | undefined;
+  return key && SORT_KEYS.includes(key) ? key : null;
+}
 
 interface Filters {
   location: string;
@@ -159,8 +168,111 @@ interface Filters {
 
 const EMPTY_FILTERS: Filters = { location: "", experience: "", type: "" };
 
+/**
+ * The whole of the feed's state, as it appears in the URL.
+ *
+ * Built in one place so the writer below and any future reader cannot disagree
+ * about parameter names or about which values count as "nothing set" — an empty
+ * string is omitted rather than written as `q=`, so a bare `/jobs` and a
+ * cleared search produce the same link.
+ */
+function feedSearchParams(search: string, filters: Filters, sort: SortKey | null): string {
+  const params = new URLSearchParams();
+  if (search) params.set("q", search);
+  if (filters.location) params.set("location", filters.location);
+  if (filters.experience) params.set("experience", filters.experience);
+  if (filters.type) params.set("type", filters.type);
+  if (sort) params.set("sort", sort);
+  return params.toString();
+}
+
 /** A posting is flagged "New" for its first week on the feed. */
 const NEW_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Referenced by all three selects through `aria-describedby`; see §2.3. */
+const facetCaveatId = "facet-caveat";
+
+/**
+ * The one constraint responsible for an empty result set, or `null`.
+ *
+ * `filter` names a select to drop and how many roles come back if it goes;
+ * `query` names the search text, which the facet counts cannot see at all.
+ */
+type Culprit =
+  | { kind: "filter"; key: keyof Filters; label: string; freed: number }
+  | { kind: "query"; term: string }
+  | null;
+
+function facetCount(options: Facet[], value: string): number | null {
+  const hit = options.find((option) => option.value.toLowerCase() === value.toLowerCase());
+  return hit ? hit.count : null;
+}
+
+/**
+ * Which control emptied the list.
+ *
+ * The facets are counted server-side over every active posting, narrowed by the
+ * *other* two selects and never by the query (see `FeedFacets`). So:
+ *
+ *  - a selected option counted at zero is, together with the other selects,
+ *    excluding everything — that select is the culprit, and the sum of its
+ *    facet's counts is exactly what comes back when it is dropped;
+ *  - if every selected option still has roles behind it and the list is empty
+ *    regardless, the one constraint the counts cannot see is the search text.
+ *
+ * An option that is not in the list at all (`null`) is one whose postings have
+ * since closed, which is the same diagnosis as a zero with no number to promise.
+ *
+ * Where more than one select is at fault, the one that frees the most is
+ * offered: it is the single change that recovers the most of the corpus.
+ */
+function findCulprit(search: string, filters: Filters, facets: FeedFacets): Culprit {
+  const candidates: Array<{ key: keyof Filters; label: string; count: number | null; freed: number }> = [];
+
+  const consider = (key: keyof Filters, value: string, label: string, options: Facet[]) => {
+    if (!value) return;
+    candidates.push({
+      key,
+      label,
+      count: facetCount(options, value),
+      freed: options.reduce((total, option) => total + option.count, 0),
+    });
+  };
+
+  consider("location", filters.location, filters.location, facets.location);
+  consider("experience", filters.experience, `${filters.experience} years`, facets.experience);
+  consider("type", filters.type, filters.type, facets.type);
+
+  const blocking = candidates
+    .filter((candidate) => candidate.count === null || candidate.count === 0)
+    .sort((a, b) => b.freed - a.freed);
+
+  if (blocking.length > 0) {
+    const worst = blocking[0];
+    return { kind: "filter", key: worst.key, label: worst.label, freed: worst.freed };
+  }
+
+  // Every select still has roles behind it, so the text is what removed them.
+  // Truncated because a pasted paragraph should not become a button label.
+  if (search) return { kind: "query", term: search.length > 28 ? `${search.slice(0, 27)}…` : search };
+
+  // Filters that each have roles behind them but no overlap once combined —
+  // no single one is at fault, so nothing is named and "Clear everything" is
+  // the honest only door.
+  return null;
+}
+
+/** The sentence above the recovery buttons, matched to what they will do. */
+function emptyStateReason(culprit: Culprit, total: number): string {
+  const corpus = `${total} open ${total === 1 ? "role" : "roles"}`;
+  if (culprit?.kind === "filter") {
+    return `Nothing in the ${corpus} matches “${culprit.label}” alongside your other filters.`;
+  }
+  if (culprit?.kind === "query") {
+    return `Your filters still have roles behind them — it is the search for “${culprit.term}” that none of the ${corpus} answer.`;
+  }
+  return `None of the ${corpus} match every filter at once. Try widening one of them, or clear them all.`;
+}
 
 /** Evidence, not decoration - three named skills is enough to earn a score. */
 const CARD_SKILL_LIMIT = 3;
@@ -189,12 +301,19 @@ function JobsFeed() {
   const jobList: JobListItem[] = useSelector((state: RootState) => state.jobs.jobs);
   const { user, isAuthenticated } = useSelector((state: RootState) => state.auth);
 
-  // The homepage hero links here as `/jobs?q=…&location=…`. They seed the local
-  // state once; from then on this is ordinary local state, so editing a field
-  // does not need to round-trip through the URL.
+  // Every control's state is seeded from the URL and written back to it. The
+  // homepage hero links here as `/jobs?q=…&location=…`, but that was only ever
+  // half the contract: a filtered feed could not be bookmarked, shared or
+  // reloaded, and the back button did nothing useful. Editing a field is still
+  // ordinary local state — the URL is kept in step by one effect below, not
+  // round-tripped through on every keystroke.
+  const router = useRouter();
   const searchParams = useSearchParams();
   const initialQuery = searchParams.get("q")?.trim() ?? "";
   const initialLocation = searchParams.get("location")?.trim() ?? "";
+  const initialExperience = searchParams.get("experience")?.trim() ?? "";
+  const initialType = searchParams.get("type")?.trim() ?? "";
+  const initialSort = parseSort(searchParams.get("sort"));
 
   const [loading, setLoading] = useState(true);
   // A search re-request must not blank the list out from under the reader, so
@@ -207,13 +326,17 @@ function JobsFeed() {
   // so firing on every keystroke would spend an embedding call per character.
   const [searchInput, setSearchInput] = useState(initialQuery);
   const [search, setSearch] = useState(initialQuery);
-  const [filters, setFilters] = useState<Filters>({ ...EMPTY_FILTERS, location: initialLocation });
+  const [filters, setFilters] = useState<Filters>({
+    location: initialLocation,
+    experience: initialExperience,
+    type: initialType,
+  });
   /**
    * `null` is "whatever this result set's natural order is" — relevance under a
    * search, date otherwise — rather than a fourth sort key. Once the user picks
    * one it stays picked, including across a search starting or ending.
    */
-  const [sort, setSort] = useState<SortKey | null>(null);
+  const [sort, setSort] = useState<SortKey | null>(initialSort);
 
   // Read off the `?meta=1` envelope: `semantic` says the server ranked these
   // rows, `matched` says the caller has an indexed profile.
@@ -313,6 +436,33 @@ function JobsFeed() {
     return () => window.clearTimeout(timer);
   }, [searchInput]);
 
+  /**
+   * The URL follows the controls, so the view on screen is the view in the
+   * address bar.
+   *
+   * This is the plumbing under three separate things: sharing or bookmarking a
+   * filtered feed, a support conversation that can start with "send me the link
+   * you're looking at", and a back button that goes somewhere sensible. It is
+   * also what lets `savedSearchFilters` below read one object instead of
+   * reconstructing an approximation of the state from the chips.
+   *
+   * `replace` rather than `push`: a settled search term, a select and a sort are
+   * refinements of a single view, and pushing each one would bury the page the
+   * reader arrived from under a dozen history entries. `search` is already the
+   * debounced value, so this fires once per settled query rather than per
+   * keystroke.
+   *
+   * The string compare is load-bearing — `router.replace` changes
+   * `searchParams`, which re-runs this effect — and it also normalises: a link
+   * arriving with the parameters in another order, or with keys this page does
+   * not read, is rewritten once to the canonical form and then left alone.
+   */
+  useEffect(() => {
+    const next = feedSearchParams(search, filters, sort);
+    if (next === searchParams.toString()) return;
+    router.replace(next ? `/jobs?${next}` : "/jobs", { scroll: false });
+  }, [search, filters, sort, router, searchParams]);
+
   const hasFilters = Boolean(search || filters.location || filters.experience || filters.type);
 
   // "Best match" only exists when there is something to sort by. Anonymous
@@ -381,11 +531,93 @@ function JobsFeed() {
     );
   }, [jobList, searchedQuery, semantic, activeSort]);
 
+  const resultCount = visibleJobs.length;
+
+  /**
+   * The previous *settled* count, so the strip can say what changed rather than
+   * only what is there.
+   *
+   * "12 roles, down from 34" is feedback that the control the reader just
+   * touched did something; "12 roles" alone is a readout that happens to hold a
+   * different number than it did a moment ago, and nothing connects the two. A
+   * mid-flight list is the previous response rather than a result, so only
+   * settled counts are recorded.
+   */
+  const settledCount = useRef<number | null>(null);
+  const [previousCount, setPreviousCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (loading || refreshing) return;
+    const before = settledCount.current;
+    settledCount.current = resultCount;
+    setPreviousCount(before === null || before === resultCount ? null : before);
+  }, [loading, refreshing, resultCount]);
+
   const clearFilters = () => {
     setSearchInput("");
     setSearch("");
     setFilters(EMPTY_FILTERS);
   };
+
+  /** One select back to "any", leaving the reader's other decisions alone. */
+  const clearFilter = (key: keyof Filters) =>
+    setFilters((current) => ({ ...current, [key]: "" }));
+
+  /** The search box back to empty, leaving the three selects alone. */
+  const clearQuery = () => {
+    setSearchInput("");
+    // Straight past the debounce, as chip removal does: a click is already the
+    // deliberate action the debounce exists to wait for.
+    setSearch("");
+  };
+
+  /**
+   * What the three selects are currently set to, as removable tokens.
+   *
+   * Baymard's applied-filters study found 42% of sites underperform here, and
+   * that showing applied values in only *one* position — either left in place
+   * among the filter controls, or gathered into an overview — measurably caused
+   * users to overlook filters and struggle to deselect them. The recommendation
+   * is both at once, which is what this is: the select goes on showing its own
+   * value, and this strip shows the full applied set in one place.
+   * https://baymard.com/blog/applied-filters
+   *
+   * The eyebrow above it says "Filtered by" while the inferred chips say "Read
+   * as", because the two are different claims: one is what the reader chose,
+   * the other is what the server understood.
+   */
+  const appliedChips = useMemo(
+    () =>
+      (
+        [
+          { key: "location", label: filters.location, control: "Location" },
+          { key: "experience", label: filters.experience && `${filters.experience} years`, control: "Experience" },
+          { key: "type", label: filters.type, control: "Job type" },
+        ] as const
+      ).filter((chip): chip is typeof chip & { label: string } => Boolean(chip.label)),
+    [filters.location, filters.experience, filters.type]
+  );
+
+  /**
+   * Which control emptied the list, when it is empty.
+   *
+   * The facet counts are computed server-side over every active posting,
+   * narrowed by the *other* two selects and never by the query text (see
+   * `FeedFacets`). Two things follow, and they are the whole diagnosis:
+   *
+   *  - A selected option whose count is zero is, on its own and in combination
+   *    with the other selects, excluding everything. That is the filter to drop,
+   *    and the sum of that facet's counts is exactly how many roles come back if
+   *    it goes.
+   *  - If every selected option still has roles behind it and the list is empty
+   *    anyway, the one constraint the facets cannot see is the search text. So
+   *    the text is the culprit, and dropping a select would not help.
+   *
+   * NN/g's filtering guidance is to prevent zero-result dead ends and always
+   * offer a way out; "Clear filters" is a way out that throws away four
+   * decisions to fix one, so it stays as the fallback rather than the only door.
+   */
+  const culprit = useMemo(() => findCulprit(search, filters, facets), [search, filters, facets]);
 
   /**
    * Taking a chip off is a new search, not a client-side hide.
@@ -425,10 +657,29 @@ function JobsFeed() {
   const canSaveSearch =
     mounted && isAuthenticated && user?.role === "SEEKER" && search.trim().length >= 2;
 
-  // The strip under the filter bar: how the query was read, what a select
-  // overruled, whether the ranking was keyword-only, and the save button.
+  // The strip under the filter bar: what a select overruled, whether the
+  // ranking was keyword-only, and the save button. The chips moved up into the
+  // applied-filters strip, so they are no longer a reason to render this.
   const showSearchNotes =
-    !loading && !error && (chips.length > 0 || overridden.length > 0 || mode === "lexical" || canSaveSearch);
+    !loading && !error && (overridden.length > 0 || mode === "lexical" || canSaveSearch);
+
+  /**
+   * One sentence, composed in full before it is handed to the live region.
+   *
+   * The visible count strip used to carry `aria-live` itself — and it contains
+   * the "Clear filters" button, so the control was re-announced on every filter
+   * change and its own state changes fought the region. Sara Soueidan's rules:
+   * the region exists in the DOM from mount, holds no interactive or rich
+   * content, and receives a message that is already complete.
+   */
+  const liveMessage =
+    loading || refreshing
+      ? ""
+      : error
+        ? ""
+        : `${resultCount === 0 ? "No" : resultCount} ${resultCount === 1 ? "role" : "roles"} matched${
+            previousCount !== null ? `, ${previousCount > resultCount ? "down" : "up"} from ${previousCount}` : ""
+          }${semantic ? ", ranked by semantic relevance" : ""}.`;
 
   // One quiet nudge, shown only to the person it can help: a signed-in seeker
   // whose profile has no vector yet. Everyone else sees the feed unchanged.
@@ -488,12 +739,21 @@ function JobsFeed() {
               </div>
             </div>
 
+            {/* `describedBy` wires the caveat below onto each control, per the
+                APG's "Providing Accessible Names and Descriptions" practice:
+                a keyboard user landing on a select hears what its counts mean
+                instead of the note existing as an unassociated sibling
+                paragraph two elements away. Only when the note is on screen —
+                an `aria-describedby` pointing at nothing is worse than none.
+                https://www.w3.org/WAI/ARIA/apg/practices/names-and-descriptions/ */}
             <FilterSelect
               id="filter-location"
               label="Location"
               allLabel="All locations"
               value={filters.location}
               options={facets.location}
+              unit="role"
+              describedBy={facetCaveatId}
               onChange={(value) => setFilters((current) => ({ ...current, location: value }))}
             />
             <FilterSelect
@@ -502,6 +762,8 @@ function JobsFeed() {
               allLabel="All levels"
               value={filters.experience}
               options={facets.experience}
+              unit="role"
+              describedBy={facetCaveatId}
               onChange={(value) => setFilters((current) => ({ ...current, experience: value }))}
             />
             <FilterSelect
@@ -510,6 +772,8 @@ function JobsFeed() {
               allLabel="All types"
               value={filters.type}
               options={facets.type}
+              unit="role"
+              describedBy={facetCaveatId}
               onChange={(value) => setFilters((current) => ({ ...current, type: value }))}
             />
 
@@ -534,42 +798,81 @@ function JobsFeed() {
           </div>
 
           {/* The counts describe the corpus, not the hits — so say so, rather
-              than let "Berlin (12)" be read as a promise about a search that
-              returned three. Only under a search: without one, picking an option
-              does yield exactly its count. */}
+              than let "Berlin — 12 roles" be read as a promise about a search
+              that returned three. Only under a search: without one, picking an
+              option does yield exactly its count. */}
+          {/* The `.eyebrow` class rather than <Eyebrow>: this needs an `id` for
+              the selects' aria-describedby, and the component does not take
+              one. Same rendered result. */}
           {Boolean(search) && (
-            <Eyebrow as="p" className="mt-3">
+            <p id={facetCaveatId} className="eyebrow mt-3">
               Filter counts cover every open role, not just this search.
-            </Eyebrow>
+            </p>
           )}
         </Card>
       </section>
 
-      {/* What the search did with the query, and what can be done about it. */}
+      {/*
+        Everything currently applied, in one strip, above the results.
+
+        Baymard: applied filter values shown in only one position — either left
+        in place among the controls or gathered into an overview — measurably
+        caused users to lose track of what the list was filtered by. Both
+        positions is the recommendation, so the selects keep their values *and*
+        this strip exists. Until now only the *inferred* chips got the overview
+        treatment, which was backwards: the selects are the filters the reader
+        set deliberately.
+        https://baymard.com/blog/applied-filters
+      */}
+      {!loading && !error && (appliedChips.length > 0 || chips.length > 0) && (
+        <section aria-label="Applied filters" className="mb-4 flex flex-wrap items-start gap-x-5 gap-y-2">
+          {appliedChips.length > 0 && (
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+              <Eyebrow as="span">Filtered by</Eyebrow>
+              {appliedChips.map((chip) => (
+                <RemovableChip
+                  key={chip.key}
+                  label={chip.label}
+                  icon={<Icon.filter className="h-3.5 w-3.5" aria-hidden="true" />}
+                  // Names the control as well as the value, so a screen-reader
+                  // user hears which of three identical-sounding chips this is.
+                  removeLabel={`Remove the ${chip.control} filter, ${chip.label}`}
+                  onRemove={() => clearFilter(chip.key)}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Kept visually distinct from the row above by its eyebrow: these
+              describe what the *server* read out of the query, not a choice. */}
+          {chips.length > 0 && (
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+              <Eyebrow as="span">Read as</Eyebrow>
+              {chips.map((chip, index) => (
+                <RemovableChip
+                  key={`${chip.key}-${chip.token}`}
+                  label={chipDisplayLabel(chip)}
+                  icon={<Icon.spark className="h-3.5 w-3.5" aria-hidden="true" />}
+                  removeLabel={`Remove ${chipDisplayLabel(chip)} from the search and search again`}
+                  onRemove={() => removeChip(index)}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* What the search did with the query, and what can be done about it.
+          The chips themselves now live in the applied-filters strip above —
+          what is left here are the notes *about* the search, plus the save
+          action, which is an action and does not belong among the tokens. */}
       {showSearchNotes && (
         <section aria-label="How this search was read" className="mb-4 sm:mb-5">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            {chips.length > 0 && (
-              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                <Eyebrow as="span">Read as</Eyebrow>
-                {chips.map((chip, index) => (
-                  <FilterChip
-                    key={`${chip.key}-${chip.token}`}
-                    label={chipDisplayLabel(chip)}
-                    onRemove={() => removeChip(index)}
-                  />
-                ))}
-              </div>
-            )}
-
-            {canSaveSearch && (
-              <div className="sm:ml-auto">
-                {/* Keyed on the query so a new search gets a fresh panel rather
-                    than the previous one's name, error or success note. */}
-                <SaveSearchPanel key={search} query={search} filters={savedSearchFilters} />
-              </div>
-            )}
-          </div>
+          {canSaveSearch && (
+            /* Keyed on the query so a new search gets a fresh panel rather than
+               the previous one's name, error or success note. */
+            <SaveSearchPanel key={search} query={search} filters={savedSearchFilters} />
+          )}
 
           {/* An inferred filter that a select overruled. The server dropped it
               before searching, so it is not quietly applied *and* not quietly
@@ -607,7 +910,9 @@ function JobsFeed() {
             <button
               type="button"
               onClick={() => setIndexHintDismissed(true)}
-              className="eyebrow flex-shrink-0 rounded p-1 hover:text-gray-900 dark:hover:text-white"
+              // `.hit-24`: a 22×22 dismiss was under SC 2.5.8's floor and only
+              // survived on the spacing exception.
+              className="eyebrow hit-24 flex-shrink-0 rounded p-1 hover:text-gray-900 dark:hover:text-white"
             >
               <Icon.x className="h-3.5 w-3.5" aria-hidden="true" />
               <span className="sr-only">Dismiss</span>
@@ -616,22 +921,29 @@ function JobsFeed() {
         </Alert>
       )}
 
-      {/* Result count, read as instrument output: "12 ROLES MATCHED". */}
+      {/*
+        One polite announcer for the page, rendered from mount and empty until
+        there is something to say. A live region that appears at the same moment
+        as its first message often does not announce at all.
+      */}
+      <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+        {liveMessage}
+      </p>
+
+      {/* Result count, read as instrument output: "12 ROLES MATCHED". No
+          `aria-live` here — see `liveMessage` above for why. */}
       {!loading && !error && (
-        <div
-          className="mb-4 flex flex-wrap items-center justify-between gap-2 sm:mb-5"
-          aria-live="polite"
-        >
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 sm:mb-5">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <Eyebrow as="span">
-              {visibleJobs.length === 0
+              {resultCount === 0
                 ? "No roles matched"
-                : `${visibleJobs.length} ${visibleJobs.length === 1 ? "role" : "roles"} matched`}
+                : `${resultCount} ${resultCount === 1 ? "role" : "roles"} matched`}
               {/* The denominator is the corpus, from the server. It used to be
                   `jobList.length`, which was the page the filters had already
                   been applied to — so it read "12 / 12 total" and measured
                   nothing. */}
-              {hasFilters && visibleJobs.length > 0 && facets.total > visibleJobs.length && (
+              {hasFilters && resultCount > 0 && facets.total > resultCount && (
                 <span className="text-gray-400 dark:text-gray-500">
                   {" "}
                   / {facets.total} open {facets.total === 1 ? "role" : "roles"}
@@ -639,10 +951,19 @@ function JobsFeed() {
               )}
             </Eyebrow>
 
+            {/* The delta, not just the level. A count that changed from 34 to 12
+                is the control reporting back; the same "12" with no reference
+                point is a readout that happens to have moved. */}
+            {previousCount !== null && (
+              <Eyebrow as="span" className="text-gray-400 dark:text-gray-500">
+                {previousCount > resultCount ? "down" : "up"} from {previousCount}
+              </Eyebrow>
+            )}
+
             {/* More rows match than one page returns, so the list is the newest
                 slice of the answer rather than the answer. */}
             {truncated && (
-              <Eyebrow as="span">Showing the newest {visibleJobs.length} — narrow to see more</Eyebrow>
+              <Eyebrow as="span">Showing the newest {resultCount} — narrow to see more</Eyebrow>
             )}
 
             {/* Explains why a result with no keyword overlap is on the list. */}
@@ -665,7 +986,7 @@ function JobsFeed() {
 
       {loading ? (
         <JobSkeletonGrid />
-      ) : visibleJobs.length > 0 ? (
+      ) : resultCount > 0 ? (
         <div
           className={`grid grid-cols-1 gap-4 transition-opacity lg:grid-cols-2 lg:gap-5 ${
             refreshing ? "opacity-60" : ""
@@ -673,7 +994,11 @@ function JobsFeed() {
           aria-busy={refreshing}
         >
           {visibleJobs.map((job) => (
-            <JobCard key={job.id} job={job} />
+            /* `scored` is a property of the *feed*, not of the card: when any
+               row carries a match every card reserves the same score slot, so a
+               two-column grid does not go ragged between a scored row and an
+               unscored one. When nothing is scored, nothing reserves. */
+            <JobCard key={job.id} job={job} scored={hasMatches} />
           ))}
         </div>
       ) : (
@@ -689,7 +1014,7 @@ function JobsFeed() {
            */
           <Card>
             <EmptyState
-              icon={<Icon.briefcase className="h-6 w-6" />}
+              icon={<Icon.search className="h-6 w-6" />}
               title={
                 facets.total === 0
                   ? "No open roles right now"
@@ -701,16 +1026,47 @@ function JobsFeed() {
                 facets.total === 0
                   ? "Nothing is being advertised at the moment. Check back soon."
                   : hasFilters
-                    ? `None of the ${facets.total} open ${
-                        facets.total === 1 ? "role" : "roles"
-                      } match every filter at once. Try widening one of them, or clear them all.`
+                    ? emptyStateReason(culprit, facets.total)
                     : "The feed came back empty. Reloading usually sorts it out."
               }
               action={
                 facets.total > 0 && hasFilters ? (
-                  <button type="button" onClick={clearFilters} className={buttonPrimary}>
-                    Clear filters
-                  </button>
+                  /*
+                   * A dead end needs a door, and the narrowest possible door is
+                   * the best one: "Clear filters" throws away four decisions to
+                   * fix one. The first button undoes exactly the constraint that
+                   * emptied the list — see `findCulprit` — and "Clear everything"
+                   * stays behind it as the fallback.
+                   */
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {culprit?.kind === "filter" && (
+                      <button
+                        type="button"
+                        onClick={() => clearFilter(culprit.key)}
+                        className={buttonPrimary}
+                      >
+                        Drop &ldquo;{culprit.label}&rdquo;
+                        {culprit.freed > 0 && (
+                          <span className="font-normal opacity-80">
+                            {" "}
+                            — {culprit.freed} {culprit.freed === 1 ? "role" : "roles"}
+                          </span>
+                        )}
+                      </button>
+                    )}
+                    {culprit?.kind === "query" && (
+                      <button type="button" onClick={clearQuery} className={buttonPrimary}>
+                        Search without &ldquo;{culprit.term}&rdquo;
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={clearFilters}
+                      className={culprit ? buttonSecondary : buttonPrimary}
+                    >
+                      Clear everything
+                    </button>
+                  </div>
                 ) : facets.total > 0 ? (
                   <button
                     type="button"
@@ -848,6 +1204,8 @@ function FilterSelect({
   allLabel,
   value,
   options,
+  unit,
+  describedBy,
   onChange,
 }: {
   id: string;
@@ -855,6 +1213,9 @@ function FilterSelect({
   allLabel: string;
   value: string;
   options: Facet[];
+  /** Singular noun for the count in each option, e.g. "role". */
+  unit: string;
+  describedBy?: string;
   onChange: (value: string) => void;
 }) {
   // A value arriving from the URL (or one whose postings have since closed) may
@@ -871,13 +1232,19 @@ function FilterSelect({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         disabled={options.length === 0 && !isUnlisted}
+        aria-describedby={describedBy}
         className={inputClass}
       >
         <option value="">{allLabel}</option>
         {isUnlisted && <option value={value}>{value}</option>}
         {options.map((option) => (
+          /* "Berlin (12)" is announced as "Berlin left parenthesis twelve right
+             parenthesis" — punctuation noise where a number was meant. A
+             word-bearing form is more verbose to read, but the dropdown is the
+             only place it appears and it is the difference between noise and
+             information. */
           <option key={option.value} value={option.value}>
-            {option.value} ({option.count})
+            {option.value} — {option.count} {option.count === 1 ? unit : `${unit}s`}
           </option>
         ))}
       </select>
@@ -891,23 +1258,40 @@ function chipDisplayLabel(chip: SearchFilterChip): string {
 }
 
 /**
- * A filter the query implied, with the means to take it back.
+ * An applied criterion, with the means to take it back.
  *
- * Local rather than a change to `Chip` in the kit: that one is a static tag,
- * and this one has to contain a control.
+ * Local rather than a change to `Chip` in the kit, which is a static tag and
+ * cannot contain a control — this collapses into `Chip` the moment the kit
+ * grows an `onRemove` prop, and should.
+ *
+ * The behaviour is Carbon's `DismissibleTag` contract: the close control is in
+ * the tab order, and its accessible name names the *token* rather than saying
+ * "remove" three times in a row, so a screen-reader user hears which of several
+ * identical-looking chips they are about to drop.
+ * https://carbondesignsystem.com/components/tag/accessibility/
+ *
+ * `.hit-24` gives the button a 24×24 target without growing the chip, which is
+ * WCAG 2.2 SC 2.5.8's floor met on its own rather than on the spacing exception
+ * the old 20×20 button was relying on.
  */
-function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }) {
+function RemovableChip({
+  label,
+  icon,
+  removeLabel,
+  onRemove,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  removeLabel: string;
+  onRemove: () => void;
+}) {
   return (
-    <span className="chip pr-1">
-      <Icon.filter className="h-3.5 w-3.5" aria-hidden="true" />
+    <span className="chip">
+      {icon}
       {label}
-      <button
-        type="button"
-        onClick={onRemove}
-        className="ml-0.5 rounded p-1 text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-900 dark:text-gray-500 dark:hover:bg-gray-600 dark:hover:text-white"
-      >
+      <button type="button" onClick={onRemove} className="chip-dismiss hit-24">
         <Icon.x className="h-3 w-3" aria-hidden="true" />
-        <span className="sr-only">Remove the {label} filter and search again</span>
+        <span className="sr-only">{removeLabel}</span>
       </button>
     </span>
   );
@@ -1079,7 +1463,25 @@ function SaveSearchPanel({
   );
 }
 
-function JobCard({ job }: { job: JobListItem }) {
+/**
+ * One result.
+ *
+ * The reading order is the deciding order, top to bottom: who and what
+ * (title, company, location) → what it pays and how it is worked → what the
+ * posting says → the evidence behind the score → when it was posted. NN/g's
+ * information-scent work is the reason the title is the only large text and the
+ * only link: the scent a reader follows is the label of the thing they are
+ * about to open, and everything else on the card exists to help them *not*
+ * open it. Compensation sits first among the facts because it is the fact
+ * candidates rank a listing on before they read a line of it.
+ * https://www.nngroup.com/articles/information-scent/
+ *
+ * `scored` is a feed-level fact rather than a card-level one — see the call
+ * site. It reserves the score column and the meter slot on every card in a
+ * scored feed so rows do not go ragged, and reserves nothing at all in a feed
+ * where no row can be scored.
+ */
+function JobCard({ job, scored }: { job: JobListItem; scored: boolean }) {
   const applicants = job._count?.applications ?? 0;
   const isNew = Date.now() - new Date(job.createdAt).getTime() < NEW_WINDOW_MS;
 
@@ -1106,9 +1508,12 @@ function JobCard({ job }: { job: JobListItem }) {
             {job.company?.name?.charAt(0).toUpperCase() ?? "C"}
           </span>
           <div className="min-w-0">
-            <h2 className="text-base font-semibold leading-snug text-gray-900 dark:text-white sm:text-lg">
+            {/* `text-balance` on the one piece of display type on the card:
+                a two-line title that breaks 9/2 is measurably harder to scan
+                than one that breaks 6/5. Free in Tailwind v4. */}
+            <h2 className="text-pretty text-base font-semibold leading-snug text-gray-900 dark:text-white sm:text-lg">
               <Link href={`/jobs/${job.id}`} className="after:absolute after:inset-0 after:rounded-xl">
-                <span className="line-clamp-2">{job.title}</span>
+                <span className="line-clamp-2 text-balance">{job.title}</span>
               </Link>
             </h2>
             <p className="mt-1 truncate text-sm text-gray-500 dark:text-gray-400">
@@ -1123,7 +1528,14 @@ function JobCard({ job }: { job: JobListItem }) {
           </div>
         </div>
 
-        <div className="flex flex-shrink-0 flex-col items-end gap-1.5">
+        {/* The score column, and nothing else. The applicant count used to sit
+            under it, which put a competitive signal and a personal one in the
+            same stack reading as one block; it has moved to the footer beside
+            the posting date, where the other metadata lives. `min-h` holds the
+            column open across a scored feed so rows stay level. */}
+        <div
+          className={`flex flex-shrink-0 flex-col items-end gap-1.5 ${scored ? "min-h-[3.25rem]" : ""}`}
+        >
           {/* The feed only ever returns open roles, so the old Active/Inactive
               badge was always green. Recency is the useful signal instead, and
               a fresh posting is exactly the "live" state emerald is for. */}
@@ -1132,24 +1544,25 @@ function JobCard({ job }: { job: JobListItem }) {
               New
             </span>
           )}
-          {/* The score takes the prominent slot; the applicant count stays,
-              one line down, because it is still the competitive signal. */}
           {match && <MatchScore value={match.score} caption="Profile fit" />}
-          <Eyebrow as="span">{formatCount(applicants)} applied</Eyebrow>
         </div>
       </div>
 
-      <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+      {/* `text-pretty` stops the clamped snippet ending on an orphan. */}
+      <p className="mt-3 line-clamp-2 text-pretty text-sm leading-relaxed text-gray-500 dark:text-gray-400">
         {job.description}
       </p>
 
+      {/* Salary first: it is the fact a reader sorts on before reading a word
+          of the posting. Location is deliberately absent — it is already on the
+          line under the title, and repeating it here spends the most valuable
+          row on the card restating something two lines above it. */}
       <div className="mt-3 flex flex-wrap gap-1.5">
-        {job.location && <Chip icon={<Icon.location className="h-3.5 w-3.5" />}>{job.location}</Chip>}
+        {job.salary && <Chip icon={<Icon.money className="h-3.5 w-3.5" />}>{job.salary}</Chip>}
         {job.type && <Chip icon={<Icon.clock className="h-3.5 w-3.5" />}>{job.type}</Chip>}
         {job.experience && (
           <Chip icon={<Icon.briefcase className="h-3.5 w-3.5" />}>{job.experience} years</Chip>
         )}
-        {job.salary && <Chip icon={<Icon.money className="h-3.5 w-3.5" />}>{job.salary}</Chip>}
       </div>
 
       {/* A number on its own is an assertion. These are the receipts for it. */}
@@ -1169,53 +1582,74 @@ function JobCard({ job }: { job: JobListItem }) {
         </div>
       )}
 
-      <div className="mt-4 flex items-center justify-between gap-3 border-t border-gray-200 pt-3 dark:border-gray-700">
-        <Eyebrow as="span">Posted {formatDate(job.createdAt)}</Eyebrow>
+      {/* The score again as bar length, directly under the evidence for it and
+          above the footer rule, so score → receipts → bar reads as one block.
+          It used to sit *below* the footer, detached from everything it is
+          about. The slot is reserved across a scored feed whether or not this
+          particular row has a score, so cards keep the same height. */}
+      {scored && (
+        <div className="mt-3 min-h-[0.375rem]">
+          {match && (
+            <Meter value={match.score} label={`Profile fit: ${match.score} out of 100`} />
+          )}
+        </div>
+      )}
+
+      {/* A minimum gap that also absorbs the slack, so two cards in the same
+          row line their footers up however much content each one has. */}
+      <div className="mt-4 flex-1" aria-hidden="true" />
+
+      <div className="flex items-center justify-between gap-3 border-t border-gray-200 pt-3 dark:border-gray-700 sm:gap-4">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5">
+          <Eyebrow as="span">Posted {formatDate(job.createdAt)}</Eyebrow>
+          <Eyebrow as="span">{formatCount(applicants)} applied</Eyebrow>
+        </div>
         <span
-          className="flex items-center gap-1 text-xs font-semibold text-gray-400 transition-colors group-hover:text-gray-900 dark:text-gray-500 dark:group-hover:text-white"
+          className="flex flex-shrink-0 items-center gap-1 text-xs font-semibold text-gray-400 transition-colors group-hover:text-gray-900 dark:text-gray-500 dark:group-hover:text-white"
           aria-hidden="true"
         >
           View
           <Icon.arrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
         </span>
       </div>
-
-      {/* The score again, as length rather than digits: legible at a glance
-          across a two-column grid, and neutral rather than red when it is low. */}
-      {match && (
-        <Meter
-          value={match.score}
-          label={`Profile fit: ${match.score} out of 100`}
-          className="mt-3"
-        />
-      )}
     </Card>
   );
 }
 
-/** Card-shaped placeholders, so the layout doesn't jump when the data lands. */
+/**
+ * Card-shaped placeholders, so the layout doesn't jump when the data lands.
+ *
+ * Built out of the kit's `Skeleton` rather than raw `bg-gray-200` divs: the
+ * primitive already carries the `motion-safe:` guard and the `aria-hidden`, and
+ * three surfaces had each reimplemented both slightly differently. The shape
+ * tracks `JobCard` row for row — including the reserved score slot — because a
+ * skeleton that is not the height of what replaces it is a layout shift with
+ * extra steps.
+ */
 function JobSkeletonGrid() {
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-5" aria-hidden="true">
       {Array.from({ length: 4 }).map((_, index) => (
         <Card key={index} grid className="p-4 sm:p-5">
-          <div className="motion-safe:animate-pulse">
-            <div className="flex items-center gap-3">
-              <div className="h-11 w-11 flex-shrink-0 rounded-md bg-gray-200 dark:bg-gray-700" />
-              <div className="flex-1 space-y-2">
-                <div className="h-4 w-3/4 rounded bg-gray-200 dark:bg-gray-700" />
-                <div className="h-3 w-1/3 rounded bg-gray-200 dark:bg-gray-700" />
-              </div>
+          <div className="flex items-start gap-3">
+            <Skeleton className="h-11 w-11 flex-shrink-0" />
+            <div className="min-w-0 flex-1 space-y-2">
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-3 w-1/3" />
             </div>
-            <div className="mt-4 space-y-2">
-              <div className="h-3 rounded bg-gray-200 dark:bg-gray-700" />
-              <div className="h-3 w-5/6 rounded bg-gray-200 dark:bg-gray-700" />
-            </div>
-            <div className="mt-4 flex gap-1.5">
-              <div className="h-6 w-20 rounded-lg bg-gray-200 dark:bg-gray-700" />
-              <div className="h-6 w-24 rounded-lg bg-gray-200 dark:bg-gray-700" />
-            </div>
-            <div className="mt-4 h-3 w-32 rounded bg-gray-200 dark:bg-gray-700" />
+            <Skeleton className="h-9 w-20 flex-shrink-0" />
+          </div>
+          <div className="mt-3 space-y-2">
+            <Skeleton className="h-3 w-full" />
+            <Skeleton className="h-3 w-5/6" />
+          </div>
+          <div className="mt-3 flex gap-1.5">
+            <Skeleton className="h-6 w-24" />
+            <Skeleton className="h-6 w-20" />
+            <Skeleton className="h-6 w-16" />
+          </div>
+          <div className="mt-4 border-t border-gray-200 pt-3 dark:border-gray-700">
+            <Skeleton className="h-3 w-40" />
           </div>
         </Card>
       ))}

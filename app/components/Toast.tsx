@@ -149,7 +149,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 dismiss(toast.id);
               }
             }}
-            className={`pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-xl border px-4 py-3 shadow-lg motion-safe:animate-fade-in-up ${variantClasses[toast.variant]}`}
+            className={`pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-xl border px-4 py-3 shadow-[var(--shadow-overlay)] motion-safe:animate-fade-in-up ${variantClasses[toast.variant]}`}
           >
             <span className="mt-0.5 flex-shrink-0" aria-hidden="true">
               {icons[toast.variant]}
@@ -159,7 +159,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               type="button"
               onClick={() => dismiss(toast.id)}
               aria-label="Dismiss notification"
-              className="-m-1 flex-shrink-0 rounded p-1 opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-current"
+              className="hit-24 -m-1 flex-shrink-0 rounded p-1 opacity-70 transition-opacity hover:opacity-100"
             >
               <Icon.x className="h-4 w-4" />
             </button>
@@ -183,7 +183,7 @@ const variantClasses: Record<ToastVariant, string> = {
     "border-red-200 bg-red-50 text-red-900 dark:border-red-700 dark:bg-red-950/90 dark:text-red-100",
   warning:
     "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950/90 dark:text-amber-100",
-  info: "border-gray-200 bg-white text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100",
+  info: "border-gray-200 bg-[var(--surface-overlay)] text-gray-900 dark:border-gray-700 dark:text-gray-100",
 };
 
 const icons: Record<ToastVariant, React.ReactNode> = {
