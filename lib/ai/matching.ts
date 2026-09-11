@@ -307,6 +307,13 @@ export interface SemanticHit {
  * Returns `null` — not an empty list — when AI is unavailable, so the caller can
  * tell "no semantic results" apart from "semantic search is switched off" and
  * fall back to keyword filtering.
+ *
+ * **No longer on any request path** — `hybridJobSearch` replaced it for the feed
+ * and for alerts. It is kept deliberately, not by oversight: `scripts/eval`
+ * measures it as the `legacy` baseline, and that comparison is what revealed
+ * hybrid retrieval regressing against it. Deleting this would delete the only
+ * benchmark we have. It also means the missing query-vector cache here costs
+ * nothing in production.
  */
 export async function semanticJobSearch(
   query: string,

@@ -51,13 +51,38 @@ export function cosineSimilarity(a: number[], b: number[]): number {
 /**
  * Maps a raw cosine score onto the 0–100 figure shown in the UI.
  *
- * Real-world text embeddings of two loosely-related documents rarely fall below
- * about 0.35, and near-identical ones rarely exceed about 0.92. Rescaling that
- * working band to 0–100 keeps the number meaningful: a straight `cosine * 100`
- * would compress every job into the 60–80 range and make the score useless for
+ * Rescaling the working band to 0–100 keeps the number meaningful: a straight
+ * `cosine * 100` compresses every job into a narrow range and is useless for
  * ranking by eye.
+ *
+ * **The defaults are measured, not assumed.** They were originally 0.35/0.92,
+ * from the folklore that unrelated documents sit near 0.35. That is false for
+ * `gemini-embedding-001`: across 672 profile↔job pairs the observed range was
+ * 0.612–0.804 (p1 0.621, p50 0.667, p99 0.775). *Zero* pairs reached either end
+ * of the old band, so scores only ever spanned 46–80 — two thirds of the scale
+ * was unreachable and an entirely irrelevant posting still scored 46.
+ *
+ * The band is slightly wider than the measured p1/p99 (0.621/0.775), and that
+ * gap is deliberate. Rescaling used to be purely linear — nothing ever reached
+ * a limit — so it could not change *ordering*, only the number shown. A band
+ * tight enough to clamp starts collapsing distinct scores into ties at both
+ * tails: at p1/p99 exactly, `npm run eval` measured match nDCG@10 falling to
+ * 91.2, which widening to 0.60/0.80 recovered to 92.8.
+ *
+ * Against the original 0.35/0.92 that is 92.8 vs 93.5 nDCG@10 — a real but
+ * small ranking cost — in exchange for intrusions (an irrelevant posting
+ * reaching a top 5) dropping from 3 to 1, and for a score that finally uses the
+ * whole scale instead of the 46–80 slice. Worth it: a bad job in someone's top
+ * five is the more visible failure, and an uninterpretable number was the thing
+ * being fixed.
+ *
+ * Caveat worth keeping: calibrated on the synthetic corpus in `scripts/eval`,
+ * so treat it as the right method and magnitude rather than a universal
+ * constant. Re-derive against production data with `npm run eval`, which prints
+ * these percentiles. The band is model-specific — changing
+ * `GEMINI_EMBEDDING_MODEL` invalidates it.
  */
-export function similarityToScore(cosine: number, floor = 0.35, ceiling = 0.92): number {
+export function similarityToScore(cosine: number, floor = 0.60, ceiling = 0.80): number {
   if (!Number.isFinite(cosine)) return 0;
   const clamped = Math.max(floor, Math.min(ceiling, cosine));
   const scaled = (clamped - floor) / (ceiling - floor);

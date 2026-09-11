@@ -12,7 +12,9 @@ import {
   Icon,
   NumberedItem,
   SignalPanel,
+  Skeleton,
   StatCard,
+  buttonLarge,
   buttonPrimary,
   buttonSecondary,
   formatCount,
@@ -31,17 +33,6 @@ type StatsState =
   | { status: "loading" }
   | { status: "ready"; data: SiteStats }
   | { status: "failed" };
-
-/**
- * The hero pair sits one size above the kit's default control height. The
- * `.btn-ink` / `.btn-outline` rules live outside Tailwind's `@layer utilities`,
- * so an unlayered declaration beats any `px-*` / `text-*` utility we could add
- * at the call site — an inline style is the only override guaranteed to land.
- */
-const HERO_CTA_SIZE: React.CSSProperties = {
-  padding: "0.875rem 1.5rem",
-  fontSize: "0.9375rem",
-};
 
 export default function Home() {
   const { user, isAuthenticated } = useSelector((state: RootState) => state.auth);
@@ -103,6 +94,19 @@ export default function Home() {
 
   const ready = stats.status === "ready" ? stats.data : null;
 
+  /**
+   * A brand-new deployment answers `/api/stats` with four zeros. "0 open roles"
+   * presented as a headline figure reads as a broken page rather than a new
+   * one, so the counters only appear once there is something real to count —
+   * and the hero says plainly that the index is empty instead of showing a dash
+   * where a number should be.
+   */
+  const hasCounts = ready
+    ? ready.jobs + ready.companies + ready.seekers + ready.applications > 0
+    : false;
+  const showCounters = stats.status === "loading" || hasCounts;
+  const postHref = isCompany ? "/jobs/post" : "/auth/register";
+
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900">
       <Navbar variant="marketing" />
@@ -119,18 +123,18 @@ export default function Home() {
               Map your real experience to the roles that actually need it.
             </h1>
 
-            <p className="mt-5 max-w-xl text-base text-gray-500 dark:text-gray-400 sm:text-lg">
+            <p className="mt-5 max-w-xl text-base text-gray-600 dark:text-gray-400 sm:text-lg">
               Every open role on NextHire in one searchable index — filter it down to the work
               you have actually done, apply with a stored resume, and follow each application
               through to the conversation.
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
-              <Link href={primaryCta.href} className={buttonPrimary} style={HERO_CTA_SIZE}>
+              <Link href={primaryCta.href} className={`${buttonPrimary} ${buttonLarge}`}>
                 {primaryCta.label}
                 <Icon.arrowUpRight className="h-4 w-4" />
               </Link>
-              <Link href={secondaryCta.href} className={buttonSecondary} style={HERO_CTA_SIZE}>
+              <Link href={secondaryCta.href} className={`${buttonSecondary} ${buttonLarge}`}>
                 {secondaryCta.label}
               </Link>
             </div>
@@ -147,7 +151,7 @@ export default function Home() {
               {/* Bare inputs rather than `.field`: the two controls read as one
                   instrument, so the container carries the single hairline. */}
               <div className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2">
-                <Icon.search className="h-4 w-4 flex-shrink-0 text-gray-400 dark:text-gray-500" />
+                <Icon.search className="h-4 w-4 flex-shrink-0 text-gray-500 dark:text-gray-400" />
                 <label htmlFor="hero-keyword" className="sr-only">
                   Role, skill or company
                 </label>
@@ -158,7 +162,7 @@ export default function Home() {
                   value={keyword}
                   onChange={(event) => setKeyword(event.target.value)}
                   placeholder="Role, skill or company"
-                  className="w-full min-w-0 bg-transparent text-sm text-gray-900 placeholder:text-gray-400 dark:text-white dark:placeholder:text-gray-500"
+                  className="w-full min-w-0 bg-transparent text-sm text-gray-900 placeholder:text-gray-500 dark:text-white dark:placeholder:text-gray-400"
                 />
               </div>
 
@@ -168,7 +172,7 @@ export default function Home() {
               />
 
               <div className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2">
-                <Icon.location className="h-4 w-4 flex-shrink-0 text-gray-400 dark:text-gray-500" />
+                <Icon.location className="h-4 w-4 flex-shrink-0 text-gray-500 dark:text-gray-400" />
                 <label htmlFor="hero-location" className="sr-only">
                   Location
                 </label>
@@ -179,7 +183,7 @@ export default function Home() {
                   value={place}
                   onChange={(event) => setPlace(event.target.value)}
                   placeholder="Location or remote"
-                  className="w-full min-w-0 bg-transparent text-sm text-gray-900 placeholder:text-gray-400 dark:text-white dark:placeholder:text-gray-500"
+                  className="w-full min-w-0 bg-transparent text-sm text-gray-900 placeholder:text-gray-500 dark:text-white dark:placeholder:text-gray-400"
                 />
               </div>
 
@@ -191,19 +195,41 @@ export default function Home() {
             {/* -------------------------------------------------------------- */}
             {/* Live signal strip — every figure comes from /api/stats          */}
             {/* -------------------------------------------------------------- */}
-            {stats.status !== "failed" && (
+            {stats.status === "loading" && (
               <SignalPanel
                 className="mt-4 max-w-3xl"
                 live
+                // An h3 here would skip a level: the nearest heading above is the
+                // page h1 and the first h2 is further down the page.
+                headingLevel={2}
                 title="Live role graph"
-                detail={
-                  ready
-                    ? `${ready.jobs.toLocaleString()} open roles mapped across ${ready.companies.toLocaleString()} companies.`
-                    : "— open roles mapped across — companies."
-                }
-                value={ready ? formatCount(ready.jobs) : "—"}
+                detail="Counting the roles open right now."
+              />
+            )}
+
+            {ready && ready.jobs > 0 && (
+              <SignalPanel
+                className="mt-4 max-w-3xl"
+                live
+                headingLevel={2}
+                title="Live role graph"
+                detail={`${ready.jobs.toLocaleString()} open roles mapped across ${ready.companies.toLocaleString()} companies.`}
+                value={formatCount(ready.jobs)}
                 valueLabel="OPEN ROLES"
               />
+            )}
+
+            {ready && ready.jobs === 0 && (
+              <div className="panel mt-4 flex max-w-3xl flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  No roles are open here yet. New postings show up in the index the moment they
+                  go live.
+                </p>
+                <Link href={postHref} className={`${buttonSecondary} flex-shrink-0`}>
+                  {isCompany ? "Post a role" : "Post the first role"}
+                  <Icon.arrowRight className="h-4 w-4" />
+                </Link>
+              </div>
             )}
           </div>
         </section>
@@ -211,7 +237,7 @@ export default function Home() {
         {/* ---------------------------------------------------------------- */}
         {/* Stats row — the same four live counters, as readouts              */}
         {/* ---------------------------------------------------------------- */}
-        {stats.status !== "failed" && (
+        {showCounters && (
           <section
             className="border-b border-gray-200 bg-gray-50 py-10 dark:border-gray-700 dark:bg-gray-950 sm:py-14"
             aria-labelledby="stats-heading"
@@ -272,7 +298,7 @@ export default function Home() {
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white sm:text-3xl lg:text-4xl">
                 Three surfaces, one signal path.
               </h2>
-              <p className="mt-4 text-base text-gray-500 dark:text-gray-400">
+              <p className="mt-4 text-base text-gray-600 dark:text-gray-400">
                 A role is posted, a profile is read against it, and the two sides end up in the
                 same thread. Nothing leaks into a spreadsheet along the way.
               </p>
@@ -412,7 +438,7 @@ export default function Home() {
                   ? "Pick up where you left off."
                   : "Put your experience where it can be matched."}
               </h2>
-              <p className="mx-auto mt-3 max-w-md text-sm text-gray-500 dark:text-gray-400 sm:text-base">
+              <p className="mx-auto mt-3 max-w-md text-sm text-gray-600 dark:text-gray-400 sm:text-base">
                 {signedIn
                   ? "Your dashboard has your latest activity and everything waiting on you."
                   : "Create an account and start applying — or start hiring — today."}
@@ -420,13 +446,12 @@ export default function Home() {
               <div className="mt-7 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
                 <Link
                   href={signedIn ? dashboardHref : "/auth/register"}
-                  className={buttonPrimary}
-                  style={HERO_CTA_SIZE}
+                  className={`${buttonPrimary} ${buttonLarge}`}
                 >
                   {signedIn ? "Open my dashboard" : "Create an account"}
                   <Icon.arrowUpRight className="h-4 w-4" />
                 </Link>
-                <Link href="/jobs" className={buttonSecondary} style={HERO_CTA_SIZE}>
+                <Link href="/jobs" className={`${buttonSecondary} ${buttonLarge}`}>
                   Browse roles
                 </Link>
               </div>
@@ -453,7 +478,7 @@ export default function Home() {
                   NextHire
                 </span>
               </span>
-              <p className="mt-4 max-w-sm text-sm text-gray-500 dark:text-gray-400">
+              <p className="mt-4 max-w-sm text-sm text-gray-600 dark:text-gray-400">
                 Connecting people looking for work with the teams looking for them — post a role,
                 apply to one, and keep the whole conversation in one place.
               </p>
@@ -495,7 +520,7 @@ export default function Home() {
           </div>
 
           <div className="mt-10 border-t border-gray-200 pt-6 dark:border-gray-700">
-            <p className="mono text-xs text-gray-500 dark:text-gray-400">
+            <p className="mono text-xs text-gray-600 dark:text-gray-400">
               &copy; {new Date().getFullYear()} NEXTHIRE — ALL RIGHTS RESERVED
             </p>
           </div>
@@ -516,7 +541,7 @@ export default function Home() {
  */
 function StatIcon({ children, accent = false }: { children: React.ReactNode; accent?: boolean }) {
   return (
-    <span className={accent ? "text-green-600 dark:text-green-400" : "text-gray-400 dark:text-gray-500"}>
+    <span className={accent ? "text-green-600 dark:text-green-400" : "text-gray-500 dark:text-gray-400"}>
       {children}
     </span>
   );
@@ -527,10 +552,7 @@ function StatValue({ value, label }: { value?: number; label: string }) {
   if (value === undefined) {
     return (
       <>
-        <span
-          className="inline-block h-6 w-14 rounded bg-gray-200 align-middle motion-safe:animate-pulse dark:bg-gray-700"
-          aria-hidden="true"
-        />
+        <Skeleton className="h-6 w-14" />
         <span className="sr-only">Loading {label}</span>
       </>
     );
@@ -561,7 +583,7 @@ function Feature({
       </span>
       <Eyebrow className="mb-2">{eyebrow}</Eyebrow>
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
-      <p className="mt-2 text-sm leading-relaxed text-gray-500 dark:text-gray-400">{description}</p>
+      <p className="mt-2 text-sm leading-relaxed text-gray-600 dark:text-gray-400">{description}</p>
     </Card>
   );
 }
@@ -598,7 +620,7 @@ function AudiencePanel({
         {points.map((point) => (
           <li
             key={point}
-            className="flex items-start gap-3 text-sm text-gray-500 dark:text-gray-400"
+            className="flex items-start gap-3 text-sm text-gray-600 dark:text-gray-400"
           >
             <Icon.check
               className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-600 dark:text-green-400"
@@ -620,7 +642,7 @@ function FooterLink({ href, children }: { href: string; children: React.ReactNod
   return (
     <Link
       href={href}
-      className="rounded text-sm text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+      className="rounded text-sm text-gray-600 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
     >
       {children}
     </Link>

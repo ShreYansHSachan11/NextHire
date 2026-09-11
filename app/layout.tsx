@@ -53,9 +53,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
+        {/*
+          First thing in the tab order, ahead of the sticky header. Every page
+          in the app renders exactly one `<main id="main-content">` — this
+          layout deliberately renders none, so that stays true rather than
+          nesting a second landmark inside the first.
+        */}
         <a
           href="#main-content"
-          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-lg focus:bg-blue-600 focus:px-4 focus:py-2 focus:text-white"
+          className="sr-only rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white shadow-lg focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] dark:bg-blue-400 dark:text-gray-900"
         >
           Skip to main content
         </a>

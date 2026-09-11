@@ -17,6 +17,7 @@ import {
   Icon,
   Label,
   PageHeading,
+  Readout,
   Spinner,
   buttonPrimary,
   buttonSecondary,
@@ -65,6 +66,14 @@ const INDUSTRIES = [
 ];
 
 const SIZES = ["1-10", "11-50", "51-200", "201-500", "501-1000", "1000+"];
+
+/**
+ * The server's own caps (`cleanText` in `PUT /api/users/:id`). Enforced here too
+ * so a long paragraph is stopped at the box rather than silently truncated
+ * after a save that reported success.
+ */
+const DESCRIPTION_MAX = 5000;
+const PROFILE_MAX = 2000;
 
 const EMPTY_FORM: CompanyProfileForm = {
   name: "",
@@ -228,7 +237,8 @@ export default function CompanyProfileEdit() {
       console.error("Error updating profile:", submitError);
       setError(message);
       toast.error(message);
-    } finally {
+      // Only re-enable on failure: the success path navigates away, and a form
+      // that came back to life mid-push would accept a second save.
       setSaving(false);
     }
   };
@@ -251,7 +261,7 @@ export default function CompanyProfileEdit() {
         <Link
           href="/company/dashboard"
           onClick={confirmDiscard}
-          className="mb-5 inline-flex items-center gap-1.5 rounded text-sm font-medium text-gray-500 transition-colors hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-gray-400 dark:hover:text-white"
+          className="mb-5 inline-flex items-center gap-1.5 rounded text-sm font-medium text-gray-600 transition-colors hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-gray-400 dark:hover:text-white"
         >
           <Icon.arrowLeft className="h-4 w-4" />
           Back to dashboard
@@ -294,7 +304,7 @@ export default function CompanyProfileEdit() {
                   value={formData.name}
                   onChange={handleInputChange}
                   autoComplete="organization"
-                  maxLength={120}
+                  maxLength={100}
                   aria-invalid={Boolean(errors.name) || undefined}
                   aria-describedby={errors.name ? "name-error" : undefined}
                   className={inputClass}
@@ -406,7 +416,7 @@ export default function CompanyProfileEdit() {
                   value={formData.location}
                   onChange={handleInputChange}
                   autoComplete="address-level2"
-                  maxLength={120}
+                  maxLength={100}
                   className={inputClass}
                   placeholder="City, State/Country"
                 />
@@ -423,9 +433,16 @@ export default function CompanyProfileEdit() {
                 value={formData.description}
                 onChange={handleInputChange}
                 rows={4}
+                maxLength={DESCRIPTION_MAX}
                 className={`${inputClass} resize-y`}
                 placeholder="Tell candidates about your company, mission and values..."
               />
+              <p className="mt-1.5 text-xs text-gray-600 dark:text-gray-400">
+                <Readout className="text-xs font-medium">
+                  {DESCRIPTION_MAX - formData.description.length}
+                </Readout>{" "}
+                characters remaining
+              </p>
             </div>
 
             <div>
@@ -438,9 +455,16 @@ export default function CompanyProfileEdit() {
                 value={formData.profile}
                 onChange={handleInputChange}
                 rows={6}
+                maxLength={PROFILE_MAX}
                 className={`${inputClass} resize-y`}
                 placeholder="History, achievements, culture, and what candidates can expect when working with you..."
               />
+              <p className="mt-1.5 text-xs text-gray-600 dark:text-gray-400">
+                <Readout className="text-xs font-medium">
+                  {PROFILE_MAX - formData.profile.length}
+                </Readout>{" "}
+                characters remaining
+              </p>
             </div>
 
             {/* Save and Cancel used to share the row equally, which read as two

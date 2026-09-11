@@ -771,7 +771,7 @@ export default function SeekerDashboardPage() {
                 >
                   Matched to you
                 </h2>
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
                   Open roles scored against your profile, strongest fit first.
                 </p>
               </div>
@@ -799,7 +799,7 @@ export default function SeekerDashboardPage() {
                   <h3 className="text-base font-semibold text-gray-900 dark:text-white">
                     Tell us what you do and we will score roles for you
                   </h3>
-                  <p className="mt-1 max-w-prose text-sm text-gray-500 dark:text-gray-400">
+                  <p className="mt-1 max-w-prose text-sm text-gray-600 dark:text-gray-400">
                     Matching reads your headline, skills and experience. Upload a resume and we
                     will pull them out for you, or fill them in yourself.
                   </p>
@@ -835,7 +835,7 @@ export default function SeekerDashboardPage() {
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white sm:text-xl">
                 My applications
               </h2>
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
                 Track how each application is progressing.
               </p>
             </div>
@@ -865,7 +865,7 @@ export default function SeekerDashboardPage() {
                       className={`mono inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11px] uppercase tracking-wider transition-colors ${
                         active
                           ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
-                          : "text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
+                          : "text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
                       }`}
                     >
                       {FILTER_LABELS[filter]}
@@ -879,7 +879,20 @@ export default function SeekerDashboardPage() {
             </div>
           </div>
 
-          <div aria-live="polite">
+          {/* `aria-busy` rather than a live region around the list itself: this
+              container holds every application, so `aria-live` had a screen
+              reader read the whole set out on any change. The count below is
+              the part worth announcing. */}
+          <div aria-busy={applicationsLoading}>
+            <p aria-live="polite" className="sr-only">
+              {applicationsLoading
+                ? ""
+                : applicationsError
+                  ? "Your applications could not be loaded."
+                  : `Showing ${visibleApplications.length} of ${stats.total} applications${
+                      statusFilter === "ALL" ? "" : `, filtered to ${FILTER_LABELS[statusFilter]}`
+                    }.`}
+            </p>
             {applicationsLoading ? (
               <div className="px-6 py-12 text-center">
                 <Spinner label="Loading your applications" />
@@ -967,7 +980,7 @@ export default function SeekerDashboardPage() {
                 <h2 className="text-base font-semibold text-gray-900 dark:text-white sm:text-lg">
                   Resume
                 </h2>
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
                   One file on record, sent with every application.
                 </p>
               </div>
@@ -1049,7 +1062,7 @@ export default function SeekerDashboardPage() {
                       <Icon.spark className="h-3.5 w-3.5" />
                       Resume intelligence
                     </Eyebrow>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
                       We can read this file into a structured profile — headline, seniority,
                       skills — which is what job matching scores against. Everything it finds
                       stays yours to edit.
@@ -1090,6 +1103,7 @@ export default function SeekerDashboardPage() {
 
             <form
               onSubmit={handleResumeUpload}
+              aria-busy={uploading}
               className="mt-6 space-y-4 border-t border-gray-200 pt-5 dark:border-gray-700"
             >
               <div>
@@ -1107,10 +1121,13 @@ export default function SeekerDashboardPage() {
                   accept={RESUME_ACCEPT}
                   onChange={handleFileChange}
                   disabled={uploading}
-                  aria-describedby="resume-hint"
+                  // A rejected file (wrong type, too large) put its reason in a
+                  // banner the input never pointed at.
+                  aria-invalid={Boolean(uploadError) || undefined}
+                  aria-describedby={uploadError ? "resume-upload-error resume-hint" : "resume-hint"}
                   className="block w-full cursor-pointer rounded-lg border border-gray-300 bg-white text-sm text-gray-500 file:mr-4 file:cursor-pointer file:rounded-l-md file:border-0 file:border-r file:border-gray-200 file:bg-gray-50 file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-gray-900 hover:file:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400 dark:file:border-gray-700 dark:file:bg-gray-700 dark:file:text-white dark:hover:file:bg-gray-600"
                 />
-                <p id="resume-hint" className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                <p id="resume-hint" className="mt-1.5 text-xs text-gray-600 dark:text-gray-400">
                   PDF, DOC or DOCX, up to 5 MB.
                   {resume && " Uploading a new file replaces the one on file."}
                 </p>
@@ -1121,9 +1138,18 @@ export default function SeekerDashboardPage() {
                 )}
               </div>
 
-              {uploadError && <Alert variant="error">{uploadError}</Alert>}
+              {uploadError && (
+                <Alert variant="error">
+                  <span id="resume-upload-error">{uploadError}</span>
+                </Alert>
+              )}
 
-              <button type="submit" disabled={uploading || !resumeFile} className={buttonPrimary}>
+              <button
+                type="submit"
+                disabled={uploading || !resumeFile}
+                aria-busy={uploading}
+                className={buttonPrimary}
+              >
                 {uploading ? (
                   <>
                     <Spinner className="h-4 w-4" />
@@ -1180,7 +1206,7 @@ function ApplicationRow({
             </Link>
           </h3>
 
-          <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
+          <p className="mt-0.5 text-sm text-gray-600 dark:text-gray-400">
             {application.job.company.name}
           </p>
 
@@ -1199,7 +1225,7 @@ function ApplicationRow({
             </div>
           )}
 
-          <p className="mono mt-2.5 text-xs text-gray-500 dark:text-gray-400">
+          <p className="mono mt-2.5 text-xs text-gray-600 dark:text-gray-400">
             Applied {formatRelative(application.createdAt)} · {formatDate(application.createdAt)}
           </p>
 
@@ -1240,23 +1266,29 @@ function ApplicationRow({
         <div className="flex flex-col gap-3 lg:w-48 lg:flex-shrink-0 lg:items-end">
           <StatusBadge status={application.status} />
           <div className="flex flex-col gap-2 sm:flex-row lg:w-full lg:flex-col">
+            {/* Every row repeats this pair, so each one names its role: read
+                out of context, "Withdraw" alone says nothing about which. */}
             <button
               type="button"
               onClick={onMessage}
               disabled={messaging}
+              aria-busy={messaging}
               className={`${buttonSecondary} lg:w-full`}
             >
               {messaging ? <Spinner className="h-4 w-4" /> : <Icon.chat className="h-4 w-4" />}
               Message
+              <span className="sr-only"> about {application.job.title}</span>
             </button>
             <button
               type="button"
               onClick={onWithdraw}
               disabled={withdrawing}
+              aria-busy={withdrawing}
               className="btn-touch inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-red-700 transition-colors hover:border-red-300 hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-800 dark:text-red-300 dark:hover:border-red-800 dark:hover:bg-red-950/40 lg:w-full"
             >
               {withdrawing ? <Spinner className="h-4 w-4" /> : <Icon.trash className="h-4 w-4" />}
               Withdraw
+              <span className="sr-only"> application for {application.job.title}</span>
             </button>
           </div>
         </div>
@@ -1291,7 +1323,7 @@ function MatchedJobCard({ job }: { job: RecommendedJob }) {
               {job.title}
             </Link>
           </h3>
-          <p className="mt-0.5 truncate text-sm text-gray-500 dark:text-gray-400">
+          <p className="mt-0.5 truncate text-sm text-gray-600 dark:text-gray-400">
             {job.company?.name ?? "—"}
           </p>
         </div>
@@ -1371,13 +1403,11 @@ function ExtractedProfile({ signal }: { signal: ProfileSignal }) {
           <Eyebrow accent className="mb-1.5 flex items-center gap-1.5" as="div">
             <Icon.spark className="h-3.5 w-3.5" />
             Extracted by AI
-            {signal.updatedAt && (
-              <span className="text-gray-400 dark:text-gray-500">
-                · {formatRelative(signal.updatedAt)}
-              </span>
-            )}
+            {/* No colour override: the accent eyebrow's own colour already
+                reads, whereas gray-400 on this surface sat at 2.6:1. */}
+            {signal.updatedAt && <span>· {formatRelative(signal.updatedAt)}</span>}
           </Eyebrow>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
             Read out of your resume by our matching model. It is a draft of your profile, not a
             verdict on it — correct anything that is wrong.
           </p>
@@ -1484,7 +1514,7 @@ function QuickLink({
       </span>
       <span className="min-w-0">
         <span className="block text-sm font-semibold text-gray-900 dark:text-white">{title}</span>
-        <span className="block text-sm text-gray-500 dark:text-gray-400">{description}</span>
+        <span className="block text-sm text-gray-600 dark:text-gray-400">{description}</span>
       </span>
       <Icon.arrowUpRight className="ml-auto h-4 w-4 flex-shrink-0 text-gray-400 transition-colors group-hover:text-gray-900 dark:group-hover:text-white" />
     </Link>

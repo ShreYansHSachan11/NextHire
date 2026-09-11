@@ -58,6 +58,13 @@ function LoginForm() {
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  /**
+   * Whether the banner is about the credentials in the boxes, as opposed to a
+   * Google redirect that failed. Only the former should mark the two inputs
+   * invalid — an OAuth error flagged both fields before the user had typed
+   * anything, so a screen reader announced "invalid entry" on an empty box.
+   */
+  const [credentialsRejected, setCredentialsRejected] = useState(false);
   /** Per-field problems caught before the request, keyed by input name. */
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const [loading, setLoading] = useState(false);
@@ -88,6 +95,7 @@ function LoginForm() {
   useEffect(() => {
     const code = searchParams.get("error");
     if (!code) return;
+    setCredentialsRejected(false);
     setError(OAUTH_ERRORS[code] ?? "Sign-in failed. Please try again.");
   }, [searchParams]);
 
@@ -102,6 +110,7 @@ function LoginForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setCredentialsRejected(false);
 
     // Catch the two things we can be certain about without a round trip. The
     // server remains the authority on whether the pair is actually valid.
@@ -140,6 +149,7 @@ function LoginForm() {
       router.push(next ?? dashboardFor(data.user.role));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
+      setCredentialsRejected(true);
       // Only stop the spinner on failure: on success we are navigating away and
       // re-enabling the form would let a double-click fire a second login.
       setLoading(false);
@@ -151,6 +161,7 @@ function LoginForm() {
 
   const handleGoogle = () => {
     setError("");
+    setCredentialsRejected(false);
     setGoogleLoading(true);
     // `signIn` navigates away; if it ever resolves without doing so, the button
     // would otherwise stay stuck in its loading state.
@@ -186,7 +197,7 @@ function LoginForm() {
               <h1 className="text-3xl font-bold text-gray-900 dark:text-white sm:text-4xl">
                 Welcome back
               </h1>
-              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
                 Sign in to pick up your matches, applications and conversations.
               </p>
             </div>
@@ -213,7 +224,7 @@ function LoginForm() {
                   value={formData.email}
                   onChange={handleChange}
                   required
-                  aria-invalid={fieldErrors.email || error ? true : undefined}
+                  aria-invalid={fieldErrors.email || credentialsRejected ? true : undefined}
                   aria-describedby={
                     [fieldErrors.email ? "email-error" : null, errorId].filter(Boolean).join(" ") ||
                     undefined
@@ -242,7 +253,7 @@ function LoginForm() {
                     value={formData.password}
                     onChange={handleChange}
                     required
-                    aria-invalid={fieldErrors.password || error ? true : undefined}
+                    aria-invalid={fieldErrors.password || credentialsRejected ? true : undefined}
                     aria-describedby={
                       [fieldErrors.password ? "password-error" : null, errorId]
                         .filter(Boolean)
@@ -311,7 +322,7 @@ function LoginForm() {
               <span>{googleLoading ? "Redirecting to Google…" : "Google"}</span>
             </button>
 
-            <p className="mt-8 border-t border-gray-200 pt-6 text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
+            <p className="mt-8 border-t border-gray-200 pt-6 text-sm text-gray-600 dark:border-gray-700 dark:text-gray-400">
               Don&apos;t have an account?{" "}
               <Link
                 href="/auth/register"

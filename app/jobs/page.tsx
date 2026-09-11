@@ -7,6 +7,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { setJobs } from "@/store/jobsSlice";
 import type { RootState, AppDispatch } from "@/store/store";
 import Navbar from "@/app/components/Navbar";
+import { useToast } from "@/app/components/Toast";
 import {
   Alert,
   Card,
@@ -18,6 +19,7 @@ import {
   MatchScore,
   Meter,
   PageHeading,
+  Spinner,
   buttonGhost,
   buttonPrimary,
   formatCount,
@@ -71,6 +73,22 @@ interface JobListItem {
   relevance?: number | null;
 }
 
+/**
+ * Mirror of `SearchFilterChip` in `lib/ai/search.ts`, declared locally for the
+ * same reason `MatchBreakdown` is: that module imports Prisma.
+ *
+ * `token` is the literal text from the query that produced the filter, which is
+ * the whole removal mechanism — see `queryWithoutToken`.
+ */
+interface SearchFilterChip {
+  key: "remote" | "seniority" | "type" | "minSalary";
+  label: string;
+  token: string;
+}
+
+/** `lexical` means the vector arm was unavailable, not that it found nothing. */
+type SearchMode = "hybrid" | "lexical" | "filters";
+
 /** The `?meta=1` envelope. Without it the route still returns a bare array. */
 interface JobFeedResponse {
   jobs: JobListItem[];
@@ -78,6 +96,10 @@ interface JobFeedResponse {
   semantic: boolean;
   /** True when the caller is a seeker whose profile has a vector. */
   matched: boolean;
+  /** How the query was understood. Empty for a listing with no `?q=`. */
+  chips: SearchFilterChip[];
+  /** Null when no search ran. */
+  mode: SearchMode | null;
 }
 
 type SortKey = "newest" | "applicants" | "match";
@@ -147,6 +169,19 @@ function JobsFeed() {
   const [matched, setMatched] = useState<boolean | null>(null);
   const [indexHintDismissed, setIndexHintDismissed] = useState(false);
 
+  // How the server read the query. `chips` are the filters it inferred and
+  // silently applied; showing them back is the point of the feature.
+  const [chips, setChips] = useState<SearchFilterChip[]>([]);
+  const [mode, setMode] = useState<SearchMode | null>(null);
+  /**
+   * The query the chips describe.
+   *
+   * Held separately from `search` because the debounce means the box can be a
+   * keystroke ahead of the response; rebuilding from the newer string would cut
+   * a span out of text the server never parsed.
+   */
+  const [chipQuery, setChipQuery] = useState("");
+
   // Redux rehydrates the session from the cookie inside an effect, so the first
   // client render must not assume a role. The fetch is unaffected: `apiFetch`
   // reads the cookie directly, so matches arrive on the very first call.
@@ -167,6 +202,11 @@ function JobsFeed() {
         dispatch(setJobs(data.jobs));
         setSemantic(data.semantic);
         setMatched(data.matched);
+        // Defensive `?? []`: the bare-array shape is still what the route
+        // returns without `?meta=1`, and an older deployment may not send these.
+        setChips(data.chips ?? []);
+        setMode(data.mode ?? null);
+        setChipQuery(term);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load jobs");
       } finally {
@@ -267,6 +307,44 @@ function JobsFeed() {
     setFilters(EMPTY_FILTERS);
   };
 
+  /**
+   * Taking a chip off is a new search, not a client-side hide.
+   *
+   * The token comes out of the query and the rebuilt string goes back through
+   * the same parser server-side, so what the chips say and what the server
+   * actually applied cannot drift apart.
+   */
+  const removeChip = (index: number) => {
+    const next = queryWithoutToken(chipQuery, chips, index);
+    setSearchInput(next);
+    // Straight past the debounce: a click is already the deliberate action the
+    // debounce exists to wait for.
+    setSearch(next);
+  };
+
+  /**
+   * What a saved search should carry alongside the query.
+   *
+   * `/api/saved-searches` allowlists exactly these three and the alert runner
+   * applies them as `where` clauses, so the selects the user has set here are
+   * worth keeping — otherwise the alert is a broader search than the one they
+   * were looking at when they pressed save.
+   */
+  const savedSearchFilters = useMemo(() => {
+    const payload: { remote?: boolean; type?: string; location?: string } = {};
+    if (chips.some((chip) => chip.key === "remote" && chip.label === "Remote")) {
+      payload.remote = true;
+    }
+    if (filters.type) payload.type = filters.type;
+    if (filters.location) payload.location = filters.location;
+    return payload;
+  }, [chips, filters.location, filters.type]);
+
+  // Saving a search is a seeker action against their own account, so it is
+  // offered to nobody else — and there is nothing to save without a query.
+  const canSaveSearch =
+    mounted && isAuthenticated && user?.role === "SEEKER" && search.trim().length >= 2;
+
   // One quiet nudge, shown only to the person it can help: a signed-in seeker
   // whose profile has no vector yet. Everyone else sees the feed unchanged.
   const showIndexHint =
@@ -364,6 +442,42 @@ function JobsFeed() {
           </div>
         </Card>
       </section>
+
+      {/* What the search did with the query, and what can be done about it. */}
+      {!loading && !error && (chips.length > 0 || mode === "lexical" || canSaveSearch) && (
+        <section aria-label="How this search was read" className="mb-4 sm:mb-5">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            {chips.length > 0 && (
+              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                <Eyebrow as="span">Read as</Eyebrow>
+                {chips.map((chip, index) => (
+                  <FilterChip
+                    key={`${chip.key}-${chip.token}`}
+                    label={chipDisplayLabel(chip)}
+                    onRemove={() => removeChip(index)}
+                  />
+                ))}
+              </div>
+            )}
+
+            {canSaveSearch && (
+              <div className="sm:ml-auto">
+                {/* Keyed on the query so a new search gets a fresh panel rather
+                    than the previous one's name, error or success note. */}
+                <SaveSearchPanel key={search} query={search} filters={savedSearchFilters} />
+              </div>
+            )}
+          </div>
+
+          {/* A quiet note, not an error: lexical mode means the vector arm was
+              unavailable, and the results are still a real ranking. */}
+          {mode === "lexical" && (
+            <Eyebrow as="p" className="mt-2">
+              Ranked on keywords — semantic search isn&rsquo;t available right now.
+            </Eyebrow>
+          )}
+        </section>
+      )}
 
       {showIndexHint && (
         <Alert variant="info" className="mb-4 sm:mb-5">
@@ -508,6 +622,82 @@ function equalsIgnoreCase(value: string | null | undefined, filter: string): boo
   return (value ?? "").trim().toLowerCase() === filter.trim().toLowerCase();
 }
 
+/**
+ * Whitespace and dangling punctuation, the same tidy-up `tidyRemainder` applies
+ * server-side — so that pulling "remote" out of "remote, senior Go" leaves
+ * "senior Go" rather than ", senior Go".
+ */
+function tidyQuery(text: string): string {
+  return text
+    .replace(/\s+/g, " ")
+    .replace(/(^|\s)[-–—,;:/&+]+(\s|$)/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Drops one inferred filter from the query text.
+ *
+ * The parser in `lib/ai/search.ts` blanks each filter's span out of the query as
+ * it consumes it, so the chips' tokens are disjoint slices of what the user
+ * typed. Every token claims its span first and only the target's is then cut,
+ * which is what makes the removal exact: the earliest literal occurrence of a
+ * word is not always the one the parser matched ("remote team, remote-friendly"),
+ * and cutting the wrong one would leave the filter applied with its chip gone.
+ *
+ * What comes back is the remainder plus the tokens of the chips that stayed, in
+ * the order they were typed — and re-parsing that yields exactly the filters
+ * that were kept, which is the contract the chips rely on.
+ *
+ * One span is cut, never every occurrence of the word. "senior senior engineer"
+ * therefore keeps its Senior chip after a removal, which is the honest answer:
+ * the query still says senior, and deleting words the parser never claimed
+ * would quietly eat a company name like "Senior Systems".
+ */
+function queryWithoutToken(query: string, chips: SearchFilterChip[], targetIndex: number): string {
+  const haystack = query.toLowerCase();
+  const claimed = new Array<boolean>(query.length).fill(false);
+  let targetSpan: { start: number; end: number } | null = null;
+
+  // Claims are taken in the order the parser produced the chips, which is the
+  // order it resolved overlaps in, so the two agree on who owns what.
+  for (let index = 0; index < chips.length; index++) {
+    const needle = chips[index].token.toLowerCase();
+    if (!needle) continue;
+
+    for (let from = 0; from + needle.length <= haystack.length; ) {
+      const start = haystack.indexOf(needle, from);
+      if (start === -1) break;
+      const end = start + needle.length;
+
+      // Already owned by an earlier chip; look further along rather than
+      // claiming the same characters twice.
+      if (claimed.slice(start, end).some(Boolean)) {
+        from = start + 1;
+        continue;
+      }
+
+      for (let i = start; i < end; i++) claimed[i] = true;
+      if (index === targetIndex) targetSpan = { start, end };
+      break;
+    }
+  }
+
+  // Unclaimed only if the box was edited since this response came back. Cutting
+  // the first literal occurrence is still better than ignoring a click on a chip
+  // the user can see.
+  const span = targetSpan ?? spanOf(haystack, chips[targetIndex].token.toLowerCase());
+
+  if (!span) return tidyQuery(query);
+  return tidyQuery(`${query.slice(0, span.start)} ${query.slice(span.end)}`);
+}
+
+function spanOf(haystack: string, needle: string): { start: number; end: number } | null {
+  if (!needle) return null;
+  const start = haystack.indexOf(needle);
+  return start === -1 ? null : { start, end: start + needle.length };
+}
+
 function FilterSelect({
   id,
   label,
@@ -548,6 +738,200 @@ function FilterSelect({
         ))}
       </select>
     </div>
+  );
+}
+
+/** "120k+" on its own is cryptic; every other chip label already reads. */
+function chipDisplayLabel(chip: SearchFilterChip): string {
+  return chip.key === "minSalary" ? `${chip.label} salary` : chip.label;
+}
+
+/**
+ * A filter the query implied, with the means to take it back.
+ *
+ * Local rather than a change to `Chip` in the kit: that one is a static tag,
+ * and this one has to contain a control.
+ */
+function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }) {
+  return (
+    <span className="chip pr-1">
+      <Icon.filter className="h-3.5 w-3.5" aria-hidden="true" />
+      {label}
+      <button
+        type="button"
+        onClick={onRemove}
+        className="ml-0.5 rounded p-1 text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-900 dark:text-gray-500 dark:hover:bg-gray-600 dark:hover:text-white"
+      >
+        <Icon.x className="h-3 w-3" aria-hidden="true" />
+        <span className="sr-only">Remove the {label} filter and search again</span>
+      </button>
+    </span>
+  );
+}
+
+/** The two frequencies worth offering at the point of saving; `OFF` is an edit. */
+const SAVE_FREQUENCIES = [
+  { value: "DAILY", label: "Daily" },
+  { value: "WEEKLY", label: "Weekly" },
+] as const;
+
+/** Mirror of `NAME_MAX` in `app/api/saved-searches/route.ts`. */
+const SAVED_NAME_MAX = 60;
+
+/**
+ * "Save this search" for a signed-in seeker.
+ *
+ * Collapsed to a single button until it is wanted, because the feed's job is
+ * browsing — and expanded it asks for a name, which is the one thing the server
+ * cannot infer and the one thing a 409 will be about.
+ */
+function SaveSearchPanel({
+  query,
+  filters,
+}: {
+  query: string;
+  filters: { remote?: boolean; type?: string; location?: string };
+}) {
+  const toast = useToast();
+
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [frequency, setFrequency] = useState<"DAILY" | "WEEKLY">("DAILY");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+
+  if (saved) {
+    return (
+      <Eyebrow as="p" accent className="inline-flex items-center gap-1.5">
+        <Icon.check className="h-3.5 w-3.5" aria-hidden="true" />
+        Saved —{" "}
+        <Link href="/seeker/alerts" className="underline underline-offset-2 hover:no-underline">
+          manage your alerts
+        </Link>
+      </Eyebrow>
+    );
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          // The query is the obvious first guess at a name, and the field stays
+          // editable — a name is what makes the search findable later.
+          setName(query.slice(0, SAVED_NAME_MAX));
+          setError("");
+          setOpen(true);
+        }}
+        className={buttonGhost}
+      >
+        <Icon.bell className="h-4 w-4" aria-hidden="true" />
+        Save this search
+      </button>
+    );
+  }
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (saving) return;
+
+    const cleanName = name.trim();
+    if (!cleanName) {
+      setError("Give this search a name");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+
+    try {
+      await apiFetch("/api/saved-searches", {
+        method: "POST",
+        body: JSON.stringify({
+          name: cleanName,
+          query,
+          frequency,
+          // Omitted entirely when empty: the route reads `{}` as no filters and
+          // stores null, but sending nothing says the same thing more cheaply.
+          ...(Object.keys(filters).length > 0 ? { filters } : {}),
+        }),
+      });
+      setSaved(true);
+      toast.success("Search saved");
+    } catch (err) {
+      /*
+       * The route answers 409 for two different things — a name already in use
+       * and the twenty-search ceiling — and writes a usable sentence for each.
+       * `apiFetch` carries that message and drops the status, so it is shown as
+       * written rather than flattened into one generic failure.
+       */
+      setError(err instanceof Error ? err.message : "Could not save that search");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card className="w-full p-3 sm:w-80">
+      <form onSubmit={submit}>
+        <Label htmlFor="save-search-name" required>
+          Name this alert
+        </Label>
+        <input
+          id="save-search-name"
+          type="text"
+          value={name}
+          maxLength={SAVED_NAME_MAX}
+          onChange={(event) => setName(event.target.value)}
+          className={inputClass}
+          autoFocus
+        />
+
+        <div className="mt-3">
+          <Label htmlFor="save-search-frequency">Tell me about new matches</Label>
+          <select
+            id="save-search-frequency"
+            value={frequency}
+            onChange={(event) => setFrequency(event.target.value as "DAILY" | "WEEKLY")}
+            className={inputClass}
+          >
+            {SAVE_FREQUENCIES.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {error && (
+          <Alert variant="error" className="mt-3">
+            {error}
+          </Alert>
+        )}
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button type="submit" className={buttonPrimary} disabled={saving}>
+            {saving ? (
+              <>
+                <Spinner className="h-4 w-4" />
+                Saving…
+              </>
+            ) : (
+              "Save search"
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className={buttonGhost}
+            disabled={saving}
+          >
+            Cancel
+          </button>
+        </div>
+      </form>
+    </Card>
   );
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 
 export type Theme = "light" | "dark";
 
@@ -64,6 +64,33 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setTheme(document.documentElement.classList.contains("dark") ? "light" : "dark");
   }, [setTheme]);
 
+  /**
+   * Follow the OS while the user has not made a choice of their own — someone
+   * on a scheduled dark mode expects the app to turn over with everything else
+   * at sunset, not at their next reload.
+   */
+  useEffect(() => {
+    const query = window.matchMedia("(prefers-color-scheme: dark)");
+
+    const onChange = (event: MediaQueryListEvent) => {
+      let stored: string | null = null;
+      try {
+        stored = localStorage.getItem(THEME_STORAGE_KEY);
+      } catch {
+        // Treated as "no preference stored".
+      }
+      if (stored === "light" || stored === "dark") return;
+
+      const next: Theme = event.matches ? "dark" : "light";
+      setThemeState(next);
+      document.documentElement.classList.toggle("dark", next === "dark");
+      document.documentElement.style.colorScheme = next;
+    };
+
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, []);
+
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme, setTheme }}>
       {children}
@@ -71,42 +98,73 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+const iconClass = "h-5 w-5";
+
+const SunGlyph = (
+  <path
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    strokeWidth={1.75}
+    d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
+  />
+);
+
+const MoonGlyph = (
+  <path
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    strokeWidth={1.75}
+    d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
+  />
+);
+
 /** Sun/moon toggle used in the shared navbar. */
 export function ThemeToggle({ className = "" }: { className?: string }) {
   const { theme, toggleTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const [announcement, setAnnouncement] = useState("");
+  const interacted = useRef(false);
+
   useEffect(() => setMounted(true), []);
 
-  const label = theme === "dark" ? "Switch to light theme" : "Switch to dark theme";
+  useEffect(() => {
+    // Only speak after the user has actually pressed the button; announcing on
+    // load would read the theme out to everyone on every page.
+    if (interacted.current) {
+      setAnnouncement(theme === "dark" ? "Dark theme on" : "Light theme on");
+    }
+  }, [theme]);
+
+  // The provider still reports "light" on the very first client render, while
+  // the pre-paint script may already have applied dark — so before hydration
+  // the label stays neutral and the glyph is chosen by the `dark:` variant
+  // rather than by React. That is what keeps the icon correct on first paint.
+  const label = !mounted
+    ? "Switch colour theme"
+    : theme === "dark"
+      ? "Switch to light theme"
+      : "Switch to dark theme";
 
   return (
     <button
       type="button"
-      onClick={toggleTheme}
+      onClick={() => {
+        interacted.current = true;
+        toggleTheme();
+      }}
       aria-label={label}
       title={label}
       className={`inline-flex h-10 w-10 items-center justify-center rounded-lg text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-white ${className}`}
     >
-      {/* Before hydration we don't know the theme, so render a neutral icon. */}
-      {mounted && theme === "dark" ? (
-        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
-          />
-        </svg>
-      ) : (
-        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
-          />
-        </svg>
-      )}
+      <svg className={`${iconClass} hidden dark:block`} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        {SunGlyph}
+      </svg>
+      <svg className={`${iconClass} dark:hidden`} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        {MoonGlyph}
+      </svg>
+      <span aria-live="polite" className="sr-only">
+        {announcement}
+      </span>
     </button>
   );
 }

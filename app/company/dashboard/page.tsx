@@ -74,6 +74,13 @@ interface Job {
  * because two colour utilities for the same property land in the same Tailwind
  * layer, so class order in the string would not decide the winner.
  */
+/** Role codes are a storage detail; the profile panel shows people a word. */
+const ACCOUNT_TYPE_LABELS: Record<string, string> = {
+  COMPANY: "Employer",
+  ADMIN: "Administrator",
+  SEEKER: "Job seeker",
+};
+
 const ghostDanger =
   "inline-flex items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-950/40 dark:hover:text-red-300";
 
@@ -360,7 +367,7 @@ export default function CompanyDashboard() {
                 <button
                   type="button"
                   onClick={() => void fetchJobs()}
-                  className="mt-3 font-semibold underline"
+                  className="mt-2 font-semibold underline underline-offset-2"
                 >
                   Try again
                 </button>
@@ -429,14 +436,18 @@ export default function CompanyDashboard() {
 
                       {/* Stacks under the title on phones, right-aligned from sm up. */}
                       <div className="flex flex-col items-stretch gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end lg:flex-shrink-0">
+                        {/* One posting's row of actions is identical to the
+                            next's, so each carries the title for anyone reading
+                            the control out of its visual context. */}
                         <Link href={`/jobs/${job.id}/edit`} className={buttonGhost}>
                           <Icon.edit className="h-4 w-4" />
-                          Edit
+                          Edit<span className="sr-only"> {job.title}</span>
                         </Link>
                         <button
                           type="button"
                           onClick={() => void toggleJobActive(job)}
                           disabled={busy}
+                          aria-busy={busy}
                           className={`${buttonGhost} disabled:cursor-not-allowed disabled:opacity-50`}
                         >
                           {job.isActive ? (
@@ -445,15 +456,17 @@ export default function CompanyDashboard() {
                             <Icon.checkCircle className="h-4 w-4" />
                           )}
                           {job.isActive ? "Close" : "Reopen"}
+                          <span className="sr-only"> {job.title}</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => void deleteJob(job)}
                           disabled={busy}
+                          aria-busy={busy}
                           className={ghostDanger}
                         >
                           <Icon.trash className="h-4 w-4" />
-                          Delete
+                          Delete<span className="sr-only"> {job.title}</span>
                         </button>
                       </div>
                     </div>
@@ -492,7 +505,7 @@ export default function CompanyDashboard() {
                                     <p className="text-sm font-semibold text-gray-900 dark:text-white">
                                       {application.user?.name || "Unknown applicant"}
                                     </p>
-                                    <p className="mono mt-0.5 break-all text-xs text-gray-500 dark:text-gray-400">
+                                    <p className="mono mt-0.5 break-all text-xs text-gray-600 dark:text-gray-400">
                                       {application.user?.email || "No email"}
                                     </p>
                                     <Eyebrow className="mt-1.5">
@@ -515,6 +528,14 @@ export default function CompanyDashboard() {
                                         >
                                           <Icon.document className="h-4 w-4" />
                                           View r&eacute;sum&eacute;
+                                          {/* Every applicant row repeats these
+                                              controls, so out of context the
+                                              name is what tells them apart. */}
+                                          <span className="sr-only">
+                                            {" "}
+                                            for {application.user?.name || "this applicant"} (opens
+                                            in a new tab)
+                                          </span>
                                           <Icon.external className="h-3.5 w-3.5" />
                                         </a>
                                       ) : (
@@ -525,10 +546,15 @@ export default function CompanyDashboard() {
                                         type="button"
                                         onClick={() => void messageApplicant(application.userId)}
                                         disabled={busyMessaging}
+                                        aria-busy={busyMessaging}
                                         className="inline-flex items-center gap-1.5 rounded text-xs font-medium text-gray-600 underline-offset-2 transition-colors hover:text-gray-900 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-400 dark:hover:text-white"
                                       >
                                         <Icon.chat className="h-4 w-4" />
-                                        {busyMessaging ? "Opening" : "Message"}
+                                        {busyMessaging ? "Opening…" : "Message"}
+                                        <span className="sr-only">
+                                          {" "}
+                                          {application.user?.name || "this applicant"}
+                                        </span>
                                       </button>
                                     </div>
                                   </div>
@@ -552,6 +578,7 @@ export default function CompanyDashboard() {
                                         )
                                       }
                                       disabled={updatingStatus === application.id}
+                                      aria-busy={updatingStatus === application.id}
                                       className={`${inputClass} py-1.5! text-xs!`}
                                     >
                                       {APPLICATION_STATUSES.map((status) => (
@@ -592,7 +619,9 @@ export default function CompanyDashboard() {
             <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
               <ProfileField label="Company name" value={user?.name} />
               <ProfileField label="Email address" value={user?.email} mono />
-              <ProfileField label="Account type" value={user?.role} mono />
+              {/* The raw enum ("COMPANY") used to reach the page unchanged;
+                  the seeker dashboard already prints a human word here. */}
+              <ProfileField label="Account type" value={ACCOUNT_TYPE_LABELS[user?.role ?? ""] ?? "Employer"} />
               {user?.website && (
                 <div className="border-t border-gray-200 pt-3 dark:border-gray-700">
                   <dt>
@@ -670,7 +699,7 @@ function QuickAction({
         <span className="block truncate text-sm font-semibold text-gray-900 dark:text-white">
           {title}
         </span>
-        <span className="block truncate text-xs text-gray-500 dark:text-gray-400">
+        <span className="block truncate text-xs text-gray-600 dark:text-gray-400">
           {description}
         </span>
       </span>

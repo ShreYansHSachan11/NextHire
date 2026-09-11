@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import Navbar from "@/app/components/Navbar";
 import { useToast } from "@/app/components/Toast";
 import { useAuthGuard } from "@/app/hooks/useAuthGuard";
-import { apiFetch } from "@/lib/clientAuth";
+import { apiFetch, authHeaders } from "@/lib/clientAuth";
 import { APPLICATION_STATUSES, STATUS_LABELS } from "@/lib/validation";
 import {
   Alert,
@@ -99,6 +99,78 @@ const EMPTY_FILTERS: Filters = { search: "", status: "", jobId: "", hasResume: "
 /** "recent" is the historical behaviour and stays the default. */
 type SortMode = "recent" | "fit";
 
+/* -------------------------------------------------------------------------- */
+/* Pool summary — POST /api/ai/review { mode: 'pipeline' }                     */
+/* -------------------------------------------------------------------------- */
+
+/** Deterministic counts the route computes itself rather than asking the model. */
+interface PipelineStats {
+  total: number;
+  withProfile: number;
+  byStatus: Record<string, number>;
+  topSkills: { skill: string; count: number }[];
+  seniorityMix: { level: string; count: number }[];
+}
+
+interface PipelineSummary {
+  overview: string;
+  commonStrengths: string[];
+  notableGaps: string[];
+  whatToProbe: string[];
+  /** The pool may be larger than what the model was shown. */
+  sampled: number;
+}
+
+interface PipelineResult {
+  jobId: string;
+  jobTitle: string;
+  stats: PipelineStats;
+  /** Null when the pool is too small to characterise — a real answer, not a failure. */
+  summary: PipelineSummary | null;
+  reason: "empty" | "too-small" | null;
+}
+
+type PipelineOutcome =
+  | { ok: true; data: PipelineResult }
+  /** `unavailable` is the 503: no model on this deployment, so stop offering it. */
+  | { ok: false; unavailable: boolean; message: string };
+
+const PIPELINE_FAILED = "The pool summary is unavailable right now. Please try again in a moment.";
+
+/**
+ * Deliberately not `apiFetch`: that helper turns every failure into one Error
+ * message, and this caller has to tell "this deployment has no model" (503,
+ * hide the feature silently) apart from "the call failed" (502 or a network
+ * blip, worth showing).
+ */
+async function requestPipeline(jobId: string): Promise<PipelineOutcome> {
+  try {
+    const res = await fetch("/api/ai/review", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ mode: "pipeline", jobId }),
+    });
+
+    if (res.status === 503) return { ok: false, unavailable: true, message: "" };
+
+    const text = await res.text();
+    const data: unknown = text ? JSON.parse(text) : null;
+
+    if (!res.ok) {
+      const message =
+        data && typeof data === "object" && "error" in data && typeof data.error === "string"
+          ? data.error
+          : PIPELINE_FAILED;
+      return { ok: false, unavailable: false, message };
+    }
+
+    return { ok: true, data: data as PipelineResult };
+  } catch (error) {
+    console.error("Pipeline summary request failed:", error);
+    return { ok: false, unavailable: false, message: PIPELINE_FAILED };
+  }
+}
+
 export default function ApplicationsPage() {
   const { ready, allowed, user } = useAuthGuard(["COMPANY"]);
   const router = useRouter();
@@ -115,6 +187,14 @@ export default function ApplicationsPage() {
   // Latched: once a scored row has been seen the sort control stays available,
   // so it cannot flicker away mid-session when a filter empties the list.
   const [scoresSeen, setScoresSeen] = useState(false);
+
+  // Optimistic, like every other AI affordance in the product: offered until
+  // the endpoint answers 503 once, then gone for the session.
+  const [pipelineAvailable, setPipelineAvailable] = useState(true);
+  /** Keyed by job so switching roles back and forth does not re-bill a model call. */
+  const [pipelines, setPipelines] = useState<Record<string, PipelineResult>>({});
+  const [pipelineLoading, setPipelineLoading] = useState<string | null>(null);
+  const [pipelineError, setPipelineError] = useState("");
 
   const companyId = user?.companyId;
 
@@ -167,6 +247,12 @@ export default function ApplicationsPage() {
     if (scored) setScoresSeen(true);
   }, [applications, scoresSeen]);
 
+  // A failure belongs to the run that produced it, not to whatever role the
+  // employer selects next.
+  useEffect(() => {
+    setPipelineError("");
+  }, [filters.jobId]);
+
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const status of APPLICATION_STATUSES) counts[status] = 0;
@@ -196,6 +282,32 @@ export default function ApplicationsPage() {
 
   const filtersActive =
     Boolean(filters.search) || Boolean(filters.status) || Boolean(filters.jobId) || Boolean(filters.hasResume);
+
+  /* ----------------------------- pool summary ----------------------------- */
+
+  const selectedJob = useMemo(
+    () => jobs.find((job) => job.id === filters.jobId) ?? null,
+    [jobs, filters.jobId]
+  );
+
+  const loadPipeline = async (jobId: string) => {
+    if (!jobId || pipelineLoading) return;
+
+    setPipelineLoading(jobId);
+    setPipelineError("");
+    const outcome = await requestPipeline(jobId);
+    setPipelineLoading(null);
+
+    if (outcome.ok) {
+      setPipelines((current) => ({ ...current, [jobId]: outcome.data }));
+      return;
+    }
+    if (outcome.unavailable) {
+      setPipelineAvailable(false);
+      return; // Nothing the employer can act on — say nothing.
+    }
+    setPipelineError(outcome.message);
+  };
 
   /* ------------------------------- mutations ------------------------------ */
 
@@ -441,6 +553,18 @@ export default function ApplicationsPage() {
           )}
         </Card>
 
+        {/* Pool summary — one role at a time, because "the shape of the pool"
+            only means anything against a single posting's requirements. */}
+        {pipelineAvailable && filters.jobId && (
+          <PipelinePanel
+            jobTitle={selectedJob?.title ?? "this role"}
+            result={pipelines[filters.jobId] ?? null}
+            loading={pipelineLoading === filters.jobId}
+            error={pipelineError}
+            onRun={() => void loadPipeline(filters.jobId)}
+          />
+        )}
+
         {/* List */}
         <Card className="mt-4">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 px-4 py-3 dark:border-gray-700 sm:px-6">
@@ -530,6 +654,183 @@ export default function ApplicationsPage() {
 /* -------------------------------------------------------------------------- */
 /* Local pieces                                                                */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * The shape of one posting's applicant pool.
+ *
+ * Framed as a sorting aid throughout, the same way `match` is framed on the
+ * rows below: it describes the pool in aggregate and is never a statement about
+ * a person. The route enforces that too — it is fed an anonymised view and its
+ * output is filtered — but the framing has to be visible here, because a panel
+ * that reads like a verdict will be used as one however the prompt was written.
+ */
+function PipelinePanel({
+  jobTitle,
+  result,
+  loading,
+  error,
+  onRun,
+}: {
+  jobTitle: string;
+  result: PipelineResult | null;
+  loading: boolean;
+  error: string;
+  onRun: () => void;
+}) {
+  const summary = result?.summary ?? null;
+
+  return (
+    <Card className="mt-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-200 px-4 py-4 dark:border-gray-700 sm:px-6">
+        <div className="min-w-0">
+          <Eyebrow className="mb-1.5">Sorting aid · not a verdict</Eyebrow>
+          <h2 className="text-base font-semibold text-gray-900 dark:text-white sm:text-lg">
+            Shape of the pool for {jobTitle}
+          </h2>
+          <p className="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400">
+            Describes everyone who applied, in aggregate: what recurs, what the posting asks for
+            that the pool shows little of, and what that suggests asking in a first screen. It does
+            not rank, grade or recommend anybody — that call is yours, and it has none of the
+            evidence you do.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={onRun}
+          disabled={loading}
+          className={`${buttonSecondary} flex-shrink-0 disabled:cursor-not-allowed disabled:opacity-50`}
+        >
+          {loading ? (
+            <>
+              <Spinner className="h-4 w-4" />
+              Reading the pool…
+            </>
+          ) : (
+            <>
+              <Icon.spark className="h-4 w-4" />
+              {result ? "Run again" : "Summarise the pool"}
+            </>
+          )}
+        </button>
+      </div>
+
+      <div className="px-4 py-4 sm:px-6" aria-live="polite">
+        {error ? (
+          <Alert variant="error">{error}</Alert>
+        ) : loading ? (
+          <div className="py-6 text-center">
+            <Spinner className="h-8 w-8" label="Reading the pool" />
+          </div>
+        ) : !result ? (
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Nothing has been generated for this role yet.
+          </p>
+        ) : !summary ? (
+          /* The route answers this without a model call: too few people to
+             describe a shape without it becoming a remark about individuals. */
+          <p className="text-sm text-gray-600 dark:text-gray-300">
+            {result.reason === "empty"
+              ? "Nobody has applied to this posting yet, so there is no pool to describe."
+              : `Only ${result.stats.total} ${
+                  result.stats.total === 1 ? "person has" : "people have"
+                } applied so far. That is too few to describe as a pool without the summary turning into a comment on individuals — read the applications directly instead.`}
+          </p>
+        ) : (
+          <div className="space-y-5">
+            <p className="text-sm leading-relaxed text-gray-700 dark:text-gray-200">
+              {summary.overview}
+            </p>
+
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-x-8">
+              <PoolList
+                title="What recurs across the pool"
+                items={summary.commonStrengths}
+                empty="Nothing recurs often enough to call out."
+              />
+              <PoolList
+                title="Asked for, but thin in the pool"
+                items={summary.notableGaps}
+                empty="Nothing the posting asks for is missing across the board."
+                note="A gap is a question to ask, not a fault to hold against anyone."
+              />
+            </div>
+
+            <PoolList
+              title="Worth probing in a first screen"
+              items={summary.whatToProbe}
+              empty="Nothing specific to add beyond the posting itself."
+            />
+
+            {result.stats.topSkills.length > 0 && (
+              <div className="border-t border-gray-200 pt-4 dark:border-gray-700">
+                {/* Counted, not generated — this part is arithmetic over the
+                    profiles and does not depend on the model at all. */}
+                <Eyebrow>Most common skills in the pool · counted</Eyebrow>
+                <ul className="mt-2 flex flex-wrap gap-1.5">
+                  {result.stats.topSkills.map(({ skill, count }) => (
+                    <li key={skill}>
+                      <Chip>
+                        {skill}
+                        <Readout className="text-[11px] text-gray-500 dark:text-gray-400">
+                          ×{count}
+                        </Readout>
+                      </Chip>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <p className="border-t border-gray-200 pt-4 text-xs leading-relaxed text-gray-500 dark:text-gray-400 dark:border-gray-700">
+              {summary.sampled < result.stats.total
+                ? `Written from the ${summary.sampled} most recent of ${result.stats.total} applicants, and from ${result.stats.withProfile} profiles with details on file. `
+                : `Written from ${result.stats.total} ${
+                    result.stats.total === 1 ? "applicant" : "applicants"
+                  }, ${result.stats.withProfile} of whom have profile details on file. `}
+              Names, contact details and résumés were not part of what it read. Counts are from when
+              it ran.
+            </p>
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+/** One titled bullet list in the pool summary, with an honest empty state. */
+function PoolList({
+  title,
+  items,
+  empty,
+  note,
+}: {
+  title: string;
+  items: string[];
+  empty: string;
+  note?: string;
+}) {
+  return (
+    <div>
+      <Eyebrow>{title}</Eyebrow>
+      {items.length > 0 ? (
+        <ul className="mt-2 space-y-1.5">
+          {items.map((item) => (
+            <li
+              key={item}
+              className="border-l-2 border-gray-200 pl-3 text-sm leading-relaxed text-gray-700 dark:border-gray-700 dark:text-gray-200"
+            >
+              {item}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">{empty}</p>
+      )}
+      {note && <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{note}</p>}
+    </div>
+  );
+}
 
 function ApplicationRow({
   application,

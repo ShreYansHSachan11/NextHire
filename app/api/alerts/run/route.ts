@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { requireRole, serverError } from '@/lib/auth';
 import { cleanText, isJobType } from '@/lib/validation';
-import { semanticJobSearch } from '@/lib/ai/matching';
+import { hybridJobSearch, type HybridHit } from '@/lib/ai/search';
 
 /**
  * POST /api/alerts/run — deliver job alerts for every saved search that is due.
@@ -311,17 +311,23 @@ export async function POST(req: NextRequest) {
 
       const scanned = completePrefix(fetched, MAX_JOBS_PER_SEARCH);
 
-      // Semantic first, keyword when the model is unavailable. `null` from
-      // `semanticJobSearch` means "switched off or unreachable", which is not the
-      // same as "nothing matched" — alerts have to keep working either way.
-      let hits: Awaited<ReturnType<typeof semanticJobSearch>> = null;
+      // The same retrieval the feed uses, so an alert fires on what the seeker
+      // would actually have seen. `hybridJobSearch` degrades internally to its
+      // lexical arm when the model is unavailable, which matters more here than
+      // on the feed: a keyless deployment that silently stopped firing prose
+      // alerts would look like nothing was ever posted.
+      //
+      // `null` still means "switched off or unusable query", not "nothing
+      // matched", so the in-memory keyword pass below remains the last resort.
+      let hits: HybridHit[] | null = null;
       try {
-        hits = await semanticJobSearch(search.query, {
+        const result = await hybridJobSearch(search.query, {
           limit: 500,
           minRelevance: MIN_RELEVANCE,
         });
+        hits = result?.hits ?? null;
       } catch (searchError) {
-        console.error(`alerts/run semantic search failed for ${search.id}:`, searchError);
+        console.error(`alerts/run hybrid search failed for ${search.id}:`, searchError);
       }
 
       let matched: CandidateJob[];

@@ -24,7 +24,12 @@ export default function NotificationBell() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  /** True once the first poll has answered, so we have a baseline to compare to. */
+  const [primed, setPrimed] = useState(false);
+  const [announcement, setAnnouncement] = useState("");
+  const lastCount = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const router = useRouter();
 
@@ -47,11 +52,27 @@ export default function NotificationBell() {
       return;
     }
     setLoading(true);
-    void fetchNotifications().finally(() => setLoading(false));
+    void fetchNotifications().finally(() => {
+      setLoading(false);
+      setPrimed(true);
+    });
 
     const interval = window.setInterval(fetchNotifications, POLL_INTERVAL_MS);
     return () => window.clearInterval(interval);
   }, [isAuthenticated, user?.id, fetchNotifications]);
+
+  /**
+   * Announce only the notifications that arrive *while* the user is here. The
+   * first poll just records a baseline: reading the whole backlog out on every
+   * page load would train people to ignore the region.
+   */
+  useEffect(() => {
+    if (!primed) return;
+    const previous = lastCount.current;
+    lastCount.current = unreadCount;
+    if (previous === null || unreadCount <= previous) return;
+    setAnnouncement(`${unreadCount} unread notification${unreadCount === 1 ? "" : "s"}`);
+  }, [primed, unreadCount]);
 
   // Close on outside click or Escape, and return focus to the trigger.
   useEffect(() => {
@@ -62,17 +83,32 @@ export default function NotificationBell() {
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        event.preventDefault();
         setOpen(false);
         buttonRef.current?.focus();
       }
     };
+    // The panel is not modal, so tabbing past its last control should close it
+    // rather than leave an orphaned dropdown floating over the page.
+    const onFocusIn = (event: FocusEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
+    };
 
     document.addEventListener("mousedown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("focusin", onFocusIn);
     return () => {
       document.removeEventListener("mousedown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("focusin", onFocusIn);
     };
+  }, [open]);
+
+  // Opening with the keyboard has to land somewhere inside the panel, or the
+  // next Tab press walks straight past everything the button just revealed.
+  useEffect(() => {
+    if (!open) return;
+    panelRef.current?.querySelector<HTMLElement>("button, a[href]")?.focus();
   }, [open]);
 
   const markAsRead = async (id: string) => {
@@ -111,18 +147,38 @@ export default function NotificationBell() {
 
   return (
     <div className="relative" ref={containerRef}>
+      {/*
+        Polling means new notifications arrive with no interaction to hang an
+        announcement off, so the count lives in its own live region. It is
+        separate from the button's `aria-label`, which only gets read when the
+        button is reached — a change to a label on an unfocused control is not
+        announced at all.
+      */}
+      <span aria-live="polite" aria-atomic="true" className="sr-only">
+        {announcement}
+      </span>
+
       <button
         ref={buttonRef}
         type="button"
-        onClick={() => setOpen((value) => !value)}
-        aria-haspopup="menu"
+        onClick={() => {
+          setOpen((value) => !value);
+        }}
+        aria-haspopup="true"
         aria-expanded={open}
+        aria-controls="notification-panel"
         aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
         className="relative inline-flex h-10 w-10 items-center justify-center rounded-lg text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-white"
       >
         <Icon.bell className="h-5 w-5" />
         {unreadCount > 0 && (
-          <span className="mono absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-green-600 px-1 text-[10px] font-semibold text-white dark:bg-green-500">
+          // The count is already in the button's label and in the live region
+          // above, so the badge itself is decorative — and it carries a number
+          // rather than relying on the emerald fill to mean "unread".
+          <span
+            aria-hidden="true"
+            className="mono absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full border border-white bg-green-700 px-1 text-[10px] font-semibold leading-none text-white dark:border-gray-900 dark:bg-green-500 dark:text-gray-900"
+          >
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
@@ -130,15 +186,25 @@ export default function NotificationBell() {
 
       {open && (
         <div
-          role="menu"
+          ref={panelRef}
+          id="notification-panel"
+          // Not `role="menu"`: a menu may only contain menuitems, and this panel
+          // also holds "Mark all read" and a footer action, which made the
+          // notification list unnavigable in menu mode on some screen readers.
+          role="group"
           aria-label="Notifications"
           className="panel absolute right-0 z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden shadow-lg"
         >
           <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-700">
             <div>
-              <h3 className="eyebrow">Signal feed</h3>
+              {/* Deliberately not a heading: a dropdown in the header would
+                  otherwise inject an h2/h3 ahead of the page's own h1. The
+                  group's `aria-label` names this region instead. */}
+              <p className="eyebrow">Signal feed</p>
               {unreadCount > 0 && (
-                <p className="mono mt-0.5 text-xs text-green-600 dark:text-green-400">{unreadCount} unread</p>
+                <p className="mono mt-0.5 text-xs text-green-700 dark:text-green-400">
+                  {unreadCount} unread
+                </p>
               )}
             </div>
             {unreadCount > 0 && (
@@ -154,10 +220,12 @@ export default function NotificationBell() {
 
           <div className="max-h-80 overflow-y-auto">
             {loading && notifications.length === 0 ? (
-              <p className="eyebrow px-4 py-8 text-center">Loading</p>
+              <p className="eyebrow px-4 py-8 text-center" role="status">
+                Loading
+              </p>
             ) : notifications.length === 0 ? (
               <div className="px-4 py-8 text-center">
-                <Icon.bell className="mx-auto mb-2 h-8 w-8 text-gray-300 dark:text-gray-600" />
+                <Icon.bell className="mx-auto mb-2 h-8 w-8 text-gray-400 dark:text-gray-500" aria-hidden="true" />
                 <p className="eyebrow">No signal</p>
               </div>
             ) : (
@@ -168,7 +236,6 @@ export default function NotificationBell() {
                         bare div with an onClick handler. */}
                     <button
                       type="button"
-                      role="menuitem"
                       onClick={() => handleClick(notification)}
                       className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-50 focus:outline-none focus-visible:bg-gray-50 dark:hover:bg-gray-700 dark:focus-visible:bg-gray-700 ${
                         notification.read ? "" : "bg-green-50/60 dark:bg-green-900/15"
@@ -181,6 +248,8 @@ export default function NotificationBell() {
                         aria-hidden="true"
                       />
                       <span className="min-w-0 flex-1">
+                        {/* Weight and an explicit "(unread)" carry the state as
+                            well as the dot, so it survives greyscale. */}
                         <span
                           className={`block text-sm ${
                             notification.read

@@ -227,7 +227,7 @@ export default function RegisterPage() {
               <h1 className="text-3xl font-bold text-gray-900 dark:text-white sm:text-4xl">
                 Create your account
               </h1>
-              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
                 It takes a minute, and it is free.
               </p>
             </div>
@@ -253,7 +253,9 @@ export default function RegisterPage() {
                   value={formData.name}
                   onChange={handleChange}
                   required
-                  maxLength={120}
+                  // `cleanString(body.name, 100)` on the server: a longer name
+                  // was accepted here and silently truncated on the way in.
+                  maxLength={100}
                   aria-invalid={Boolean(nameError) || undefined}
                   aria-describedby={nameError ? "name-error" : undefined}
                   className={inputClass}
@@ -313,7 +315,10 @@ export default function RegisterPage() {
                   <button
                     type="button"
                     onClick={() => setShowPassword((value) => !value)}
-                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    // One toggle governs both boxes, so the label says both —
+                    // "Show password" described half of what the button does.
+                    aria-label={showPassword ? "Hide both passwords" : "Show both passwords"}
+                    aria-controls="password confirmPassword"
                     aria-pressed={showPassword}
                     className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-lg text-gray-500 transition-colors hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-gray-400 dark:hover:text-white"
                   >
@@ -331,7 +336,7 @@ export default function RegisterPage() {
                       className={`mono flex items-center gap-2 text-[11px] ${
                         rule.met
                           ? "text-green-700 dark:text-green-400"
-                          : "text-gray-500 dark:text-gray-400"
+                          : "text-gray-600 dark:text-gray-400"
                       }`}
                     >
                       {rule.met ? (
@@ -416,7 +421,7 @@ export default function RegisterPage() {
                             <span className="mt-1.5 block text-sm font-semibold text-gray-900 dark:text-white">
                               {option.title}
                             </span>
-                            <span className="mt-1 block text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                            <span className="mt-1 block text-xs leading-relaxed text-gray-600 dark:text-gray-400">
                               {option.description}
                             </span>
                           </span>
@@ -472,11 +477,11 @@ export default function RegisterPage() {
               {googleLoading ? <Spinner className="h-4 w-4" /> : <GoogleIcon />}
               <span>{googleLoading ? "Redirecting to Google…" : "Google"}</span>
             </button>
-            <p className="mt-2 text-center text-xs text-gray-500 dark:text-gray-400">
+            <p className="mt-2 text-center text-xs text-gray-600 dark:text-gray-400">
               Google sign-up creates a job seeker account.
             </p>
 
-            <p className="mt-8 border-t border-gray-200 pt-6 text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
+            <p className="mt-8 border-t border-gray-200 pt-6 text-sm text-gray-600 dark:border-gray-700 dark:text-gray-400">
               Already have an account?{" "}
               <Link
                 href="/auth/login"

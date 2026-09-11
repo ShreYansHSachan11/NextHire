@@ -24,18 +24,32 @@
    ========================================================================== */
 
 @theme inline {
+  /* `inline` because these point at the CSS variables Next's font loader emits. */
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
   --font-mono: var(--font-mono-jb), ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo,
     Consolas, monospace;
+}
 
+/*
+ * Colours live in a *non-inline* `@theme` deliberately. Tailwind then emits them
+ * as custom properties and every colour utility resolves through `var(--color-*)`,
+ * which is what lets the `.dark` block below re-tune a single step of a ramp for
+ * one theme only — `text-gray-500` is a legible slate on the light canvas and a
+ * legible haze on the dark one, from the same class, with no call site touched.
+ * (With `inline` the literal hex is baked into each utility and that is impossible.)
+ */
+@theme {
   /* Neutral ramp: cool slate in the light range, true navy in the dark range. */
   --color-gray-50: #f7f8fa;
   --color-gray-100: #eff1f5;
   --color-gray-200: #e2e6ec;
   --color-gray-300: #cbd2dc;
   --color-gray-400: #94a0b0;
-  --color-gray-500: #6b7889;
+  /* `text-gray-500` is the app's secondary-text class. The old #6b7889 measured
+     4.2:1 on the light canvas, i.e. below AA for body copy, so the light value is
+     darkened here and re-lightened for the dark theme further down. */
+  --color-gray-500: #5c6878;
   --color-gray-600: #4e5a6b;
   --color-gray-700: #27313f;
   --color-gray-800: #131b2a;
@@ -54,15 +68,18 @@
   --color-blue-800: #3730a3;
   --color-blue-900: #312e81;
 
-  /* Accent: emerald. Reserved for match quality, live state and confirmation. */
+  /* Accent: emerald. Reserved for match quality, live state and confirmation.
+     600 and 700 are pulled darker than stock emerald because `text-green-600`
+     is used as text ("3 unread", "98% match") and stock #059669 only reaches
+     3.6:1 on white — fine for an icon, not for a word. */
   --color-green-50: #ecfdf5;
   --color-green-100: #d1fae5;
   --color-green-200: #a7f3d0;
   --color-green-300: #6ee7b7;
   --color-green-400: #34d399;
   --color-green-500: #10b981;
-  --color-green-600: #059669;
-  --color-green-700: #047857;
+  --color-green-600: #04795b;
+  --color-green-700: #036249;
   --color-green-800: #065f46;
   --color-green-900: #064e3b;
 }
@@ -73,10 +90,15 @@
   --surface-raised: #ffffff;
   --ink: #0b111c;
   --ink-muted: #4e5a6b;
-  --ink-faint: #6b7889;
+  /* The faintest text tier still has to clear 4.5:1 — `.eyebrow` is 11px, so it
+     never qualifies for the large-text exemption. */
+  --ink-faint: #5c6878;
   --line: #e2e6ec;
   --line-strong: #cbd2dc;
+  /* `--accent` paints graphics (meter fills, live dots) where 3:1 is the bar;
+     `--accent-text` is the same hue pulled far enough down to set words in. */
   --accent: #059669;
+  --accent-text: #036249;
   --accent-soft: #ecfdf5;
   --rail: linear-gradient(90deg, #4f46e5 0%, #6366f1 45%, #10b981 100%);
 
@@ -88,6 +110,10 @@
 
   /* Graph-paper rule colour used by .grid-field. */
   --grid-line: rgba(11, 17, 28, 0.06);
+
+  /* Hover tint for borderless controls. Translucent, so it works on the canvas,
+     on a panel and on a tinted row without a variant for each. */
+  --hover-wash: rgba(11, 17, 28, 0.06);
 }
 
 .dark {
@@ -96,10 +122,13 @@
   --surface-raised: #182130;
   --ink: #f2f5f9;
   --ink-muted: #94a0b0;
-  --ink-faint: #6b7889;
+  /* #6b7889 measured 3.8:1 on the dark surface. Dark themes need the quiet tier
+     lighter, not darker, so it moves the other way from its light counterpart. */
+  --ink-faint: #8896a8;
   --line: #27313f;
   --line-strong: #37424f;
   --accent: #34d399;
+  --accent-text: #34d399;
   --accent-soft: rgba(16, 185, 129, 0.12);
 
   --btn-bg: #f2f5f9;
@@ -107,6 +136,13 @@
   --btn-bg-hover: #ffffff;
 
   --grid-line: rgba(148, 160, 176, 0.09);
+  --hover-wash: rgba(255, 255, 255, 0.07);
+
+  /* Re-tuning one step of the Tailwind ramp for this theme only. `text-gray-500`
+     is the "quieter than secondary" class used for timestamps and meta; the light
+     value is too dark to read on navy, so the same class resolves lighter here.
+     This works only because the colour `@theme` above is not `inline`. */
+  --color-gray-500: #8896a8;
 }
 
 html {
@@ -217,7 +253,7 @@ nav {
   }
 
   .eyebrow-accent {
-    color: var(--accent);
+    color: var(--accent-text);
   }
 
   /* Numeric readout, e.g. "94.2%". */
@@ -318,7 +354,7 @@ nav {
   .chip-accent {
     border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
     background: var(--accent-soft);
-    color: var(--accent);
+    color: var(--accent-text);
   }
 
   /* ==========================================================================
@@ -373,6 +409,89 @@ nav {
   .btn-outline:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  /* Destructive and quiet actions were previously long Tailwind strings in
+     ui.tsx, which is why only some of their call sites remembered to add a
+     disabled state. They are real classes now, so the state comes for free. */
+  .btn-danger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 0.5rem;
+    border: 1px solid #fca5a5;
+    background: #fef2f2;
+    color: #b91c1c;
+    padding: 0.625rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    transition: background-color 150ms ease, border-color 150ms ease;
+  }
+
+  .btn-danger:hover:not(:disabled) {
+    background: #fee2e2;
+  }
+
+  .dark .btn-danger {
+    border-color: #991b1b;
+    background: rgba(69, 10, 10, 0.4);
+    color: #fca5a5;
+  }
+
+  .dark .btn-danger:hover:not(:disabled) {
+    background: rgba(69, 10, 10, 0.7);
+  }
+
+  .btn-danger:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    border-radius: 0.375rem;
+    padding: 0.375rem 0.625rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--ink-muted);
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
+  /* A token rather than `color-mix`: the generated fallback for a `color-mix`
+     background is the *solid* colour, which on a no-support browser would paint
+     near-black text on a near-black fill. */
+  .btn-ghost:hover:not(:disabled) {
+    background: var(--hover-wash);
+    color: var(--ink);
+  }
+
+  .btn-ghost:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* One size up, for hero and closing-CTA pairs. Buttons are component classes,
+     so a `px-*` utility would win but a same-layer class declared after them
+     does too — and this keeps the size a token rather than an inline style. */
+  .btn-lg {
+    padding: 0.875rem 1.5rem;
+    font-size: 0.9375rem;
+  }
+
+  /* Loading state shared by every button: the control stays its own size and
+     keeps its label (screen readers get `aria-busy`), it just stops accepting
+     clicks and dims. Pair with a <Spinner /> in the label slot. */
+  .btn-ink[aria-busy="true"],
+  .btn-outline[aria-busy="true"],
+  .btn-danger[aria-busy="true"],
+  .btn-ghost[aria-busy="true"] {
+    cursor: progress;
+    opacity: 0.7;
   }
 
   /* ==========================================================================

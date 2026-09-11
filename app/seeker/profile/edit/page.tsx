@@ -60,15 +60,6 @@ const PROFILE_MAX = 2000;
 const HEADLINE_MAX = 140;
 const YEARS_MAX = 60;
 
-/**
- * What an empty years box sends.
- *
- * `PUT /api/users/:id` gates the four matching fields on presence, so the key
- * has to be there — and it clamps years with `Number()`, which reads both
- * `null` and `""` as a literal zero years of experience. A non-numeric value is
- * the only thing that round-trips as "not specified", so that is what goes.
- */
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -403,7 +394,8 @@ export default function EditSeekerProfilePage() {
       console.error("Profile update failed:", error);
       setFormError(message);
       toast.error(message);
-    } finally {
+      // Only re-enable on failure: the success path navigates away, and a form
+      // that came back to life mid-push would accept a second save.
       setSaving(false);
     }
   };
@@ -505,7 +497,7 @@ export default function EditSeekerProfilePage() {
                   {errors.email}
                 </p>
               ) : (
-                <p id="email-hint" className="mt-1.5 text-sm text-gray-500 dark:text-gray-400">
+                <p id="email-hint" className="mt-1.5 text-sm text-gray-600 dark:text-gray-400">
                   You will use this address to sign in.
                 </p>
               )}
@@ -527,7 +519,7 @@ export default function EditSeekerProfilePage() {
               />
               {/* A counter is machine output, so it reads in mono with tabular
                   figures — the digits don't jitter as you type. */}
-              <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+              <p className="mt-1.5 text-xs text-gray-600 dark:text-gray-400">
                 <Readout className="text-xs font-medium">{remaining}</Readout> characters remaining
               </p>
             </div>
@@ -549,10 +541,22 @@ export default function EditSeekerProfilePage() {
               >
                 What we match you on
               </h3>
-              <p className="mt-1 max-w-prose text-sm text-gray-500 dark:text-gray-400">
+              <p className="mt-1 max-w-prose text-sm text-gray-600 dark:text-gray-400">
                 These four fields are what job matching scores roles against — and anything the
                 resume reader filled in for you can be corrected here.
               </p>
+
+              {/* These four controls are disabled until the stored values are in
+                  hand. Without a word of explanation that reads as a broken
+                  form, so the wait says what it is. The live region is mounted
+                  unconditionally, because one added later is never announced. */}
+              <div aria-live="polite">
+                {!signalLoaded && !signalFailed && (
+                  <p className="mt-3 text-sm text-gray-600 dark:text-gray-400">
+                    Loading your saved matching fields…
+                  </p>
+                )}
+              </div>
 
               {signalFailed && (
                 <Alert variant="warning" className="mt-4">
@@ -648,11 +652,14 @@ export default function EditSeekerProfilePage() {
                           <li key={skill}>
                             <Chip>
                               {skill}
+                              {/* 24px square: the old p-0.5 around a 12px glyph
+                                  gave a 16px target, under the AA minimum and
+                                  genuinely hard to hit on a phone. */}
                               <button
                                 type="button"
                                 onClick={() => removeSkill(skill)}
                                 disabled={!signalLoaded}
-                                className="-mr-0.5 rounded p-0.5 text-gray-400 transition-colors hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:hover:text-white"
+                                className="-my-1 -mr-1.5 ml-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-gray-500 transition-colors hover:bg-gray-200 hover:text-gray-900 disabled:cursor-not-allowed dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white"
                               >
                                 <Icon.x className="h-3 w-3" />
                                 <span className="sr-only">Remove {skill}</span>
@@ -685,7 +692,7 @@ export default function EditSeekerProfilePage() {
                   </div>
 
                   <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                    <p id="skill-hint" className="text-xs text-gray-500 dark:text-gray-400">
+                    <p id="skill-hint" className="text-xs text-gray-600 dark:text-gray-400">
                       Enter or a comma adds a skill. Backspace in an empty box removes the last
                       one.
                     </p>
@@ -707,7 +714,12 @@ export default function EditSeekerProfilePage() {
               className="flex flex-col gap-3 border-t border-gray-200 pt-5 dark:border-gray-700 sm:flex-row"
               aria-live="polite"
             >
-              <button type="submit" disabled={saving} className={buttonPrimary}>
+              <button
+                type="submit"
+                disabled={saving}
+                aria-busy={saving}
+                className={buttonPrimary}
+              >
                 {saving ? (
                   <>
                     <Spinner className="h-4 w-4" />
@@ -720,7 +732,15 @@ export default function EditSeekerProfilePage() {
                   </>
                 )}
               </button>
-              <Link href="/seeker/dashboard" className={buttonSecondary}>
+              {/* The beforeunload guard only covers reloads and tab closes, so
+                  in-app navigation has to ask for itself — this link was the
+                  one exit that dropped unsaved edits without a word. */}
+              <Link
+                href="/seeker/dashboard"
+                onClick={confirmDiscard}
+                className={buttonSecondary}
+              >
+                <Icon.x className="h-4 w-4" />
                 Cancel
               </Link>
             </div>

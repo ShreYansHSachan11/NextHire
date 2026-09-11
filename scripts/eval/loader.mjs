@@ -30,6 +30,25 @@ const ROOT = resolvePath(dirname(fileURLToPath(import.meta.url)), '..', '..');
 /** Extensions tried, in the order TypeScript itself would try them. */
 const CANDIDATES = ['', '.ts', '.tsx', '.js', '.mjs', '/index.ts', '/index.js'];
 
+/**
+ * Modules the harness substitutes wholesale, by specifier.
+ *
+ * The harness has to run with no Postgres, and `lib/ai/search.ts`,
+ * `lib/ai/cache.ts`, `lib/ai/matching.ts` and `lib/ai/skills.ts` all import
+ * `@/lib/prisma` at module scope — where `new PrismaClient()` would want a
+ * `DATABASE_URL` and then a server to connect to. Redirecting the *specifier*
+ * is what lets those four files be loaded and measured completely unmodified:
+ * dependency injection imposed from outside, rather than a flag threaded
+ * through product code for the benefit of a test.
+ *
+ * This is the only substitution, and it is not a general mocking facility. Any
+ * addition here is a claim that the harness is no longer exercising the real
+ * thing, and should be argued for in EVAL.md before it is made.
+ */
+const SUBSTITUTIONS = new Map([
+  ['@/lib/prisma', resolvePath(ROOT, 'scripts', 'eval', 'harness', 'prisma-double.ts')],
+]);
+
 function firstExistingFile(basePath) {
   for (const suffix of CANDIDATES) {
     const candidate = basePath + suffix;
@@ -44,6 +63,9 @@ function firstExistingFile(basePath) {
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
+    const substitute = SUBSTITUTIONS.get(specifier);
+    if (substitute) return { url: pathToFileURL(substitute).href, shortCircuit: true };
+
     if (specifier.startsWith('@/')) {
       const found = firstExistingFile(resolvePath(ROOT, specifier.slice(2)));
       if (found) return { url: pathToFileURL(found).href, shortCircuit: true };

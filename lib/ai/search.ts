@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { JOB_TYPES, type SeniorityLevel } from '@/lib/validation';
+import { JOB_TYPES, SENIORITY_LEVELS, type SeniorityLevel } from '@/lib/validation';
 import { RETRIEVAL_DEPTH, RRF_K } from './config';
 import { embedQueryCached, getActiveJobVectors } from './cache';
 import { cosineSimilarity } from './vector';
@@ -362,10 +362,22 @@ function filterPredicates(filters: SearchFilters): Prisma.Sql[] {
   }
 
   if (filters.seniority) {
-    const patterns = SENIORITY_SQL[filters.seniority].map(
-      (pattern) =>
-        Prisma.sql`coalesce(j."title", '') ILIKE ${pattern} OR coalesce(j."experience", '') ILIKE ${pattern}`
-    );
+    // A floor, not an equality test.
+    //
+    // Measured: "remote senior Go role above 120k" was filtering out a Staff
+    // posting — remote, $185k, 8+ years — because its title says "Staff" and
+    // not "Senior". Someone asking for senior work wants that role; excluding it
+    // dropped the whole structured query from 99.0 to 81.8 nDCG. Seniority is an
+    // ordered ladder, so the filter matches the level asked for and everything
+    // above it, and over-qualification is left for the match score to weigh
+    // rather than removed from the corpus before ranking.
+    const floor = SENIORITY_LEVELS.indexOf(filters.seniority);
+    const patterns = SENIORITY_LEVELS.slice(floor)
+      .flatMap((level) => SENIORITY_SQL[level])
+      .map(
+        (pattern) =>
+          Prisma.sql`coalesce(j."title", '') ILIKE ${pattern} OR coalesce(j."experience", '') ILIKE ${pattern}`
+      );
     conditions.push(Prisma.sql`(${Prisma.join(patterns, ' OR ')})`);
   }
 
@@ -615,7 +627,19 @@ export async function hybridJobSearch(
   let lexical = settled(lexicalSettled, 'lexical arm', []);
   const vector = settled(vectorSettled, 'vector arm', null);
 
-  if (lexical.length === 0 && text) {
+  // Trigram is a last resort, not a second lexical arm.
+  //
+  // Measured: for "JavaScript engineer", full-text finds nothing (it ANDs its
+  // terms), so this fired and returned DevOps, Android, Analytics and *Java*
+  // Engineer — titles related only by the word "Engineer" — which then entered
+  // fusion at the same weight as the vector arm's genuine hits and dragged that
+  // query from 70.5 to 42.4 nDCG.
+  //
+  // Character similarity is a typo-tolerance mechanism. It earns its place when
+  // there is nothing better, and costs accuracy whenever there is: so it runs
+  // only when the vector arm produced nothing either, which in practice means
+  // AI is off or the embedding call failed.
+  if (lexical.length === 0 && text && (!vector || vector.length === 0)) {
     lexical = await trigramSearch(text, parsed.filters, depth);
   }
 

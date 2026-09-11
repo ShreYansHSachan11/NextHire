@@ -38,9 +38,17 @@ interface CreatedJob {
 /** Mirrors where the server truncates, so the counter tells the truth. */
 const MAX_TITLE = 150;
 const MAX_DESCRIPTION = 10000;
+/**
+ * `POST /api/jobs` runs `cleanString(body.experience, 60)`. The input used to
+ * allow 100, so anything longer was accepted by the form and then silently
+ * shortened on save — the employer never saw where it was cut.
+ */
+const MAX_EXPERIENCE = 60;
+const MAX_SALARY = 100;
+const MAX_LOCATION = 120;
 
 /* -------------------------------------------------------------------------- */
-/* Drafting help — POST /api/ai/assist                                         */
+/* AI requests                                                                 */
 /* -------------------------------------------------------------------------- */
 
 interface DescriptionDraft {
@@ -62,13 +70,16 @@ const ASSIST_FAILED = "The writing assistant is unavailable right now. Please tr
 
 /**
  * Deliberately not `apiFetch`: that helper collapses every failure into an
- * Error message, and this caller has to tell "the deployment has no model"
+ * Error message, and these callers have to tell "the deployment has no model"
  * (503, hide the feature and say nothing) apart from "the call failed" (502 or
  * a network blip, worth one toast).
+ *
+ * Every `/api/ai/*` route shares one key, so a 503 from any of them is a fact
+ * about the whole deployment and all of the assistive buttons go together.
  */
-async function requestAssist<T>(body: Record<string, unknown>): Promise<AssistOutcome<T>> {
+async function requestAi<T>(path: string, body: Record<string, unknown>): Promise<AssistOutcome<T>> {
   try {
-    const res = await fetch("/api/ai/assist", {
+    const res = await fetch(path, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify(body),
@@ -89,9 +100,180 @@ async function requestAssist<T>(body: Record<string, unknown>): Promise<AssistOu
 
     return { ok: true, data: data as T };
   } catch (error) {
-    console.error("AI assist request failed:", error);
+    console.error("AI request failed:", error);
     return { ok: false, unavailable: false, message: ASSIST_FAILED };
   }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Inclusivity check — POST /api/ai/review { mode: 'inclusivity' }             */
+/* -------------------------------------------------------------------------- */
+
+/** The three buckets the route returns, in the employer's language. */
+const FINDING_LABELS: Record<string, string> = {
+  exclusionary: "Narrows the pool",
+  requirement: "Requirement worth questioning",
+  jargon: "Insider jargon",
+};
+
+interface Finding {
+  phrase: string;
+  category: string;
+  why: string;
+  rewrite: string;
+}
+
+interface InclusivityReview {
+  findings: Finding[];
+  summary: string;
+}
+
+/**
+ * Swaps the first occurrence of `phrase` for `rewrite`.
+ *
+ * The route guarantees `phrase` was located verbatim in the draft it was sent,
+ * which is what makes a blind replace safe — but `String.replace` with a string
+ * pattern also expands `$&`, `$1` and `$'` inside the *replacement*, and a
+ * rewrite is arbitrary prose that may well contain a dollar sign. Going through
+ * a replacer function turns that substitution off entirely.
+ */
+function applyRewrite(description: string, phrase: string, rewrite: string): string {
+  return description.replace(phrase, () => rewrite);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Screening questions                                                         */
+/* -------------------------------------------------------------------------- */
+
+/** Every cap here mirrors `PUT /api/jobs/:jobId/questions`, which is the authority. */
+const MAX_QUESTIONS = 10;
+const MAX_PROMPT_CHARS = 300;
+const MIN_OPTIONS = 2;
+const MAX_OPTIONS = 6;
+const MAX_OPTION_CHARS = 80;
+/** `POST /api/ai/screening` will not return more than this however many we ask for. */
+const MAX_SUGGESTIONS = 8;
+
+const QUESTION_KINDS = [
+  { value: "TEXT", label: "Short text" },
+  { value: "BOOLEAN", label: "Yes / No" },
+  { value: "SINGLE_CHOICE", label: "Pick one" },
+  { value: "NUMBER", label: "Number" },
+] as const;
+
+type QuestionKind = (typeof QUESTION_KINDS)[number]["value"];
+
+/** Stored as these two literals so a knockout comparison has something to match. */
+const BOOLEAN_ANSWERS = ["Yes", "No"] as const;
+
+interface QuestionDraft {
+  /** Local only. React keys have to survive a reorder and an edit of the prompt. */
+  key: string;
+  /** Null here — nothing is persisted until the posting itself exists. */
+  id: string | null;
+  prompt: string;
+  kind: QuestionKind;
+  options: string[];
+  required: boolean;
+  knockout: boolean;
+  expected: string | null;
+  /** The model's note on what the question probes. Shown once; never sent back. */
+  rationale: string;
+}
+
+interface Suggestion {
+  prompt: string;
+  kind: string;
+  options: string[];
+  required: boolean;
+  knockout: boolean;
+  expected: string | null;
+  rationale: string;
+}
+
+let questionKeySeed = 0;
+const nextQuestionKey = () => `question-${(questionKeySeed += 1)}`;
+
+function isQuestionKind(value: string): value is QuestionKind {
+  return QUESTION_KINDS.some((kind) => kind.value === value);
+}
+
+/** The answers a knockout could be compared against, or none. */
+function answerChoices(question: QuestionDraft): string[] {
+  if (question.kind === "BOOLEAN") return [...BOOLEAN_ANSWERS];
+  if (question.kind === "SINGLE_CHOICE") return cleanOptions(question.options);
+  // TEXT and NUMBER have no single correct form, so they can never be knockouts.
+  return [];
+}
+
+/** Trims, drops empties and de-duplicates exactly the way the route does. */
+function cleanOptions(options: string[]): string[] {
+  const seen = new Set<string>();
+  const cleaned: string[] = [];
+  for (const raw of options) {
+    const option = raw.trim().replace(/\s+/g, " ").slice(0, MAX_OPTION_CHARS);
+    if (!option) continue;
+    const key = option.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    cleaned.push(option);
+    if (cleaned.length >= MAX_OPTIONS) break;
+  }
+  return cleaned;
+}
+
+/**
+ * Keeps a draft in a shape the questions route would accept, so the editor can
+ * never build a set that only fails at save time.
+ *
+ * Changing the answer type invalidates the choices and the expected answer, and
+ * a knockout with nothing to compare against is dropped — the server drops it
+ * too, and a checkbox that silently means nothing is worse than one that turns
+ * itself off in front of you.
+ */
+function normaliseQuestion(question: QuestionDraft): QuestionDraft {
+  const options = question.kind === "SINGLE_CHOICE" ? question.options : [];
+  const choices = answerChoices({ ...question, options });
+  const expected =
+    question.expected && choices.includes(question.expected) ? question.expected : null;
+  return { ...question, options, expected, knockout: question.knockout && expected !== null };
+}
+
+/** Client-side mirror of the route's per-question rules. */
+function questionProblem(question: QuestionDraft, index: number): string | null {
+  if (!question.prompt.trim()) return `Screening question ${index + 1} needs a prompt`;
+  if (question.kind === "SINGLE_CHOICE" && cleanOptions(question.options).length < MIN_OPTIONS) {
+    return `Screening question ${index + 1} needs at least ${MIN_OPTIONS} choices`;
+  }
+  return null;
+}
+
+/** The exact body `PUT /api/jobs/:jobId/questions` expects. */
+function toQuestionPayload(questions: QuestionDraft[]) {
+  return questions.map((question) => ({
+    id: question.id,
+    prompt: question.prompt.trim().slice(0, MAX_PROMPT_CHARS),
+    kind: question.kind,
+    options: question.kind === "SINGLE_CHOICE" ? cleanOptions(question.options) : [],
+    required: question.required,
+    knockout: question.knockout,
+    expected: question.expected,
+  }));
+}
+
+function suggestionToDraft(suggestion: Suggestion): QuestionDraft {
+  const kind = isQuestionKind(suggestion.kind) ? suggestion.kind : "TEXT";
+  return normaliseQuestion({
+    key: nextQuestionKey(),
+    id: null,
+    prompt: suggestion.prompt,
+    kind,
+    options: Array.isArray(suggestion.options) ? suggestion.options : [],
+    required: suggestion.required !== false,
+    knockout: suggestion.knockout === true,
+    expected: suggestion.expected ?? null,
+    rationale: suggestion.rationale ?? "",
+  });
 }
 
 const EMPTY_FORM = {
@@ -128,13 +310,34 @@ export default function PostJobPage() {
   /** Announced politely so the tag list is usable without seeing it. */
   const [skillNotice, setSkillNotice] = useState("");
 
-  // Optimistic: the buttons are offered until the endpoint answers 503 once.
+  // Optimistic: the buttons are offered until an AI endpoint answers 503 once.
   // After that they stay hidden for the session and the form is exactly the
   // form a deployment without a Gemini key has always had.
   const [aiAvailable, setAiAvailable] = useState(true);
   const [drafting, setDrafting] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
   const [draft, setDraft] = useState<DescriptionDraft | null>(null);
+
+  /* --------------------------- inclusivity check -------------------------- */
+
+  const [reviewing, setReviewing] = useState(false);
+  const [review, setReview] = useState<InclusivityReview | null>(null);
+  /** Phrases already swapped in, so a done finding reads as done, not as stale. */
+  const [appliedPhrases, setAppliedPhrases] = useState<string[]>([]);
+  const [reviewNotice, setReviewNotice] = useState("");
+
+  /* -------------------------- screening questions ------------------------- */
+
+  const [questions, setQuestions] = useState<QuestionDraft[]>([]);
+  const [suggestingQuestions, setSuggestingQuestions] = useState(false);
+  const [questionNotice, setQuestionNotice] = useState("");
+  /**
+   * The posting and its questions are two separate writes. When the first
+   * succeeds and the second does not, the job is live and the questions are
+   * not — say so and offer the retry rather than pretending both landed.
+   */
+  const [questionsUnsaved, setQuestionsUnsaved] = useState(false);
+  const [retryingQuestions, setRetryingQuestions] = useState(false);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -211,7 +414,7 @@ export default function PostJobPage() {
     if (!title || drafting) return;
 
     setDrafting(true);
-    const outcome = await requestAssist<DescriptionDraft>({
+    const outcome = await requestAi<DescriptionDraft>("/api/ai/assist", {
       mode: "job-description",
       title,
       // Whatever is already in the box is passed as notes, not overwritten:
@@ -240,7 +443,11 @@ export default function PostJobPage() {
     if (!title || !description || suggesting) return;
 
     setSuggesting(true);
-    const outcome = await requestAssist<SkillsDraft>({ mode: "job-skills", title, description });
+    const outcome = await requestAi<SkillsDraft>("/api/ai/assist", {
+      mode: "job-skills",
+      title,
+      description,
+    });
     setSuggesting(false);
 
     if (outcome.ok) {
@@ -267,13 +474,212 @@ export default function PostJobPage() {
       description: draft.description.slice(0, MAX_DESCRIPTION),
     }));
     setDraft(null);
+    // Any findings were about the old text; keeping them on screen next to a
+    // wholly different description would invite applying a stale rewrite.
+    setReview(null);
+    setAppliedPhrases([]);
     toast.success("Draft inserted — read it through and edit before posting.");
   };
 
+  /* --------------------------- inclusivity check -------------------------- */
+
+  const handleInclusivityCheck = async () => {
+    const description = formData.description.trim();
+    if (!description || reviewing) return;
+
+    setReviewing(true);
+    setReviewNotice("");
+    const outcome = await requestAi<InclusivityReview>("/api/ai/review", {
+      mode: "inclusivity",
+      title: formData.title.trim() || undefined,
+      description,
+    });
+    setReviewing(false);
+
+    if (outcome.ok) {
+      setReview(outcome.data);
+      // A previous run's applied list has nothing to do with this run's findings.
+      setAppliedPhrases([]);
+      const count = outcome.data.findings.length;
+      setReviewNotice(
+        count === 0
+          ? "Inclusivity check finished. Nothing flagged in this draft."
+          : `Inclusivity check finished. ${count} ${count === 1 ? "suggestion" : "suggestions"} to read.`
+      );
+      return;
+    }
+    if (outcome.unavailable) {
+      setAiAvailable(false);
+      return;
+    }
+    toast.error(outcome.message);
+  };
+
+  /**
+   * One-click apply.
+   *
+   * The phrase was verbatim in the draft when the check ran, but the employer
+   * may have kept typing since. Re-checking against the live description here
+   * is the difference between a safe replace and one that quietly does nothing
+   * — and the button is already disabled in that case, so this is the guard for
+   * the race where the text changes between paint and click.
+   */
+  const applyFinding = (finding: Finding) => {
+    const current = formData.description;
+
+    if (!current.includes(finding.phrase)) {
+      setReviewNotice(
+        "That wording is no longer in the description. Run the check again so it reads the current draft."
+      );
+      return;
+    }
+
+    const next = applyRewrite(current, finding.phrase, finding.rewrite);
+    if (next.length > MAX_DESCRIPTION) {
+      // Silently slicing here would cut the end off the posting to make room for
+      // a suggestion the employer only asked to try.
+      setReviewNotice(
+        `That rewrite would push the description past ${MAX_DESCRIPTION.toLocaleString()} characters. Shorten the description first.`
+      );
+      return;
+    }
+
+    setFormData((form) => ({ ...form, description: next }));
+    setAppliedPhrases((applied) => [...applied, finding.phrase]);
+    setReviewNotice(`Applied. “${finding.phrase}” is now “${finding.rewrite}”.`);
+  };
+
+  /* -------------------------- screening questions ------------------------- */
+
+  const updateQuestion = (key: string, patch: Partial<QuestionDraft>) => {
+    setQuestions((current) =>
+      current.map((question) =>
+        question.key === key ? normaliseQuestion({ ...question, ...patch }) : question
+      )
+    );
+  };
+
+  const addQuestion = () => {
+    if (questions.length >= MAX_QUESTIONS) return;
+    setQuestions((current) => [
+      ...current,
+      {
+        key: nextQuestionKey(),
+        id: null,
+        prompt: "",
+        kind: "TEXT",
+        options: [],
+        required: true,
+        knockout: false,
+        expected: null,
+        rationale: "",
+      },
+    ]);
+    setQuestionNotice(`Question ${questions.length + 1} added.`);
+  };
+
+  const removeQuestion = (key: string) => {
+    const index = questions.findIndex((question) => question.key === key);
+    if (index === -1) return;
+    setQuestions((current) => current.filter((question) => question.key !== key));
+    setQuestionNotice(`Question ${index + 1} removed. ${questions.length - 1} remaining.`);
+  };
+
+  /** Keyboard-operable reordering — no pointer-only drag handles. */
+  const moveQuestion = (key: string, delta: -1 | 1) => {
+    const index = questions.findIndex((question) => question.key === key);
+    const target = index + delta;
+    if (index === -1 || target < 0 || target >= questions.length) return;
+
+    const next = [...questions];
+    [next[index], next[target]] = [next[target], next[index]];
+    setQuestions(next);
+    setQuestionNotice(`Moved to position ${target + 1} of ${next.length}.`);
+  };
+
+  const handleSuggestQuestions = async () => {
+    const title = formData.title.trim();
+    if (!title || suggestingQuestions) return;
+
+    const room = MAX_QUESTIONS - questions.length;
+    if (room <= 0) {
+      setQuestionNotice(`You already have the maximum of ${MAX_QUESTIONS} questions.`);
+      return;
+    }
+
+    setSuggestingQuestions(true);
+    const outcome = await requestAi<{ questions: Suggestion[]; filtered: number }>(
+      "/api/ai/screening",
+      {
+        title,
+        description: formData.description.trim() || undefined,
+        skills: skillsRef.current,
+        location: formData.location.trim() || undefined,
+        experience: formData.experience.trim() || undefined,
+        count: Math.min(room, MAX_SUGGESTIONS),
+      }
+    );
+    setSuggestingQuestions(false);
+
+    if (!outcome.ok) {
+      if (outcome.unavailable) setAiAvailable(false);
+      else toast.error(outcome.message);
+      return;
+    }
+
+    const existing = new Set(questions.map((question) => question.prompt.trim().toLowerCase()));
+    const additions: QuestionDraft[] = [];
+
+    for (const suggestion of outcome.data.questions ?? []) {
+      if (additions.length >= room) break;
+      const key = (suggestion.prompt ?? "").trim().toLowerCase();
+      if (!key || existing.has(key)) continue;
+      existing.add(key);
+      additions.push(suggestionToDraft(suggestion));
+    }
+
+    if (additions.length > 0) setQuestions((current) => [...current, ...additions]);
+    setQuestionNotice(
+      additions.length > 0
+        ? `${additions.length} suggested ${additions.length === 1 ? "question" : "questions"} added below. Edit or remove anything that does not fit.`
+        : "No new questions to suggest for this posting."
+    );
+  };
+
+  /** Used by the submit path and by the retry in the success banner. */
+  const saveQuestions = async (jobId: string) => {
+    await apiFetch(`/api/jobs/${jobId}/questions`, {
+      method: "PUT",
+      body: JSON.stringify({ questions: toQuestionPayload(questions) }),
+    });
+  };
+
+  const retrySaveQuestions = async () => {
+    if (!created || retryingQuestions) return;
+    setRetryingQuestions(true);
+    try {
+      await saveQuestions(created.id);
+      setQuestionsUnsaved(false);
+      setQuestions([]);
+      toast.success("Screening questions saved.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save the screening questions");
+    } finally {
+      setRetryingQuestions(false);
+    }
+  };
+
+  /* -------------------------------- submit -------------------------------- */
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Belt and braces alongside the disabled button: a second Enter press while
+    // the request is in flight must not create a second posting.
+    if (loading) return;
+
     setError("");
     setCreated(null);
+    setQuestionsUnsaved(false);
 
     const title = formData.title.trim();
     const description = formData.description.trim();
@@ -289,6 +695,16 @@ export default function PostJobPage() {
     if (!isJobType(formData.type)) {
       setError("Choose a job type");
       return;
+    }
+
+    // Validated before the posting is created, not after: a question the route
+    // would reject should not cost the employer a live job with no questions.
+    for (let index = 0; index < questions.length; index += 1) {
+      const problem = questionProblem(questions[index], index);
+      if (problem) {
+        setError(problem);
+        return;
+      }
     }
 
     setLoading(true);
@@ -313,12 +729,38 @@ export default function PostJobPage() {
       });
 
       setCreated(job);
+
+      // The questions are a second write to a different route. The posting is
+      // already live at this point, so a failure here is reported on its own
+      // terms instead of being rolled into "job posting failed".
+      let questionsSaved = true;
+      if (questions.length > 0) {
+        try {
+          await saveQuestions(job.id);
+        } catch (questionError) {
+          console.error("Saving screening questions failed:", questionError);
+          questionsSaved = false;
+          setQuestionsUnsaved(true);
+        }
+      }
+
       setFormData(EMPTY_FORM);
       applySkills([]);
       setSkillInput("");
       setSkillNotice("");
       setDraft(null);
-      toast.success("Job posted.");
+      setReview(null);
+      setAppliedPhrases([]);
+      setReviewNotice("");
+      // Kept on screen when the save failed, so the retry has something to send.
+      if (questionsSaved) {
+        setQuestions([]);
+        setQuestionNotice("");
+      }
+
+      toast.success(
+        questionsSaved ? "Job posted." : "Job posted, but the screening questions did not save."
+      );
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Job posting failed";
@@ -344,8 +786,10 @@ export default function PostJobPage() {
   const atDescriptionLimit = descriptionLength >= MAX_DESCRIPTION;
   // The assistant writes *from* something; with no title it has nothing to go on.
   const titleFilled = formData.title.trim().length > 0;
-  const canSuggestSkills = titleFilled && formData.description.trim().length > 0;
+  const descriptionFilled = formData.description.trim().length > 0;
+  const canSuggestSkills = titleFilled && descriptionFilled;
   const skillsFull = skills.length >= MAX_SKILLS;
+  const questionsFull = questions.length >= MAX_QUESTIONS;
   const suggestedTitleIsNew =
     !!draft && draft.suggestedTitle.trim().toLowerCase() !== formData.title.trim().toLowerCase();
 
@@ -369,7 +813,35 @@ export default function PostJobPage() {
         {created && (
           <Alert variant="success" className="mb-6">
             <p className="font-semibold">&ldquo;{created.title}&rdquo; is live.</p>
+
+            {questionsUnsaved && (
+              <p className="mt-2">
+                The posting saved, but its screening questions did not. They are still in the form
+                below — nothing has been lost.
+              </p>
+            )}
+
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              {questionsUnsaved && (
+                <button
+                  type="button"
+                  onClick={() => void retrySaveQuestions()}
+                  disabled={retryingQuestions}
+                  className={`${buttonSecondary} disabled:cursor-not-allowed disabled:opacity-50`}
+                >
+                  {retryingQuestions ? (
+                    <>
+                      <Spinner className="h-4 w-4" />
+                      Saving…
+                    </>
+                  ) : (
+                    <>
+                      <Icon.check className="h-4 w-4" />
+                      Save the questions
+                    </>
+                  )}
+                </button>
+              )}
               <Link href={`/jobs/${created.id}`} className="btn-ink btn-touch">
                 View the posting
                 <Icon.arrowUpRight className="h-4 w-4" />
@@ -445,30 +917,59 @@ export default function PostJobPage() {
                       Job description
                     </Label>
                     {aiAvailable && (
-                      <button
-                        type="button"
-                        onClick={() => void handleDraft()}
-                        disabled={!titleFilled || drafting}
-                        aria-describedby={titleFilled ? undefined : "ai-draft-hint"}
-                        className={`${buttonSecondary} mb-2 disabled:cursor-not-allowed disabled:opacity-50`}
-                      >
-                        {drafting ? (
-                          <>
-                            <Spinner className="h-4 w-4" />
-                            Drafting…
-                          </>
-                        ) : (
-                          <>
-                            <Icon.spark className="h-4 w-4" />
-                            Draft with AI
-                          </>
-                        )}
-                      </button>
+                      <div className="mb-2 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void handleDraft()}
+                          disabled={!titleFilled || drafting}
+                          aria-describedby={titleFilled ? undefined : "ai-draft-hint"}
+                          className={`${buttonSecondary} disabled:cursor-not-allowed disabled:opacity-50`}
+                        >
+                          {drafting ? (
+                            <>
+                              <Spinner className="h-4 w-4" />
+                              Drafting…
+                            </>
+                          ) : (
+                            <>
+                              <Icon.spark className="h-4 w-4" />
+                              Draft with AI
+                            </>
+                          )}
+                        </button>
+
+                        {/* Same interaction as drafting: one button, a result
+                            panel below the field, nothing applied until asked. */}
+                        <button
+                          type="button"
+                          onClick={() => void handleInclusivityCheck()}
+                          disabled={!descriptionFilled || reviewing}
+                          aria-describedby={descriptionFilled ? undefined : "ai-review-hint"}
+                          className={`${buttonGhost} disabled:cursor-not-allowed disabled:opacity-50`}
+                        >
+                          {reviewing ? (
+                            <>
+                              <Spinner className="h-4 w-4" />
+                              Reading the draft…
+                            </>
+                          ) : (
+                            <>
+                              <Icon.spark className="h-4 w-4" />
+                              Check the wording
+                            </>
+                          )}
+                        </button>
+                      </div>
                     )}
                   </div>
                   {aiAvailable && !titleFilled && (
                     <p id="ai-draft-hint" className="eyebrow mb-2">
                       Add a job title to draft from
+                    </p>
+                  )}
+                  {aiAvailable && titleFilled && !descriptionFilled && (
+                    <p id="ai-review-hint" className="eyebrow mb-2">
+                      Write a description to check it
                     </p>
                   )}
                   <textarea
@@ -609,6 +1110,120 @@ export default function PostJobPage() {
                       </div>
                     </Card>
                   )}
+
+                  {/* Findings sit under the field, in the same panel language as
+                      the AI draft above. Advisory throughout: nothing here can
+                      stop the posting going out. */}
+                  {review && (
+                    <Card grid className="mt-3 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="flex items-center gap-1.5 text-green-600 dark:text-green-400">
+                          <Icon.spark className="h-4 w-4" />
+                          <Eyebrow as="span" accent>
+                            Wording check · advisory
+                          </Eyebrow>
+                        </span>
+                        <Readout className="text-xs text-gray-500 dark:text-gray-400">
+                          {review.findings.length}{" "}
+                          {review.findings.length === 1 ? "finding" : "findings"}
+                        </Readout>
+                      </div>
+
+                      {review.summary && (
+                        <p className="mt-2 text-sm leading-relaxed text-gray-700 dark:text-gray-200">
+                          {review.summary}
+                        </p>
+                      )}
+
+                      <p className="mt-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                        Suggestions only — none of this blocks the posting. Apply what you agree
+                        with and ignore the rest.
+                      </p>
+
+                      {review.findings.length === 0 ? (
+                        <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">
+                          Nothing flagged in this draft.
+                        </p>
+                      ) : (
+                        <ul className="mt-3 space-y-3">
+                          {review.findings.map((finding) => {
+                            const done = appliedPhrases.includes(finding.phrase);
+                            // Recomputed every render, so the button disables the
+                            // moment the employer edits that wording away.
+                            const stillPresent = formData.description.includes(finding.phrase);
+
+                            return (
+                              <li
+                                key={finding.phrase}
+                                className="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900"
+                              >
+                                <Eyebrow>
+                                  {FINDING_LABELS[finding.category] ?? "Worth a second look"}
+                                </Eyebrow>
+
+                                <p className="mt-1.5 text-sm text-gray-900 dark:text-white">
+                                  <q className="font-medium">{finding.phrase}</q>
+                                </p>
+
+                                <p className="mt-1.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                                  {finding.why}
+                                </p>
+
+                                <div className="mt-2.5 border-l-2 border-green-500 bg-green-50 py-1.5 pl-3 dark:bg-green-950/30">
+                                  <Eyebrow>Suggested wording</Eyebrow>
+                                  <p className="mt-1 text-sm leading-relaxed text-gray-800 dark:text-gray-100">
+                                    {finding.rewrite}
+                                  </p>
+                                </div>
+
+                                {done ? (
+                                  <p className="eyebrow mt-2.5 flex items-center gap-1.5">
+                                    <Icon.check className="h-3.5 w-3.5" />
+                                    Applied to the description
+                                  </p>
+                                ) : stillPresent ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => applyFinding(finding)}
+                                    className={`${buttonSecondary} mt-2.5 w-full sm:w-auto`}
+                                  >
+                                    <Icon.check className="h-4 w-4" />
+                                    Use this wording
+                                  </button>
+                                ) : (
+                                  /* The employer edited the draft after the check
+                                     ran. We will not guess at a near-match. */
+                                  <p className="mt-2.5 text-xs leading-relaxed text-amber-700 dark:text-amber-400">
+                                    This wording is no longer in the description. Run the check
+                                    again to read the current draft.
+                                  </p>
+                                )}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+
+                      <div className="mt-4 border-t border-gray-200 pt-3 dark:border-gray-700">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReview(null);
+                            setAppliedPhrases([]);
+                            setReviewNotice("Wording check dismissed.");
+                          }}
+                          className={buttonGhost}
+                        >
+                          <Icon.x className="h-4 w-4" />
+                          Dismiss
+                        </button>
+                      </div>
+                    </Card>
+                  )}
+
+                  <p aria-live="polite" className="eyebrow mt-1.5 normal-case tracking-normal">
+                    {reviewNotice}
+                  </p>
                 </div>
               </div>
             </section>
@@ -657,7 +1272,7 @@ export default function PostJobPage() {
                     placeholder="e.g. Bangalore, or Remote"
                     value={formData.location}
                     onChange={handleChange}
-                    maxLength={120}
+                    maxLength={MAX_LOCATION}
                     className={inputClass}
                   />
                 </div>
@@ -676,7 +1291,7 @@ export default function PostJobPage() {
                     placeholder="e.g. ₹18–25 LPA"
                     value={formData.salary}
                     onChange={handleChange}
-                    maxLength={100}
+                    maxLength={MAX_SALARY}
                     className={inputClass}
                   />
                 </div>
@@ -695,7 +1310,7 @@ export default function PostJobPage() {
                     placeholder="e.g. 3–5 years"
                     value={formData.experience}
                     onChange={handleChange}
-                    maxLength={100}
+                    maxLength={MAX_EXPERIENCE}
                     className={inputClass}
                   />
                 </div>
@@ -792,6 +1407,96 @@ export default function PostJobPage() {
               </div>
             </section>
 
+            {/* Section 3 — screening questions. The editor itself is plain
+                persistence, so it is offered on every deployment; only the
+                "suggest" button depends on a model being configured. */}
+            <section
+              aria-labelledby="section-screening"
+              className="mt-8 border-t border-gray-200 pt-6 dark:border-gray-700"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+                <div className="min-w-0">
+                  <h3 id="section-screening" className="eyebrow mb-1">
+                    03 · Screening questions
+                  </h3>
+                  <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                    Optional. Applicants answer these when they apply, and you see the answers on
+                    the application. Up to {MAX_QUESTIONS}.
+                  </p>
+                </div>
+                {aiAvailable && (
+                  <button
+                    type="button"
+                    onClick={() => void handleSuggestQuestions()}
+                    disabled={!titleFilled || suggestingQuestions || questionsFull}
+                    aria-describedby="screening-ai-hint"
+                    className={`${buttonGhost} disabled:cursor-not-allowed disabled:opacity-50`}
+                  >
+                    {suggestingQuestions ? (
+                      <>
+                        <Spinner className="h-4 w-4" />
+                        Drafting questions…
+                      </>
+                    ) : (
+                      <>
+                        <Icon.spark className="h-4 w-4" />
+                        Suggest questions
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+
+              {aiAvailable && (
+                <p id="screening-ai-hint" className="eyebrow mt-2">
+                  {questionsFull
+                    ? `Maximum of ${MAX_QUESTIONS} questions reached`
+                    : !titleFilled
+                      ? "Add a job title to draft questions from"
+                      : "Suggestions are drafts — read each one before you post"}
+                </p>
+              )}
+
+              {questions.length === 0 ? (
+                <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
+                  No screening questions yet. Post without them, or add one below.
+                </p>
+              ) : (
+                <ol className="mt-4 space-y-4">
+                  {questions.map((question, index) => (
+                    <QuestionEditor
+                      key={question.key}
+                      question={question}
+                      index={index}
+                      total={questions.length}
+                      onChange={updateQuestion}
+                      onMove={moveQuestion}
+                      onRemove={removeQuestion}
+                    />
+                  ))}
+                </ol>
+              )}
+
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={addQuestion}
+                  disabled={questionsFull}
+                  className={`${buttonSecondary} disabled:cursor-not-allowed disabled:opacity-50`}
+                >
+                  <Icon.plus className="h-4 w-4" />
+                  Add a question
+                </button>
+                <Readout className="text-xs text-gray-500 dark:text-gray-400">
+                  {questions.length}/{MAX_QUESTIONS}
+                </Readout>
+              </div>
+
+              <p aria-live="polite" className="eyebrow mt-2 normal-case tracking-normal">
+                {questionNotice}
+              </p>
+            </section>
+
             <div className="mt-8 flex flex-col-reverse gap-3 border-t border-gray-200 pt-5 dark:border-gray-700 sm:flex-row sm:justify-end">
               <Link href="/company/dashboard" className={`${buttonSecondary} w-full sm:w-auto`}>
                 Cancel
@@ -799,6 +1504,7 @@ export default function PostJobPage() {
               <button
                 type="submit"
                 disabled={loading || !hasCompany}
+                aria-describedby={error ? "post-job-error" : undefined}
                 className={`${buttonPrimary} w-full sm:w-auto`}
               >
                 {loading ? (
@@ -815,5 +1521,245 @@ export default function PostJobPage() {
         </Card>
       </main>
     </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Local pieces                                                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One screening question, fully editable.
+ *
+ * Reordering is a pair of buttons rather than a drag handle: a drag target is
+ * unreachable by keyboard and unusable at 360px, and "move up" is the same
+ * operation with a name a screen reader can read out.
+ */
+function QuestionEditor({
+  question,
+  index,
+  total,
+  onChange,
+  onMove,
+  onRemove,
+}: {
+  question: QuestionDraft;
+  index: number;
+  total: number;
+  onChange: (key: string, patch: Partial<QuestionDraft>) => void;
+  onMove: (key: string, delta: -1 | 1) => void;
+  onRemove: (key: string) => void;
+}) {
+  const promptId = `question-prompt-${question.key}`;
+  const kindId = `question-kind-${question.key}`;
+  const expectedId = `question-expected-${question.key}`;
+  const requiredId = `question-required-${question.key}`;
+  const knockoutId = `question-knockout-${question.key}`;
+  const knockoutHintId = `question-knockout-hint-${question.key}`;
+
+  const choices = answerChoices(question);
+  const position = `${index + 1} of ${total}`;
+  const label = question.prompt.trim() || `question ${index + 1}`;
+
+  const setOption = (optionIndex: number, value: string) => {
+    const options = [...question.options];
+    options[optionIndex] = value;
+    onChange(question.key, { options });
+  };
+
+  return (
+    <li className="rounded-lg border border-gray-200 p-3 dark:border-gray-700 sm:p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Eyebrow as="span">Question {position}</Eyebrow>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => onMove(question.key, -1)}
+            disabled={index === 0}
+            aria-label={`Move ${label} up`}
+            className={`${buttonGhost} disabled:cursor-not-allowed disabled:opacity-40`}
+          >
+            <Icon.arrowRight className="h-4 w-4 -rotate-90" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onMove(question.key, 1)}
+            disabled={index === total - 1}
+            aria-label={`Move ${label} down`}
+            className={`${buttonGhost} disabled:cursor-not-allowed disabled:opacity-40`}
+          >
+            <Icon.arrowRight className="h-4 w-4 rotate-90" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onRemove(question.key)}
+            aria-label={`Remove ${label}`}
+            className={buttonGhost}
+          >
+            <Icon.trash className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-3">
+        <Label htmlFor={promptId} required>
+          Question
+        </Label>
+        <textarea
+          id={promptId}
+          value={question.prompt}
+          onChange={(event) => onChange(question.key, { prompt: event.target.value })}
+          rows={2}
+          maxLength={MAX_PROMPT_CHARS}
+          placeholder="e.g. How many years have you worked with TypeScript in production?"
+          className={inputClass}
+        />
+        <p className="mt-1.5 text-right">
+          <Readout className="text-xs text-gray-500 dark:text-gray-400">
+            {question.prompt.length}/{MAX_PROMPT_CHARS}
+          </Readout>
+        </p>
+      </div>
+
+      {question.rationale && (
+        <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+          Suggested to probe: {question.rationale}
+        </p>
+      )}
+
+      <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <Label htmlFor={kindId}>Answer type</Label>
+          <select
+            id={kindId}
+            value={question.kind}
+            onChange={(event) =>
+              onChange(question.key, { kind: event.target.value as QuestionKind })
+            }
+            className={inputClass}
+          >
+            {QUESTION_KINDS.map((kind) => (
+              <option key={kind.value} value={kind.value}>
+                {kind.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Only kinds with a closed answer set can carry an expected answer,
+            which is exactly when the server will honour a knockout. */}
+        {choices.length > 0 && (
+          <div>
+            <Label htmlFor={expectedId} hint="Optional. Needed before this can flag anyone.">
+              Answer you are looking for
+            </Label>
+            <select
+              id={expectedId}
+              value={question.expected ?? ""}
+              onChange={(event) =>
+                onChange(question.key, { expected: event.target.value || null })
+              }
+              className={inputClass}
+            >
+              <option value="">No particular answer</option>
+              {choices.map((choice) => (
+                <option key={choice} value={choice}>
+                  {choice}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+
+      {question.kind === "SINGLE_CHOICE" && (
+        <fieldset className="mt-3">
+          <legend className="eyebrow mb-2">
+            Choices · {MIN_OPTIONS}–{MAX_OPTIONS}
+          </legend>
+          <ul className="space-y-2">
+            {question.options.map((option, optionIndex) => (
+              <li key={optionIndex} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={option}
+                  onChange={(event) => setOption(optionIndex, event.target.value)}
+                  maxLength={MAX_OPTION_CHARS}
+                  aria-label={`Choice ${optionIndex + 1} for ${label}`}
+                  placeholder={`Choice ${optionIndex + 1}`}
+                  className={inputClass}
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    onChange(question.key, {
+                      options: question.options.filter((_, at) => at !== optionIndex),
+                    })
+                  }
+                  aria-label={`Remove choice ${optionIndex + 1} from ${label}`}
+                  className={buttonGhost}
+                >
+                  <Icon.x className="h-4 w-4" />
+                </button>
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            onClick={() => onChange(question.key, { options: [...question.options, ""] })}
+            disabled={question.options.length >= MAX_OPTIONS}
+            className={`${buttonGhost} mt-2 disabled:cursor-not-allowed disabled:opacity-50`}
+          >
+            <Icon.plus className="h-4 w-4" />
+            Add a choice
+          </button>
+          {cleanOptions(question.options).length < MIN_OPTIONS && (
+            <p className="eyebrow mt-1.5 normal-case tracking-normal text-amber-700 dark:text-amber-400">
+              A pick-one question needs at least {MIN_OPTIONS} choices before it can be saved.
+            </p>
+          )}
+        </fieldset>
+      )}
+
+      <div className="mt-4 space-y-2.5 border-t border-gray-200 pt-3 dark:border-gray-700">
+        <label htmlFor={requiredId} className="flex items-center gap-2.5 text-sm">
+          <input
+            type="checkbox"
+            id={requiredId}
+            checked={question.required}
+            onChange={(event) => onChange(question.key, { required: event.target.checked })}
+            className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800"
+          />
+          <span className="text-gray-700 dark:text-gray-200">Applicants must answer this</span>
+        </label>
+
+        <div>
+          <label htmlFor={knockoutId} className="flex items-center gap-2.5 text-sm">
+            <input
+              type="checkbox"
+              id={knockoutId}
+              checked={question.knockout}
+              disabled={question.expected === null}
+              onChange={(event) => onChange(question.key, { knockout: event.target.checked })}
+              aria-describedby={knockoutHintId}
+              className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800"
+            />
+            <span className="text-gray-700 dark:text-gray-200">
+              Flag applicants who answer differently
+            </span>
+          </label>
+          {/* Said plainly, because the word "knockout" implies otherwise: this
+              marks an application, it does not reject or hide one. */}
+          <p
+            id={knockoutHintId}
+            className="mt-1 pl-7 text-xs leading-relaxed text-gray-500 dark:text-gray-400"
+          >
+            {question.expected === null
+              ? "Choose the answer you are looking for first — there is nothing to compare against yet."
+              : `Applications that do not answer “${question.expected}” are marked for your attention. They still arrive in your queue, and nobody is filtered out on your behalf.`}
+          </p>
+        </div>
+      </div>
+    </li>
   );
 }

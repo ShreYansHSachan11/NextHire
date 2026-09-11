@@ -128,6 +128,10 @@ export const Icon = {
   /** Activity/pulse line, used beside a match score. */
   pulse: make(<path {...stroke} d="M3 12h3.5L9 5l4 14 2.6-7H21" />),
   filter: make(<path {...stroke} d="M4 5h16M7 12h10M10 19h4" />),
+  /** Saved searches and job alerts. */
+  bookmark: make(<path {...stroke} d="M6 5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16l-6-4-6 4V5Z" />),
+  /** Hamburger, so the navbar stops hand-rolling its own SVG. */
+  menu: make(<path {...stroke} d="M4 7h16M4 12h16M4 17h16" />),
 };
 
 /* -------------------------------------------------------------------------- */
@@ -188,18 +192,25 @@ export function CardHeader({
   description,
   eyebrow,
   action,
+  /** Lets a page keep a sane h1 → h2 → h3 order without restyling the header. */
+  headingLevel = 2,
 }: {
   title: string;
   description?: string;
   eyebrow?: string;
   action?: React.ReactNode;
+  headingLevel?: 2 | 3 | 4;
 }) {
+  const Heading = `h${headingLevel}` as const;
+
   return (
     <div className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-200 px-4 py-4 dark:border-gray-700 sm:px-6">
       <div className="min-w-0">
         {eyebrow && <Eyebrow className="mb-1.5">{eyebrow}</Eyebrow>}
-        <h2 className="text-base font-semibold text-gray-900 dark:text-white sm:text-lg">{title}</h2>
-        {description && <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{description}</p>}
+        <Heading className="text-base font-semibold text-gray-900 dark:text-white sm:text-lg">
+          {title}
+        </Heading>
+        {description && <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{description}</p>}
       </div>
       {action && <div className="flex-shrink-0">{action}</div>}
     </div>
@@ -219,6 +230,7 @@ export function SignalPanel({
   valueLabel,
   bars,
   className = "",
+  headingLevel = 3,
 }: {
   title: string;
   detail?: string;
@@ -228,8 +240,11 @@ export function SignalPanel({
   /** 0–1 heights for the sparkline. Falls back to a fixed, calm pattern. */
   bars?: number[];
   className?: string;
+  /** The panel often sits directly under an h1, where an h3 would skip a level. */
+  headingLevel?: 2 | 3 | 4;
 }) {
   const series = bars ?? [0.35, 0.5, 0.42, 0.68, 0.55, 0.82, 0.7, 0.95, 0.6];
+  const Heading = `h${headingLevel}` as const;
 
   return (
     <div className={`panel grid-field flex flex-wrap items-center gap-4 p-3 sm:p-4 ${className}`}>
@@ -240,10 +255,10 @@ export function SignalPanel({
 
       <div className="min-w-[12rem] flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{title}</h3>
+          <Heading className="text-sm font-semibold text-gray-900 dark:text-white">{title}</Heading>
           {live && <Eyebrow as="span" accent>LIVE</Eyebrow>}
         </div>
-        {detail && <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 sm:text-sm">{detail}</p>}
+        {detail && <p className="mt-0.5 text-xs text-gray-600 dark:text-gray-400 sm:text-sm">{detail}</p>}
       </div>
 
       {(value || bars) && (
@@ -273,15 +288,48 @@ export function SignalPanel({
 /* Feedback                                                                    */
 /* -------------------------------------------------------------------------- */
 
-export function Spinner({ className = "h-8 w-8", label }: { className?: string; label?: string }) {
+export function Spinner({
+  className = "h-8 w-8",
+  label,
+  /**
+   * Drops the `role="status"` wrapper and the text. For a spinner inside a
+   * control that already announces itself (a button with `aria-busy`), the
+   * extra live region just says "Loading" over the top of the real label.
+   */
+  decorative = false,
+}: {
+  className?: string;
+  label?: string;
+  decorative?: boolean;
+}) {
+  const circle = (
+    <span
+      className={`inline-block rounded-full border-2 border-gray-300 border-t-green-500 motion-safe:animate-spin dark:border-gray-700 dark:border-t-green-400 ${className}`}
+      aria-hidden="true"
+    />
+  );
+
+  if (decorative) return circle;
+
   return (
     <span className="inline-flex flex-col items-center gap-2" role="status">
-      <span
-        className={`inline-block animate-spin rounded-full border-2 border-gray-300 border-t-green-500 dark:border-gray-700 dark:border-t-green-400 ${className}`}
-        aria-hidden="true"
-      />
+      {circle}
       <span className={label ? "eyebrow" : "sr-only"}>{label ?? "Loading"}</span>
     </span>
+  );
+}
+
+/**
+ * Placeholder block for content that has not arrived yet. Sized by the caller;
+ * inert to assistive tech, so pair it with an `sr-only` "Loading …" where the
+ * wait is worth announcing.
+ */
+export function Skeleton({ className = "h-4 w-full" }: { className?: string }) {
+  return (
+    <span
+      className={`block rounded bg-gray-200 motion-safe:animate-pulse dark:bg-gray-700 ${className}`}
+      aria-hidden="true"
+    />
   );
 }
 
@@ -295,8 +343,10 @@ export function Alert({
   className?: string;
 }) {
   const styles = {
+    // Every variant's dark rule steps one stop lighter than its light rule;
+    // error was the odd one out at -500 and read as a darker, muddier bar.
     error:
-      "border-l-red-500 bg-red-50 text-red-900 dark:bg-red-950/40 dark:text-red-100 dark:border-l-red-500",
+      "border-l-red-500 bg-red-50 text-red-900 dark:bg-red-950/40 dark:text-red-100 dark:border-l-red-400",
     success:
       "border-l-green-500 bg-green-50 text-green-900 dark:bg-green-950/40 dark:text-green-100 dark:border-l-green-400",
     info: "border-l-blue-500 bg-blue-50 text-blue-900 dark:bg-blue-950/40 dark:text-blue-100 dark:border-l-blue-400",
@@ -337,12 +387,12 @@ export function EmptyState({
 }) {
   return (
     <div className="grid-field px-6 py-14 text-center">
-      <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-500">
+      <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
         {icon ?? <Icon.document className="h-6 w-6" />}
       </div>
       <h3 className="mb-2 text-base font-semibold text-gray-900 dark:text-white">{title}</h3>
       {description && (
-        <p className="mx-auto mb-5 max-w-sm text-sm text-gray-500 dark:text-gray-400">{description}</p>
+        <p className="mx-auto mb-5 max-w-sm text-sm text-gray-600 dark:text-gray-400">{description}</p>
       )}
       {action}
     </div>
@@ -381,7 +431,10 @@ export function Meter({
       aria-valuenow={Math.round(pct)}
       aria-valuemin={0}
       aria-valuemax={100}
-      aria-label={label}
+      // A progressbar with no accessible name is announced as an anonymous
+      // "progress bar"; callers that pass no label at least get a generic one.
+      aria-label={label ?? "Progress"}
+      aria-valuetext={`${Math.round(pct)}%`}
     >
       <span
         className={`meter-fill ${strong ? "" : "meter-fill-muted"}`}
@@ -475,6 +528,13 @@ const STATUS_STYLES: Record<string, string> = {
     "border-gray-300 bg-gray-100 text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400",
 };
 
+/**
+ * Shared by both badges below. They had drifted to separate copies of the same
+ * string, so a change to one silently left the other behind.
+ */
+const BADGE_BASE =
+  "mono inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-1 text-[11px] font-medium uppercase tracking-wider";
+
 const STATUS_ICONS: Record<string, React.ReactNode> = {
   PENDING: <Icon.clock className="h-3 w-3" />,
   SHORTLISTED: <Icon.checkCircle className="h-3 w-3" />,
@@ -495,9 +555,7 @@ export function StatusBadge({ status, className = "" }: { status: string; classN
     "border-gray-300 bg-gray-100 text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300";
 
   return (
-    <span
-      className={`mono inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-1 text-[11px] font-medium uppercase tracking-wider ${styles} ${className}`}
-    >
+    <span className={`${BADGE_BASE} ${styles} ${className}`}>
       {STATUS_ICONS[status] ?? null}
       <span>{label}</span>
     </span>
@@ -508,9 +566,9 @@ export function StatusBadge({ status, className = "" }: { status: string; classN
 export function JobStateBadge({ isActive }: { isActive: boolean }) {
   return (
     <span
-      className={`mono inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-1 text-[11px] font-medium uppercase tracking-wider ${
+      className={`${BADGE_BASE} ${
         isActive
-          ? "border-green-300 bg-green-50 text-green-700 dark:border-green-700 dark:bg-green-950/40 dark:text-green-300"
+          ? "border-green-300 bg-green-50 text-green-800 dark:border-green-700 dark:bg-green-950/40 dark:text-green-200"
           : "border-gray-300 bg-gray-100 text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400"
       }`}
     >
@@ -561,7 +619,7 @@ export function StatCard({
         </span>
       </div>
       <Readout className="mt-3 block text-2xl font-semibold leading-none">{value}</Readout>
-      {hint && <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">{hint}</p>}
+      {hint && <p className="mt-1.5 text-xs text-gray-600 dark:text-gray-400">{hint}</p>}
     </div>
   );
 }
@@ -586,7 +644,7 @@ export function PageHeading({
         {eyebrow && <Eyebrow className="mb-2">{eyebrow}</Eyebrow>}
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white sm:text-3xl">{title}</h1>
         {description && (
-          <p className="mt-2 max-w-2xl text-sm text-gray-500 dark:text-gray-400 sm:text-base">
+          <p className="mt-2 max-w-2xl text-sm text-gray-600 dark:text-gray-400 sm:text-base">
             {description}
           </p>
         )}
@@ -642,7 +700,7 @@ export function Label({
         )}
         {required && <span className="sr-only"> (required)</span>}
       </span>
-      {hint && <span className="mt-1 block text-xs normal-case tracking-normal text-gray-500 dark:text-gray-400">{hint}</span>}
+      {hint && <span className="mt-1 block text-xs normal-case tracking-normal text-gray-600 dark:text-gray-400">{hint}</span>}
     </label>
   );
 }
@@ -658,12 +716,71 @@ export const buttonPrimary = "btn-ink btn-touch";
 
 export const buttonSecondary = "btn-outline btn-touch";
 
-export const buttonDanger =
-  "inline-flex items-center justify-center gap-2 rounded-lg border border-red-300 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-950/70 btn-touch";
+/**
+ * Danger and ghost used to be long utility strings while primary and secondary
+ * were component classes — which is how the two of them ended up with a
+ * disabled state that each call site had to remember to append. They are
+ * component classes now (`.btn-danger` / `.btn-ghost` in globals.css), so
+ * disabled, hover and `aria-busy` behaviour is part of the primitive. The
+ * exported names and their `string` type are unchanged.
+ */
+export const buttonDanger = "btn-danger btn-touch";
 
 /** Quiet, borderless action for inline links inside cards. */
-export const buttonGhost =
-  "inline-flex items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white";
+export const buttonGhost = "btn-ghost";
+
+/** One size up, for hero and closing-CTA button pairs. */
+export const buttonLarge = "btn-lg";
+
+type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
+
+const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
+  primary: buttonPrimary,
+  secondary: buttonSecondary,
+  danger: buttonDanger,
+  ghost: buttonGhost,
+};
+
+/**
+ * The button primitive, for the common case of an action that can be pending.
+ * The class constants above stay exported for `<Link>` and for anything that
+ * needs the bare string; this exists so that "disabled while submitting, with a
+ * spinner, without the layout jumping" is one prop rather than six lines of JSX
+ * re-written on every page.
+ */
+export function Button({
+  variant = "primary",
+  loading = false,
+  loadingLabel = "Working",
+  icon,
+  className = "",
+  children,
+  disabled,
+  type = "button",
+  ...rest
+}: Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "children"> & {
+  variant?: ButtonVariant;
+  /** Disables the control and swaps `icon` for a spinner. */
+  loading?: boolean;
+  /** What a screen reader hears while `loading` is true. */
+  loadingLabel?: string;
+  icon?: React.ReactNode;
+  children?: React.ReactNode;
+}) {
+  return (
+    <button
+      {...rest}
+      type={type}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
+      className={`${BUTTON_VARIANTS[variant]} ${className}`}
+    >
+      {loading ? <Spinner className="h-4 w-4" decorative /> : icon}
+      {children}
+      {loading && <span className="sr-only">{loadingLabel}</span>}
+    </button>
+  );
+}
 
 /* -------------------------------------------------------------------------- */
 /* Formatting                                                                  */
