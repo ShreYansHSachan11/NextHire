@@ -236,19 +236,3 @@ export async function getActiveJobVectors(): Promise<CachedJobVector[]> {
 export function invalidateJobVectorCache(): void {
   globalForCache.nextHireJobVectors = null;
 }
-
-/** Cache state, for diagnostics on the re-index/health route. */
-export function jobVectorCacheStatus(): {
-  size: number;
-  ageMs: number | null;
-  truncated: boolean;
-  limit: number;
-} {
-  const cached = globalForCache.nextHireJobVectors;
-  return {
-    size: cached?.rows.length ?? 0,
-    ageMs: cached ? Date.now() - cached.loadedAt : null,
-    truncated: cached?.truncated ?? false,
-    limit: JOB_VECTOR_CACHE_LIMIT,
-  };
-}

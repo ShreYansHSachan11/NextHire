@@ -213,7 +213,14 @@ export default function Home() {
                 live
                 headingLevel={2}
                 title="Live role graph"
-                detail={`${ready.jobs.toLocaleString()} open roles mapped across ${ready.companies.toLocaleString()} companies.`}
+                // `formatCount` on both halves: the sentence and the readout
+                // beside it are the same figure, and they used to disagree
+                // above a thousand ("1,200 open roles" next to "1.2k").
+                // `toLocaleString()` with no locale also follows the visitor's
+                // runtime, while the readout is hard-coded English either way.
+                detail={`${formatCount(ready.jobs)} open roles mapped across ${formatCount(
+                  ready.companies
+                )} companies.`}
                 value={formatCount(ready.jobs)}
                 valueLabel="OPEN ROLES"
               />
@@ -520,8 +527,13 @@ export default function Home() {
           </div>
 
           <div className="mt-10 border-t border-gray-200 pt-6 dark:border-gray-700">
+            {/* The year is read from the clock, and the server's clock and the
+                browser's disagree either side of midnight on 31 December —
+                React then throws away the server HTML for this subtree. Behind
+                the same `mounted` gate the rest of the page already uses for
+                client-only values; the server renders the name alone. */}
             <p className="mono text-xs text-gray-600 dark:text-gray-400">
-              &copy; {new Date().getFullYear()} NEXTHIRE — ALL RIGHTS RESERVED
+              &copy; {mounted ? `${new Date().getFullYear()} ` : ""}NEXTHIRE — ALL RIGHTS RESERVED
             </p>
           </div>
         </div>

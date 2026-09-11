@@ -924,7 +924,11 @@ export default function SeekerDashboardPage() {
               />
             ) : visibleApplications.length === 0 ? (
               <EmptyState
-                title={`No ${STATUS_LABELS[statusFilter as ApplicationStatus].toLowerCase()} applications`}
+                // `FILTER_LABELS` is total over `StatusFilter`; `STATUS_LABELS`
+                // is not, and the cast was hiding `undefined.toLowerCase()` for
+                // the "ALL" case. Unreachable today only because of the branch
+                // above it — one more filter state and it would be a crash.
+                title={`No ${FILTER_LABELS[statusFilter].toLowerCase()} applications`}
                 description="Try a different status filter to see the rest of your applications."
                 action={
                   <button type="button" onClick={() => setStatusFilter("ALL")} className={buttonSecondary}>

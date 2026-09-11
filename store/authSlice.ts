@@ -19,18 +19,27 @@ export interface AuthUser {
 
 interface AuthState {
   user: AuthUser | null;
-  token: string | null;
   isAuthenticated: boolean;
 }
 
+/**
+ * `token` is accepted and deliberately dropped.
+ *
+ * The cookie is the only store of the JWT: every caller writes it there with
+ * `setToken`, `authHeaders()` reads it back for every fetch, and
+ * `AuthRehydrator` decodes it there on a hard navigation. Nothing ever read it
+ * off this slice — so a second copy, in a store any component can select from
+ * and the Redux devtools print in full, bought nothing and widened the surface
+ * the JWT sits on. It stays in the payload because both callers do hold one;
+ * this is simply where it stops.
+ */
 interface LoginPayload {
   user: AuthUser;
-  token: string;
+  token?: string | null;
 }
 
 const initialState: AuthState = {
   user: null,
-  token: null,
   isAuthenticated: false,
 };
 
@@ -40,28 +49,25 @@ const authSlice = createSlice({
   reducers: {
     login(state, action: PayloadAction<LoginPayload>) {
       state.user = action.payload.user;
-      state.token = action.payload.token;
       state.isAuthenticated = true;
     },
     logout(state) {
       state.user = null;
-      state.token = null;
       state.isAuthenticated = false;
     },
     /**
      * Merges updated profile fields into the current user.
      *
-     * Accepts an optional `token`: the API re-issues the JWT whenever a change
-     * affects the name or company name, and without storing it here the stale
-     * one keeps winning on the next rehydrate.
+     * The API re-issues the JWT whenever a change touches the name or company
+     * name, and both edit pages hand that straight to `setToken` before
+     * dispatching. `token` is still named in the payload so that spreading a
+     * response object here cannot smuggle a JWT onto `AuthUser` as a stray
+     * field — it is pulled out of `fields` and discarded, never stored.
      */
     updateProfile(state, action: PayloadAction<Partial<AuthUser> & { token?: string | null }>) {
-      const { token, ...fields } = action.payload;
+      const { token: _token, ...fields } = action.payload;
       if (state.user) {
         state.user = { ...state.user, ...fields };
-      }
-      if (token) {
-        state.token = token;
       }
     },
   },

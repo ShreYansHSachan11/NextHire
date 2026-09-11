@@ -60,11 +60,55 @@ interface MatchBreakdown {
   missingSkills: string[];
 }
 
+/**
+ * One screening answer, joined to the question it answers.
+ *
+ * `knockout` and `expected` are the answer key, and `GET /api/applications`
+ * only attaches them on the employer branch — the same rule
+ * `GET /api/jobs/:jobId/questions` applies. They are here so the employer can
+ * see *why* an answer is flagged; they are never sent to the applicant.
+ */
+interface ScreeningAnswer {
+  id: string;
+  value: string;
+  question: {
+    id: string;
+    prompt: string;
+    kind: string;
+    options: string[];
+    required: boolean;
+    knockout: boolean;
+    expected: string | null;
+    position: number;
+  };
+}
+
+/**
+ * Whether an answer disagrees with the one the employer said they wanted.
+ *
+ * Compared case-insensitively, and only when the question is actually a
+ * knockout with something to compare against — the questions route already
+ * refuses to store the flag without an expected answer, and this is the reading
+ * half of that same rule.
+ *
+ * The result decorates a row. It never removes one: nothing in this file
+ * filters, sorts or hides on it, because the authoring UI promises the employer
+ * that a knockout "marks an application, it does not reject or hide one", and
+ * that promise is only kept here.
+ */
+function isKnockoutMiss(answer: ScreeningAnswer): boolean {
+  const { knockout, expected } = answer.question;
+  if (!knockout || !expected) return false;
+  return answer.value.trim().toLowerCase() !== expected.trim().toLowerCase();
+}
+
 interface Application {
   id: string;
   status: string;
   message?: string | null;
   createdAt: string;
+  /** Ordered by the question's position. Absent on a posting that asks nothing. */
+  answers?: ScreeningAnswer[];
   /** The fit frozen when this person applied. Always present on the row. */
   matchScore?: number | null;
   /** Only ever populated by `?rank=fit&jobId=…` — a live score against one posting. */
@@ -847,11 +891,16 @@ function ApplicationRow({
 }) {
   const resume = application.user.resumes?.[0];
   const [showBreakdown, setShowBreakdown] = useState(false);
+  const [showAnswers, setShowAnswers] = useState(false);
 
   const match = application.match ?? null;
   const storedScore = typeof application.matchScore === "number" ? application.matchScore : null;
   const sharedSkills = match?.sharedSkills ?? [];
   const breakdownId = `fit-breakdown-${application.id}`;
+
+  const answers = application.answers ?? [];
+  const flaggedAnswers = answers.filter(isKnockoutMiss);
+  const answersId = `screening-answers-${application.id}`;
 
   return (
     <li className="px-4 py-4 sm:px-6 sm:py-5">
@@ -912,6 +961,34 @@ function ApplicationRow({
                 >
                   <Icon.graph className="h-4 w-4" />
                   {showBreakdown ? "Hide breakdown" : "How this was scored"}
+                </button>
+              </div>
+            )}
+
+            {/* The flag sits on the row, not behind the toggle: an employer
+                scanning the queue has to be able to see that something wants
+                their attention without opening every application. */}
+            {answers.length > 0 && (
+              <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                {flaggedAnswers.length > 0 && (
+                  <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                    <Icon.warning className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
+                    {flaggedAnswers.length === 1
+                      ? "1 screening answer to look at"
+                      : `${flaggedAnswers.length} screening answers to look at`}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowAnswers((open) => !open)}
+                  aria-expanded={showAnswers}
+                  aria-controls={answersId}
+                  className={buttonGhost}
+                >
+                  <Icon.document className="h-4 w-4" />
+                  {showAnswers
+                    ? "Hide screening answers"
+                    : `Screening answers · ${answers.length}`}
                 </button>
               </div>
             )}
@@ -1037,6 +1114,59 @@ function ApplicationRow({
             <p className="mt-5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
               Computed from this posting and the candidate&rsquo;s profile. A gap here is
               something to ask about in a screen, not a reason to pass.
+            </p>
+          </Card>
+        </div>
+      )}
+
+      {/* Kept in the tree while collapsed, like the breakdown above: so
+          `aria-controls` always points at a real element, and so an answer is
+          findable with the browser's own in-page search. */}
+      {answers.length > 0 && (
+        <div id={answersId} hidden={!showAnswers} className="mt-4">
+          <Card className="p-4">
+            <Eyebrow>Screening answers</Eyebrow>
+
+            {/* A description list, because that is what this is: the employer's
+                question and this person's answer to it, in the order they were
+                asked. */}
+            <dl className="mt-3 space-y-3.5">
+              {answers.map((answer) => {
+                const flagged = isKnockoutMiss(answer);
+                return (
+                  <div
+                    key={answer.id}
+                    className={`border-l-2 pl-3 ${
+                      flagged
+                        ? "border-amber-400 dark:border-amber-500"
+                        : "border-gray-200 dark:border-gray-700"
+                    }`}
+                  >
+                    <dt className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                      {answer.question.prompt}
+                    </dt>
+                    {/* Free-text answers keep their line breaks, and a long one
+                        wraps rather than pushing the row sideways. */}
+                    <dd className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-800 dark:text-gray-100">
+                      {answer.value}
+                    </dd>
+                    {flagged && (
+                      <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                        You asked for &ldquo;{answer.question.expected}&rdquo;.
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </dl>
+
+            {/* Said plainly, and in the same words the authoring form used when
+                the employer ticked the box. A flag is a prompt to read, and the
+                queue on this page is everyone who applied. */}
+            <p className="mt-4 border-t border-gray-200 pt-3 text-xs leading-relaxed text-gray-500 dark:border-gray-700 dark:text-gray-400">
+              {flaggedAnswers.length > 0
+                ? "An answer you did not ask for marks this application for your attention. Nobody has been rejected, filtered or hidden — this queue is everyone who applied, and the decision is still yours."
+                : "Answered when they applied. Questions you marked as knockouts are checked here; nothing is filtered on your behalf either way."}
             </p>
           </Card>
         </div>

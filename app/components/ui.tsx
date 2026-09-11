@@ -796,7 +796,39 @@ export function formatDate(value?: string | Date | null): string {
 export function formatTime(value: string | Date): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  // "en-US" rather than `[]`: an empty list means the runtime's own locale, so
+  // the same timestamp rendered 09:05 or 9:05 AM depending on the machine,
+  // beside a `formatDate` that was pinned to English all along.
+  return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+}
+
+/**
+ * "Today" / "Yesterday" / a written date, for the day separators in a message
+ * thread.
+ *
+ * Lives here rather than in either conversation page because there were two of
+ * these, one per side, and they disagreed: the company saw "Tue, Mar 4" where
+ * the seeker saw "Mar 4, 2025" on the very same message. The year is shown only
+ * when it is not the current one, so an old thread still says which year it is.
+ */
+export function dayLabel(value: string | Date): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+
+  const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString();
+  if (sameDay(date, today)) return "Today";
+  if (sameDay(date, yesterday)) return "Yesterday";
+
+  return date.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: date.getFullYear() === today.getFullYear() ? undefined : "numeric",
+  });
 }
 
 /** "Just now", "5m ago", "3h ago", then a date. */

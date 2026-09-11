@@ -967,7 +967,12 @@ export default function PostJobPage() {
                       Add a job title to draft from
                     </p>
                   )}
-                  {aiAvailable && titleFilled && !descriptionFilled && (
+                  {/* Not gated on `titleFilled` as well: the button above is
+                      `aria-describedby` this, and with both conditions the hint
+                      was absent in the empty state — exactly where a disabled
+                      control most needs to say why. Each hint now renders on
+                      precisely the condition that disables its own button. */}
+                  {aiAvailable && !descriptionFilled && (
                     <p id="ai-review-hint" className="eyebrow mb-2">
                       Write a description to check it
                     </p>

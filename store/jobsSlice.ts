@@ -37,12 +37,10 @@ export interface Job {
 
 interface JobsState {
   jobs: Job[];
-  selectedJob: Job | null;
 }
 
 const initialState: JobsState = {
   jobs: [],
-  selectedJob: null,
 };
 
 const jobsSlice = createSlice({
@@ -52,11 +50,8 @@ const jobsSlice = createSlice({
     setJobs(state, action: PayloadAction<Job[]>) {
       state.jobs = action.payload;
     },
-    selectJob(state, action: PayloadAction<Job | null>) {
-      state.selectedJob = action.payload;
-    },
   },
 });
 
-export const { setJobs, selectJob } = jobsSlice.actions;
+export const { setJobs } = jobsSlice.actions;
 export default jobsSlice.reducer;

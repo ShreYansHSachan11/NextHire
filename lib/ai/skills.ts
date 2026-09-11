@@ -22,7 +22,7 @@ import { cosineSimilarity } from './vector';
  *
  *   1. An alias table — static, free, synchronous, catches the large majority.
  *   2. Canonical form on the way in, so both sides of a comparison already
- *      agree before anything is compared (`canonicalSkillList`).
+ *      agree before anything is compared (`canonicalSkill`, `skillLabel`).
  *   3. Embedding similarity for whatever survives 1 and 2 — `GraphQL` vs
  *      `Apollo` is a real partial match no alias table will ever hold.
  *
@@ -372,32 +372,6 @@ export function skillLabel(tag: string): string {
   const key = canonicalSkill(tag);
   if (!key) return '';
   return LABEL_BY_KEY.get(key) ?? cleanString(tag, MAX_SKILL_LENGTH) ?? key;
-}
-
-/* -------------------------------------------------------------------------- */
-/* Layer 2 — canonical storage                                                 */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Canonicalises a list of tags for storage, de-duplicating on the canonical key
- * so `React` and `ReactJS` on one profile collapse to a single entry.
- *
- * This is layer 2: run it on the way in — after `cleanTagList`, which does the
- * untrusted-input work — and both sides of every later comparison already agree
- * without anything having to be computed at read time.
- */
-export function canonicalSkillList(tags: string[]): string[] {
-  const seen = new Set<string>();
-  const result: string[] = [];
-
-  for (const tag of tags ?? []) {
-    const key = canonicalSkill(tag);
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    result.push(skillLabel(tag));
-  }
-
-  return result;
 }
 
 /* -------------------------------------------------------------------------- */

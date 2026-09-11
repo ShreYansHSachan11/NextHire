@@ -4,7 +4,7 @@ import { cleanString } from '@/lib/validation';
 import { TEXT_MODEL, isAiEnabled } from './config';
 import { contentHash } from './documents';
 import { generateJson } from './gemini';
-import { computeMatch, loadProfileContext, type MatchBreakdown } from './matching';
+import { computeMatchAsync, loadProfileContext, type MatchBreakdown } from './matching';
 
 /**
  * One grounded sentence explaining why a seeker matches a posting.
@@ -195,7 +195,16 @@ export async function explainMatch(userId: string, jobId: string): Promise<Expla
 
   if (!profile || !job) return { status: 'no-match' };
 
-  const match = computeMatch(profile, {
+  // `computeMatchAsync`, not `computeMatch`, because `GET /api/jobs/:jobId` —
+  // the route that produces the number this sentence is printed beside — uses
+  // the async one. The two differ in the skill layer: the sync version stops at
+  // the alias table, the async one adds the embedding fallback. Scoring with
+  // the cheaper of the two here made the sentence disagree with the meters next
+  // to it (observed: a breakdown listing Kubernetes as matched, under prose
+  // saying the profile does not list it), which is the exact failure this whole
+  // module exists to prevent. This is a single pair, which is the case the
+  // async variant is documented for.
+  const match = await computeMatchAsync(profile, {
     vector: job.embedding?.vector ?? null,
     skills: job.skills ?? [],
     location: job.location,

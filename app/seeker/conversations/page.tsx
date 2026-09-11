@@ -26,7 +26,7 @@ import {
   Readout,
   Spinner,
   buttonPrimary,
-  formatDate,
+  dayLabel,
   formatRelative,
   formatTime,
 } from "@/app/components/ui";
@@ -74,19 +74,6 @@ interface Conversation {
 function mergeMessage(existing: Message[], incoming: Message): Message[] {
   if (existing.some((message) => message.id === incoming.id)) return existing;
   return [...existing, incoming];
-}
-
-/** "Today" / "Yesterday" / a date, for the day separators in the thread. */
-function dayLabel(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
-  const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString();
-  if (sameDay(date, today)) return "Today";
-  if (sameDay(date, yesterday)) return "Yesterday";
-  return formatDate(date);
 }
 
 interface DayGroup {

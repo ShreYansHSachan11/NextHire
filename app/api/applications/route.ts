@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Prisma } from '@prisma/client';
+import { Prisma, type $Enums } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import {
   canActAs,
@@ -11,7 +11,7 @@ import {
   serverError,
   isUuid,
 } from '@/lib/auth';
-import { cleanText, isApplicationStatus, STATUS_LABELS } from '@/lib/validation';
+import { cleanString, cleanText, isApplicationStatus, STATUS_LABELS } from '@/lib/validation';
 import {
   computeMatchAsync,
   loadProfileContext,
@@ -54,6 +54,192 @@ const APPLICANT_INCLUDE = {
     },
   },
 } as const;
+
+/**
+ * The screening answers, joined to the question each one answers.
+ *
+ * Only ever spread onto the employer's view. `knockout` and `expected` are the
+ * answer key — `GET /api/jobs/:jobId/questions` already withholds both from
+ * anyone who does not own the posting, and handing them back on the applicant's
+ * own application row would publish the key to the person being screened.
+ *
+ * Ordered by the question's position rather than by when the answer was
+ * written, so the employer reads the set back in the order they authored it.
+ */
+const SCREENING_INCLUDE = {
+  answers: {
+    orderBy: { question: { position: 'asc' } },
+    select: {
+      id: true,
+      value: true,
+      question: {
+        select: {
+          id: true,
+          prompt: true,
+          kind: true,
+          options: true,
+          required: true,
+          knockout: true,
+          expected: true,
+          position: true,
+        },
+      },
+    },
+  },
+} as const;
+
+/** The applicant, plus the answers only the owning company may read. */
+const EMPLOYER_INCLUDE = {
+  ...APPLICANT_INCLUDE,
+  ...SCREENING_INCLUDE,
+} as const;
+
+/* -------------------------------------------------------------------------- */
+/* Screening answers                                                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Caps on a stored answer. This route is the authority; the apply form mirrors
+ * them, the same way the posting editor mirrors the questions route.
+ *
+ * `cleanText` and `cleanString` from `lib/validation` do the actual trimming and
+ * slicing, so an answer cannot be stored in a shape the rest of the app has
+ * never had to handle. Long-form answers keep their newlines; the closed kinds
+ * are collapsed to a single line because they are compared, not read.
+ */
+const MAX_ANSWER_CHARS = 1000;
+/** The cover letter, named rather than inlined so the form has one figure to mirror. */
+const MAX_MESSAGE_CHARS = 2000;
+/** Wide enough for any figure a person could mean, narrow enough to bound the parse. */
+const MAX_NUMBER_CHARS = 24;
+
+/** The two literals a BOOLEAN answer is stored as, so a knockout can compare. */
+const BOOLEAN_ANSWERS = ['Yes', 'No'] as const;
+
+/** Exactly what answering needs to know about a question — never the answer key. */
+type ScreeningQuestion = {
+  id: string;
+  prompt: string;
+  kind: $Enums.QuestionKind;
+  options: string[];
+  required: boolean;
+};
+
+/** A prompt is up to 300 characters; an error message quoting one is not. */
+function questionLabel(question: ScreeningQuestion): string {
+  return cleanString(question.prompt, 80) ?? 'A screening question';
+}
+
+/**
+ * Normalises one answer against the kind of question it answers.
+ *
+ * An empty result means "not answered" rather than an error — the caller
+ * decides whether that is allowed, because only it knows whether the question
+ * was required. Values for the closed kinds are snapped to the stored casing so
+ * the employer's knockout comparison runs against a value the schema produced
+ * rather than whatever the applicant's keyboard did.
+ */
+function readAnswerValue(
+  question: ScreeningQuestion,
+  raw: unknown
+): { value: string } | { error: string } {
+  // A JSON client that sends 3 or true rather than "3"/"true" means the same
+  // thing; the string coercion happens here so the cleaners below see a string.
+  const stated =
+    typeof raw === 'number' || typeof raw === 'boolean' ? String(raw) : raw;
+
+  switch (question.kind) {
+    case 'BOOLEAN': {
+      const text = cleanString(stated, MAX_ANSWER_CHARS);
+      if (!text) return { value: '' };
+      const answer = BOOLEAN_ANSWERS.find((option) => option.toLowerCase() === text.toLowerCase());
+      if (!answer) return { error: `“${questionLabel(question)}” takes Yes or No` };
+      return { value: answer };
+    }
+    case 'SINGLE_CHOICE': {
+      const text = cleanString(stated, MAX_ANSWER_CHARS);
+      if (!text) return { value: '' };
+      // The options come from the posting, not from the request, so a value
+      // outside them is rejected rather than stored as a new de facto choice.
+      const choice = question.options.find((option) => option.toLowerCase() === text.toLowerCase());
+      if (!choice) return { error: `“${questionLabel(question)}” must be one of its choices` };
+      return { value: choice };
+    }
+    case 'NUMBER': {
+      const text = cleanString(stated, MAX_NUMBER_CHARS);
+      if (!text) return { value: '' };
+      const parsed = Number(text);
+      if (!Number.isFinite(parsed)) return { error: `“${questionLabel(question)}” takes a number` };
+      // Stored canonically: "007", "3.50" and "3e0" are the same answer, and the
+      // employer should not have to notice which one was typed.
+      return { value: String(parsed) };
+    }
+    default: {
+      // TEXT is the only kind a person writes freely, so it is the only one that
+      // keeps its line breaks.
+      return { value: cleanText(stated, MAX_ANSWER_CHARS) ?? '' };
+    }
+  }
+}
+
+/**
+ * Validates the whole answer set against the questions *this* job actually asks.
+ *
+ * Nothing in the body is trusted: the question set is loaded from the job being
+ * applied to, and an id that is not in it — copied from another posting, or
+ * invented — is rejected outright rather than written. `ApplicationAnswer` has
+ * no constraint that would catch that on its own: its unique key is
+ * (applicationId, questionId), and a foreign question id satisfies it perfectly.
+ */
+function readAnswers(
+  raw: unknown,
+  questions: ScreeningQuestion[]
+): { answers: { questionId: string; value: string }[] } | { error: string } {
+  if (raw !== undefined && raw !== null && !Array.isArray(raw)) {
+    return { error: 'Send `answers` as an array' };
+  }
+  const entries: unknown[] = Array.isArray(raw) ? raw : [];
+  if (entries.length > questions.length) {
+    return { error: 'That is more answers than this job asks for' };
+  }
+
+  const byId = new Map(questions.map((question) => [question.id, question]));
+  const seen = new Set<string>();
+  const values = new Map<string, string>();
+
+  for (const entry of entries) {
+    if (!entry || typeof entry !== 'object') return { error: 'One of the answers is not valid' };
+    const { questionId, value } = entry as Record<string, unknown>;
+
+    if (!isUuid(questionId)) return { error: 'One of the answers names an invalid question' };
+    const question = byId.get(questionId);
+    if (!question) return { error: 'One of the answers is not a question on this job' };
+
+    // Caught here rather than at the unique constraint: a P2002 raised mid-write
+    // is indistinguishable from the duplicate-application P2002 below it.
+    if (seen.has(question.id)) {
+      return { error: `“${questionLabel(question)}” was answered twice` };
+    }
+    seen.add(question.id);
+
+    const read = readAnswerValue(question, value);
+    if ('error' in read) return { error: read.error };
+    // Blank answers to optional questions are simply not rows. An absent answer
+    // and an empty one mean the same thing to the employer, and only one of
+    // them needs storing.
+    if (read.value) values.set(question.id, read.value);
+  }
+
+  for (const question of questions) {
+    if (question.required && !values.has(question.id)) {
+      return { error: `“${questionLabel(question)}” needs an answer` };
+    }
+  }
+
+  return {
+    answers: [...values].map(([questionId, value]) => ({ questionId, value })),
+  };
+}
 
 /**
  * GET /api/applications
@@ -129,7 +315,7 @@ export async function GET(req: NextRequest) {
 
     const applications = await prisma.application.findMany({
       where,
-      include: APPLICANT_INCLUDE,
+      include: EMPLOYER_INCLUDE,
       orderBy: { createdAt: 'desc' },
     });
 
@@ -181,7 +367,7 @@ export async function POST(req: NextRequest) {
 
   if (!isUuid(body.jobId)) return badRequest('Invalid job id');
   const jobId = body.jobId;
-  const message = cleanText(body.message, 2000);
+  const message = cleanText(body.message, MAX_MESSAGE_CHARS);
 
   try {
     const job = await prisma.job.findUnique({
@@ -197,23 +383,61 @@ export async function POST(req: NextRequest) {
         location: true,
         experience: true,
         embedding: { select: { vector: true } },
+        // The screening set is read from the job being applied to, which is what
+        // makes "does this question belong here" answerable without trusting a
+        // single field of the request. The answer key is not selected: nothing
+        // in this handler needs it, and the applicant must never see it.
+        questions: {
+          orderBy: { position: 'asc' },
+          select: { id: true, prompt: true, kind: true, options: true, required: true },
+        },
       },
     });
 
     if (!job) return notFound('Job not found');
     if (!job.isActive) return badRequest('This job is no longer accepting applications');
 
+    // Validated in full before anything is written, so a rejected answer costs
+    // the applicant a 400 rather than an application they then cannot re-submit.
+    const screening = readAnswers(body.answers, job.questions);
+    if ('error' in screening) return badRequest(screening.error);
+    const answers = screening.answers;
+
     // The applicant is always the signed-in user. The old handler took `userId`
     // from the body, which let anyone apply on somebody else's behalf.
-    const application = await prisma.application.create({
-      data: {
-        jobId: job.id,
-        userId: session.id,
-        message,
-        status: 'PENDING',
-      },
-      include: APPLICANT_INCLUDE,
-    });
+    const applicationData = {
+      jobId: job.id,
+      userId: session.id,
+      message,
+      status: 'PENDING',
+    } as const;
+
+    // The posting is the gate, not the body: a job that asks nothing takes
+    // exactly the path it always has — one insert, no transaction to open.
+    //
+    // When there are answers the two writes are one transaction, because an
+    // application whose answers half-landed is worse than no application at all:
+    // the (userId, jobId) unique means the applicant cannot simply apply again
+    // to fix it, and the employer would read a required question as unanswered.
+    const application =
+      job.questions.length === 0
+        ? await prisma.application.create({ data: applicationData, include: APPLICANT_INCLUDE })
+        : await prisma.$transaction(async (tx) => {
+            const created = await tx.application.create({
+              data: applicationData,
+              include: APPLICANT_INCLUDE,
+            });
+            if (answers.length > 0) {
+              await tx.applicationAnswer.createMany({
+                data: answers.map((answer) => ({
+                  applicationId: created.id,
+                  questionId: answer.questionId,
+                  value: answer.value,
+                })),
+              });
+            }
+            return created;
+          });
 
     // Freeze the fit at the moment of applying so it does not drift as either
     // the posting or the profile is edited. Its own try/catch: a scoring failure

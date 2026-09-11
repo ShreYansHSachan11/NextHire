@@ -118,33 +118,3 @@ export function tagOverlap(a: string[], b: string[]): number {
 function canonicalTag(tag: string): string {
   return canonicalSkill(tag);
 }
-
-/** Which tags actually appear in both sets — used to explain a match. */
-export function sharedTags(a: string[], b: string[]): string[] {
-  const right = new Map(b.map((tag) => [canonicalTag(tag), tag]));
-  const seen = new Set<string>();
-  const result: string[] = [];
-
-  for (const tag of a) {
-    const key = canonicalTag(tag);
-    if (key && right.has(key) && !seen.has(key)) {
-      seen.add(key);
-      result.push(right.get(key) ?? tag);
-    }
-  }
-
-  return result;
-}
-
-/**
- * Returns the top `limit` entries by score, descending. Kept as a partial
- * selection rather than a full sort because ranking every job in the corpus to
- * show ten of them is wasted work once the corpus is large.
- */
-export function topBy<T>(items: T[], score: (item: T) => number, limit: number): T[] {
-  return items
-    .map((item) => ({ item, value: score(item) }))
-    .sort((a, b) => b.value - a.value)
-    .slice(0, limit)
-    .map((entry) => entry.item);
-}

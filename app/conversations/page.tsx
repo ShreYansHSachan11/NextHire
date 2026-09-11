@@ -18,6 +18,7 @@ import {
   PageHeading,
   Spinner,
   buttonPrimary,
+  dayLabel,
   formatRelative,
   formatTime,
   inputClass,
@@ -97,23 +98,6 @@ function mergeMessages(existing: Message[], incoming: Message[]): Message[] {
 function dayKey(value: string): string {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "" : date.toDateString();
-}
-
-/** "Today" / "Yesterday" / a written date, for the separators between days. */
-function dayLabel(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const today = new Date();
-  const yesterday = new Date();
-  yesterday.setDate(today.getDate() - 1);
-  if (date.toDateString() === today.toDateString()) return "Today";
-  if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
-  return date.toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: date.getFullYear() === today.getFullYear() ? undefined : "numeric",
-  });
 }
 
 function groupByDay(messages: Message[]): { key: string; label: string; messages: Message[] }[] {

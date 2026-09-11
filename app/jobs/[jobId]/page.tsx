@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSelector } from "react-redux";
@@ -18,6 +18,7 @@ import {
   Meter,
   MeterRow,
   Readout,
+  Skeleton,
   Spinner,
   StatusBadge,
   buttonGhost,
@@ -29,8 +30,37 @@ import {
 import { useToast } from "@/app/components/Toast";
 import { apiFetch } from "@/lib/clientAuth";
 
-/** The cover letter the API stores; anything past this is truncated server-side. */
+/**
+ * Both caps mirror `POST /api/applications`, which is the authority: it length-
+ * caps every value it stores through `lib/validation`. Mirrored here so the box
+ * stops accepting characters the API would silently drop — the form promising
+ * more than the API keeps is a bug this codebase has shipped before.
+ */
 const MESSAGE_LIMIT = 2000;
+const ANSWER_LIMIT = 1000;
+
+/** The four answer types a posting can ask for; mirrors the `QuestionKind` enum. */
+type QuestionKind = "TEXT" | "BOOLEAN" | "SINGLE_CHOICE" | "NUMBER";
+
+/** Stored as these two literals, so the employer's knockout check can compare. */
+const BOOLEAN_ANSWERS = ["Yes", "No"] as const;
+
+/**
+ * One row of `GET /api/jobs/:jobId/questions`.
+ *
+ * The public projection deliberately carries no `knockout` or `expected`: the
+ * route strips the answer key for anyone who does not own the posting, and a
+ * published expected answer is a hint rather than a screen. Nothing here should
+ * ever start expecting those fields.
+ */
+interface ScreeningQuestion {
+  id: string;
+  prompt: string;
+  kind: QuestionKind;
+  options: string[];
+  required: boolean;
+  position: number;
+}
 
 /**
  * Mirror of `MatchBreakdown` in `lib/ai/matching.ts`.
@@ -53,6 +83,18 @@ interface MatchBreakdown {
   sharedSkills: string[];
   /** Skills the posting names that the profile does not evidence. */
   missingSkills: string[];
+}
+
+/**
+ * `POST /api/ai/explain` — one grounded sentence about the caller's own match.
+ *
+ * `score` is the score the sentence was written about, and is returned so the
+ * page can refuse to print prose about one number beside a different one; see
+ * `MatchRationale`.
+ */
+interface MatchExplanation {
+  text: string;
+  score: number;
 }
 
 interface JobApplication {
@@ -121,6 +163,24 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
   const [message, setMessage] = useState("");
   const [submitted, setSubmitted] = useState<JobApplication | null>(null);
 
+  /* -------------------------- screening questions ------------------------- */
+
+  const [questions, setQuestions] = useState<ScreeningQuestion[]>([]);
+  const [questionsLoading, setQuestionsLoading] = useState(true);
+  // Separate from `loadError`: the posting still reads perfectly without its
+  // questions, so a failure here must not replace the page with an error card.
+  const [questionsFailed, setQuestionsFailed] = useState(false);
+  /** Keyed by question id. A missing key and an empty string both mean unanswered. */
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [answerErrors, setAnswerErrors] = useState<Record<string, string>>({});
+  /**
+   * The focusable control for each question, so a failed submit lands the
+   * caret on the first thing that needs fixing rather than leaving the reader
+   * to hunt for the red text — the pattern the auth forms already use, held in
+   * a map because the field list is only known at runtime.
+   */
+  const answerFields = useRef<Record<string, HTMLElement | null>>({});
+
   // This page is public, so the first client render must match the signed-out
   // markup the server produced; Redux only rehydrates in an effect.
   const [mounted, setMounted] = useState(false);
@@ -145,9 +205,93 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
     void fetchJob();
   }, [fetchJob, user?.id]);
 
+  /**
+   * The screening set, from the public half of `GET /api/jobs/:jobId/questions`.
+   *
+   * Its own request rather than a field on the job: the endpoint is public and
+   * returns the same rows to everyone who is not the owner, so it neither needs
+   * the session nor has to be refetched when one appears. The employer authored
+   * these expecting the applicant to answer them — until now nothing ever read
+   * them back, and a `required` question was invisible to the person it was
+   * written for.
+   */
+  const fetchQuestions = useCallback(async () => {
+    try {
+      setQuestionsLoading(true);
+      setQuestionsFailed(false);
+      const data = await apiFetch<{ questions?: ScreeningQuestion[] }>(
+        `/api/jobs/${jobId}/questions`
+      );
+      const list = Array.isArray(data?.questions) ? data.questions : [];
+      // The route already orders by position; sorting again is free and keeps
+      // the numbering printed beside each prompt honest regardless.
+      setQuestions([...list].sort((a, b) => a.position - b.position));
+    } catch (err) {
+      console.error("Failed to load screening questions:", err);
+      setQuestions([]);
+      setQuestionsFailed(true);
+    } finally {
+      setQuestionsLoading(false);
+    }
+  }, [jobId]);
+
+  useEffect(() => {
+    void fetchQuestions();
+  }, [fetchQuestions]);
+
+  const setAnswer = (questionId: string, value: string) => {
+    setAnswers((current) => ({ ...current, [questionId]: value }));
+    // Clear the field's error as soon as it is touched; leaving "needs an
+    // answer" under a box that now has one is just noise.
+    setAnswerErrors((current) => {
+      if (!current[questionId]) return current;
+      const next = { ...current };
+      delete next[questionId];
+      return next;
+    });
+  };
+
+  /**
+   * The client-side half of the server's rules, and only the half a person can
+   * fix in the form. Choice and boolean values can only come from controls that
+   * offer the stored options, so the two checks worth making here are the two a
+   * free-text box can get wrong: a required question left blank, and a number
+   * field holding something that is not one.
+   */
+  const findAnswerProblems = (): Record<string, string> => {
+    const problems: Record<string, string> = {};
+    for (const question of questions) {
+      const value = (answers[question.id] ?? "").trim();
+      if (!value) {
+        if (question.required) problems[question.id] = "This question needs an answer.";
+        continue;
+      }
+      if (question.kind === "NUMBER" && !Number.isFinite(Number(value))) {
+        problems[question.id] = "Enter this as a number.";
+      }
+    }
+    return problems;
+  };
+
   const handleApply = async () => {
     if (!isAuthenticated) {
       router.push(`/auth/login?next=${encodeURIComponent(`/jobs/${jobId}`)}`);
+      return;
+    }
+
+    // Checked before the request, not instead of it: the API re-runs every one
+    // of these against the questions it loads itself, because a form is a
+    // courtesy and not a boundary.
+    const problems = findAnswerProblems();
+    setAnswerErrors(problems);
+    const firstProblem = questions.find((question) => problems[question.id]);
+    if (firstProblem) {
+      setApplyError(
+        questions.length === 1
+          ? "Answer the screening question before you apply."
+          : "Answer the screening questions before you apply."
+      );
+      answerFields.current[firstProblem.id]?.focus();
       return;
     }
 
@@ -156,16 +300,36 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
       setApplyError("");
 
       const trimmed = message.trim();
+      // Built from the question list rather than from the answer map, so nothing
+      // can be posted for a question this posting does not ask — and so blanks
+      // left in optional questions become absent answers rather than empty rows.
+      const answered = questions
+        .map((question) => ({
+          questionId: question.id,
+          value: (answers[question.id] ?? "").trim(),
+        }))
+        .filter((answer) => answer.value.length > 0);
+
       const application = await apiFetch<JobApplication>("/api/applications", {
         method: "POST",
         // No `userId`: the server takes the applicant from the session. The
         // blank field is genuinely optional now — it used to be silently
         // replaced with "I'm interested in this position".
-        body: JSON.stringify({ jobId, message: trimmed || undefined }),
+        //
+        // `answers` is presence-gated the same way: a posting with nothing to
+        // ask sends no key at all, and that request is byte-for-byte the one
+        // this page has always sent.
+        body: JSON.stringify({
+          jobId,
+          message: trimmed || undefined,
+          answers: answered.length > 0 ? answered : undefined,
+        }),
       });
 
       setSubmitted(application);
       setMessage("");
+      setAnswers({});
+      setAnswerErrors({});
       toast.success("Application submitted");
     } catch (err) {
       setApplyError(err instanceof Error ? err.message : "Failed to submit your application");
@@ -383,6 +547,43 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
                 </Alert>
               )}
 
+              {/* The employer's questions come before the cover letter: they are
+                  the part of this form that is actually asked of the applicant,
+                  and some of them have to be answered. */}
+              {questionsLoading ? (
+                <p className="mb-4">
+                  <Eyebrow as="span">Checking for screening questions…</Eyebrow>
+                </p>
+              ) : questions.length > 0 ? (
+                <ScreeningFields
+                  questions={questions}
+                  answers={answers}
+                  errors={answerErrors}
+                  disabled={applying}
+                  companyName={job.company?.name ?? "This company"}
+                  onChange={setAnswer}
+                  registerField={(questionId, element) => {
+                    answerFields.current[questionId] = element;
+                  }}
+                />
+              ) : questionsFailed ? (
+                /* Apply stays enabled. Almost no posting carries questions, and
+                   blocking every applicant on a request that failed would be a
+                   far larger regression than the one this warns about — if the
+                   posting does screen, the API rejects the application and says
+                   which question needs an answer. */
+                <Alert variant="warning" className="mb-4">
+                  <p>Couldn&rsquo;t load this role&rsquo;s screening questions.</p>
+                  <button
+                    type="button"
+                    onClick={() => void fetchQuestions()}
+                    className="mt-2 font-semibold underline"
+                  >
+                    Try again
+                  </button>
+                </Alert>
+              ) : null}
+
               <div className="mb-4">
                 <Label htmlFor="cover-letter">Cover letter (optional)</Label>
                 <textarea
@@ -423,7 +624,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
 
           {/* Sits above the fact readout: the score is about *this reader*, the
               facts below are about the role, and the personal thing goes first. */}
-          {match && <MatchPanel match={match} />}
+          {match && <MatchPanel jobId={jobId} match={match} />}
 
           {/* No score and nothing to score against. One line, no panel — an
               empty breakdown frame would be worse than none at all. */}
@@ -469,6 +670,259 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
 /* -------------------------------------------------------------------------- */
 
 /**
+ * The prompt, styled as a field label.
+ *
+ * Deliberately not `Label` from the kit: that renders the micro-caps eyebrow
+ * treatment, which is right for "Cover letter" and unreadable at three hundred
+ * characters of question. Sentence case, normal weight contrast, same margin.
+ */
+const promptClass = "mb-2 block text-sm font-medium leading-snug text-gray-900 dark:text-white";
+
+/** The required marker used by `Label`, reused so the two forms mark the same way. */
+function RequiredMark({ required }: { required: boolean }) {
+  if (!required) return null;
+  return (
+    <>
+      <span className="ml-1 text-red-500" aria-hidden="true">
+        *
+      </span>
+      <span className="sr-only"> (required)</span>
+    </>
+  );
+}
+
+/**
+ * The employer's screening questions, as the applicant's half of the form.
+ *
+ * An ordered list because the order is the employer's and is meaningful — they
+ * arranged these by `position` in the editor, and the numbering printed beside
+ * each prompt is what lets an error message ("question 2 needs an answer") mean
+ * anything on either side of the request.
+ */
+function ScreeningFields({
+  questions,
+  answers,
+  errors,
+  disabled,
+  companyName,
+  onChange,
+  registerField,
+}: {
+  questions: ScreeningQuestion[];
+  answers: Record<string, string>;
+  errors: Record<string, string>;
+  disabled: boolean;
+  companyName: string;
+  onChange: (questionId: string, value: string) => void;
+  registerField: (questionId: string, element: HTMLElement | null) => void;
+}) {
+  const total = questions.length;
+
+  return (
+    <section
+      aria-labelledby="screening-heading"
+      className="mb-5 border-b border-gray-200 pb-5 dark:border-gray-700"
+    >
+      <h3 id="screening-heading" className="eyebrow mb-1.5">
+        Screening questions
+      </h3>
+      <p className="mb-4 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+        {companyName} asks everyone who applies{" "}
+        {total === 1 ? "this question" : `these ${total} questions`}. Your answers go to them with
+        your application.
+      </p>
+
+      <ol className="space-y-5">
+        {questions.map((question, index) => (
+          <QuestionField
+            key={question.id}
+            question={question}
+            index={index}
+            total={total}
+            value={answers[question.id] ?? ""}
+            error={errors[question.id] ?? ""}
+            disabled={disabled}
+            onChange={onChange}
+            registerField={registerField}
+          />
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+/**
+ * One question, rendered as whatever its `kind` actually is.
+ *
+ * The two closed kinds are radio groups over the stored values rather than free
+ * text, which is what makes a knockout comparison meaningful: the employer
+ * chose the expected answer from the same list, so a mismatch is a real
+ * disagreement and never a difference of spelling.
+ */
+function QuestionField({
+  question,
+  index,
+  total,
+  value,
+  error,
+  disabled,
+  onChange,
+  registerField,
+}: {
+  question: ScreeningQuestion;
+  index: number;
+  total: number;
+  value: string;
+  error: string;
+  disabled: boolean;
+  onChange: (questionId: string, value: string) => void;
+  registerField: (questionId: string, element: HTMLElement | null) => void;
+}) {
+  const fieldId = `screening-${question.id}`;
+  const errorId = `${fieldId}-error`;
+  const countId = `${fieldId}-count`;
+  const legendId = `${fieldId}-legend`;
+
+  // The counter is only described when there is one to describe; an empty
+  // `aria-describedby` is still an `aria-describedby`.
+  const describedBy =
+    [error ? errorId : null, question.kind === "TEXT" ? countId : null]
+      .filter(Boolean)
+      .join(" ") || undefined;
+  // `undefined` rather than `false`: an explicit aria-invalid="false" on every
+  // untouched field is noise in the accessibility tree.
+  const invalid = error ? true : undefined;
+
+  const choices =
+    question.kind === "BOOLEAN"
+      ? [...BOOLEAN_ANSWERS]
+      : question.kind === "SINGLE_CHOICE"
+        ? question.options
+        : [];
+
+  const marker = (
+    <Eyebrow as="span" className="mb-1.5 block">
+      Question {index + 1} of {total}
+      {question.required ? "" : " · optional"}
+    </Eyebrow>
+  );
+
+  return (
+    <li className="min-w-0">
+      {marker}
+
+      {choices.length > 0 ? (
+        /* `aria-invalid` belongs on the group, not on each radio: a single
+           option is not individually invalid, and the role does not support the
+           attribute anyway. `aria-labelledby` is explicit rather than relying
+           on the legend, because the overridden role can cost a fieldset its
+           native naming. */
+        <fieldset
+          className="min-w-0"
+          role="radiogroup"
+          aria-labelledby={legendId}
+          aria-describedby={describedBy}
+          aria-invalid={invalid}
+        >
+          <legend id={legendId} className={promptClass}>
+            {question.prompt}
+            <RequiredMark required={question.required} />
+          </legend>
+          <div className="space-y-2">
+            {choices.map((choice, choiceIndex) => {
+              const optionId = `${fieldId}-${choiceIndex}`;
+              return (
+                <label
+                  key={choice}
+                  htmlFor={optionId}
+                  className="flex items-start gap-2.5 text-sm text-gray-700 dark:text-gray-200"
+                >
+                  <input
+                    type="radio"
+                    id={optionId}
+                    // One `name` per question, so arrow keys move within the
+                    // group and never across into the next question's.
+                    name={fieldId}
+                    value={choice}
+                    checked={value === choice}
+                    disabled={disabled}
+                    onChange={() => onChange(question.id, choice)}
+                    // Only the first option is registered: focus belongs on the
+                    // group, and that is where the browser puts it.
+                    ref={
+                      choiceIndex === 0
+                        ? (element) => {
+                            registerField(question.id, element);
+                          }
+                        : undefined
+                    }
+                    className="mt-0.5 h-4 w-4 flex-shrink-0 border-gray-300 text-green-600 focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800"
+                  />
+                  <span className="min-w-0 break-words">{choice}</span>
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+      ) : question.kind === "NUMBER" ? (
+        <>
+          <label htmlFor={fieldId} className={promptClass}>
+            {question.prompt}
+            <RequiredMark required={question.required} />
+          </label>
+          <input
+            id={fieldId}
+            type="number"
+            // `decimal` rather than `numeric`: "2.5 years" is a plausible answer
+            // and a keypad without a decimal point cannot type it.
+            inputMode="decimal"
+            value={value}
+            disabled={disabled}
+            aria-invalid={invalid}
+            aria-describedby={describedBy}
+            onChange={(event) => onChange(question.id, event.target.value)}
+            ref={(element) => {
+              registerField(question.id, element);
+            }}
+            className={`${inputClass} text-sm`}
+          />
+        </>
+      ) : (
+        <>
+          <label htmlFor={fieldId} className={promptClass}>
+            {question.prompt}
+            <RequiredMark required={question.required} />
+          </label>
+          <textarea
+            id={fieldId}
+            value={value}
+            rows={3}
+            maxLength={ANSWER_LIMIT}
+            disabled={disabled}
+            aria-invalid={invalid}
+            aria-describedby={describedBy}
+            onChange={(event) => onChange(question.id, event.target.value)}
+            ref={(element) => {
+              registerField(question.id, element);
+            }}
+            className={`${inputClass} resize-y text-sm`}
+          />
+          <p id={countId} className="eyebrow mt-1.5 text-right">
+            {value.length} / {ANSWER_LIMIT}
+          </p>
+        </>
+      )}
+
+      {error && (
+        <p id={errorId} className="mt-1.5 text-xs font-medium text-red-600 dark:text-red-400">
+          {error}
+        </p>
+      )}
+    </li>
+  );
+}
+
+/**
  * The match breakdown.
  *
  * The point of showing all four facets rather than one number is that "78%"
@@ -476,7 +930,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
  * overlap is thin" in a way they cannot act on a composite. Rendered only when
  * a breakdown actually exists; there is no zero state here by design.
  */
-function MatchPanel({ match }: { match: MatchBreakdown }) {
+function MatchPanel({ jobId, match }: { jobId: string; match: MatchBreakdown }) {
   return (
     <Card grid className="p-4 sm:p-5">
       <div className="mb-4 flex items-start justify-between gap-3">
@@ -497,6 +951,11 @@ function MatchPanel({ match }: { match: MatchBreakdown }) {
           Signal v1
         </Eyebrow>
       </div>
+
+      {/* Prose first: a sentence is what a person reads, and the meters below
+          are the receipts for it. Renders nothing at all when there is no
+          sentence to show — see `MatchRationale`. */}
+      <MatchRationale jobId={jobId} score={match.score} />
 
       {/* Headline: the composite, as digits and as bar length. */}
       <div className="mb-5 border-b border-gray-200 pb-4 dark:border-gray-700">
@@ -566,6 +1025,89 @@ function MatchPanel({ match }: { match: MatchBreakdown }) {
         to spend your time, not a decision — the company reads every application it receives.
       </p>
     </Card>
+  );
+}
+
+/**
+ * The one-sentence rationale behind the number, from `POST /api/ai/explain`.
+ *
+ * Fetched from inside the panel rather than with the job, for two reasons. A
+ * cache miss spends a generation call, so it must only happen where a reader
+ * has actually opened a role — never once per card in the feed. And the page
+ * has to paint without waiting on it, the same way `SimilarRoles` does.
+ *
+ * Every unhappy path is silence: 503 when Gemini is unconfigured, 502 when the
+ * model returned nothing usable, 404 when there is no match to explain. None of
+ * those is the reader's problem, and an error card next to their match score
+ * would read as a problem with *them*. The meters below stand on their own.
+ *
+ * `score` is the number this panel is printing. The route recomputes the match
+ * server-side, so if the two disagree the profile moved between the two
+ * requests and the sentence is about a score that is no longer on screen —
+ * which is the one thing this feature exists to make impossible. Drop it.
+ */
+function MatchRationale({ jobId, score }: { jobId: string; score: number }) {
+  const [text, setText] = useState<string | null>(null);
+  const [pending, setPending] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    // Navigating between two roles reuses this component; the previous role's
+    // sentence must never be left sitting above the new role's number.
+    setText(null);
+    setPending(true);
+
+    void (async () => {
+      try {
+        const data = await apiFetch<MatchExplanation>("/api/ai/explain", {
+          method: "POST",
+          body: JSON.stringify({ jobId }),
+        });
+        if (cancelled) return;
+        if (typeof data?.text === "string" && data.score === score) setText(data.text);
+      } catch {
+        // Swallowed on purpose — see the note above the component.
+      } finally {
+        if (!cancelled) setPending(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [jobId, score]);
+
+  if (pending) {
+    return (
+      <div className="mb-5 border-b border-gray-200 pb-4 dark:border-gray-700">
+        <Skeleton className="h-3 w-28" />
+        <Skeleton className="mt-2.5 h-3.5 w-full" />
+        <Skeleton className="mt-1.5 h-3.5 w-4/5" />
+        <span className="sr-only">Writing a summary of this match</span>
+      </div>
+    );
+  }
+
+  if (!text) return null;
+
+  return (
+    <div className="mb-5 border-b border-gray-200 pb-4 dark:border-gray-700">
+      {/* `Icon.spark` is the kit's AI affordance everywhere else in the app, so
+          the glyph is what marks this as machine-written rather than copy. */}
+      <Eyebrow accent className="mb-2 flex items-center gap-1.5">
+        <Icon.spark className="h-3.5 w-3.5" aria-hidden="true" />
+        Why this matched
+      </Eyebrow>
+      <p className="text-sm leading-relaxed text-gray-700 dark:text-gray-300">{text}</p>
+      {/* Says exactly what the sentence was written from, because that is the
+          property that makes it trustworthy: the model is handed the breakdown
+          below and nothing else, so it cannot claim an overlap the meters do
+          not show. The second half is the framing used product-wide. */}
+      <p className="mt-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+        Written from the breakdown below &mdash; it has not read your r&eacute;sum&eacute;. A sorting
+        aid, not an assessment of you.
+      </p>
+    </div>
   );
 }
 

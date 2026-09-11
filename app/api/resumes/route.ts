@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v2 as cloudinary, type UploadApiResponse } from 'cloudinary';
 import { prisma } from '@/lib/prisma';
-import { env } from '@/lib/env';
+import { env, validateEnv } from '@/lib/env';
 import {
   requireAuth,
   requireRole,
@@ -157,6 +157,22 @@ export async function POST(req: NextRequest) {
   const guard = requireRole(req, 'SEEKER');
   if (guard.response) return guard.response;
   const { session } = guard;
+
+  // The one place `validateEnv()` earns its keep, and the reason it exists as
+  // an explicit call rather than an import-time check. `env.CLOUDINARY.*`
+  // throws at the point of use — which is *after* the file has crossed the
+  // wire — so a deployment missing a Cloudinary variable answered a résumé
+  // upload with a 500 halfway through it. Checked here it costs five
+  // `process.env` reads and gives an honest answer before anything is spent.
+  try {
+    validateEnv();
+  } catch (error) {
+    console.error('POST /api/resumes: environment incomplete:', error);
+    return NextResponse.json(
+      { error: 'Résumé uploads are not configured on this deployment.' },
+      { status: 503 }
+    );
+  }
 
   let entry: FormDataEntryValue | null = null;
   try {
