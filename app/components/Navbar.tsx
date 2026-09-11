@@ -64,6 +64,7 @@ export default function Navbar({ variant = "app" }: { variant?: "app" | "marketi
       : [
           { href: "/seeker/dashboard", label: "Overview" },
           { href: "/jobs", label: "Explore" },
+          { href: "/seeker/coach", label: "Coach" },
           { href: "/seeker/conversations", label: "Messages" },
         ]
     : [{ href: "/jobs", label: "Explore" }];

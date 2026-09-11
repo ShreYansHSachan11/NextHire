@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
@@ -17,6 +17,7 @@ import {
   Icon,
   Label,
   NumberedItem,
+  Spinner,
   buttonPrimary,
   inputClass,
 } from "@/app/components/ui";
@@ -82,6 +83,13 @@ export default function RegisterPage() {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  /** Separate from `loading`: the two sign-up routes must not disable each other's spinner. */
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  const nameRef = useRef<HTMLInputElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const confirmRef = useRef<HTMLInputElement>(null);
 
   const router = useRouter();
   const dispatch = useDispatch<AppDispatch>();
@@ -126,20 +134,27 @@ export default function RegisterPage() {
     const name = formData.name.trim();
     const email = formData.email.trim();
 
+    // Each branch focuses the field it is complaining about: the banner sits at
+    // the top of a long form, so on a phone it can be a screenful away from the
+    // submit button the user just pressed.
     if (!name) {
       setError("Please enter your full name");
+      nameRef.current?.focus();
       return;
     }
     if (!isValidEmail(email)) {
       setError("Enter a valid email address");
+      emailRef.current?.focus();
       return;
     }
     if (passwordError) {
       setError(passwordError);
+      passwordRef.current?.focus();
       return;
     }
     if (formData.password !== formData.confirmPassword) {
       setError("The two passwords do not match");
+      confirmRef.current?.focus();
       return;
     }
 
@@ -172,6 +187,16 @@ export default function RegisterPage() {
   };
 
   const showEmailError = Boolean(emailError) && (submitted || formData.email.length > 0);
+  const nameError = submitted && !formData.name.trim() ? "Please enter your full name" : null;
+  const busy = loading || googleLoading;
+
+  const handleGoogle = () => {
+    setError("");
+    setGoogleLoading(true);
+    // `signIn` navigates away; if it ever resolves without doing so, the button
+    // would otherwise stay stuck in its loading state.
+    void Promise.resolve(signIn("google")).finally(() => setGoogleLoading(false));
+  };
 
   return (
     <main id="main-content" className="min-h-screen lg:grid lg:grid-cols-2">
@@ -213,12 +238,13 @@ export default function RegisterPage() {
               </Alert>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+            <form onSubmit={handleSubmit} className="space-y-5" noValidate aria-busy={loading}>
               <div>
                 <Label htmlFor="name" required>
                   Full name
                 </Label>
                 <input
+                  ref={nameRef}
                   type="text"
                   id="name"
                   name="name"
@@ -228,8 +254,15 @@ export default function RegisterPage() {
                   onChange={handleChange}
                   required
                   maxLength={120}
+                  aria-invalid={Boolean(nameError) || undefined}
+                  aria-describedby={nameError ? "name-error" : undefined}
                   className={inputClass}
                 />
+                {nameError && (
+                  <p id="name-error" className="mt-1.5 text-xs text-red-600 dark:text-red-400">
+                    {nameError}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -237,10 +270,12 @@ export default function RegisterPage() {
                   Email address
                 </Label>
                 <input
+                  ref={emailRef}
                   type="email"
                   id="email"
                   name="email"
                   autoComplete="email"
+                  inputMode="email"
                   placeholder="you@example.com"
                   value={formData.email}
                   onChange={handleChange}
@@ -262,6 +297,7 @@ export default function RegisterPage() {
                 </Label>
                 <div className="relative">
                   <input
+                    ref={passwordRef}
                     type={showPassword ? "text" : "password"}
                     id="password"
                     name="password"
@@ -320,6 +356,7 @@ export default function RegisterPage() {
                   Confirm password
                 </Label>
                 <input
+                  ref={confirmRef}
                   type={showPassword ? "text" : "password"}
                   id="confirmPassword"
                   name="confirmPassword"
@@ -390,9 +427,23 @@ export default function RegisterPage() {
                 </div>
               </fieldset>
 
-              <button type="submit" disabled={loading} className={`${buttonPrimary} w-full py-3`}>
-                {loading ? "Creating account…" : "Create account"}
-                {!loading && <Icon.arrowRight className="h-4 w-4" />}
+              <button
+                type="submit"
+                disabled={busy}
+                aria-busy={loading}
+                className={`${buttonPrimary} w-full py-3`}
+              >
+                {loading ? (
+                  <>
+                    <Spinner className="h-4 w-4" />
+                    Creating account…
+                  </>
+                ) : (
+                  <>
+                    Create account
+                    <Icon.arrowRight className="h-4 w-4" />
+                  </>
+                )}
               </button>
             </form>
 
@@ -413,11 +464,13 @@ export default function RegisterPage() {
                 `type="button"` also stops it submitting the form above. */}
             <button
               type="button"
-              onClick={() => signIn("google")}
+              onClick={handleGoogle}
+              disabled={busy}
+              aria-busy={googleLoading}
               className="btn-outline btn-touch w-full py-3"
             >
-              <GoogleIcon />
-              <span>Google</span>
+              {googleLoading ? <Spinner className="h-4 w-4" /> : <GoogleIcon />}
+              <span>{googleLoading ? "Redirecting to Google…" : "Google"}</span>
             </button>
             <p className="mt-2 text-center text-xs text-gray-500 dark:text-gray-400">
               Google sign-up creates a job seeker account.

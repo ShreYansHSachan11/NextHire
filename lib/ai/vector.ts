@@ -9,6 +9,8 @@
  * grows past the tens of thousands.
  */
 
+import { canonicalSkill } from './skills';
+
 /** Scales a vector to unit length so a dot product is the cosine similarity. */
 export function normalize(vector: number[]): number[] {
   let sumSquares = 0;
@@ -62,7 +64,14 @@ export function similarityToScore(cosine: number, floor = 0.35, ceiling = 0.92):
   return Math.round(scaled * 100);
 }
 
-/** Jaccard overlap of two tag sets, case- and whitespace-insensitive. */
+/**
+ * Jaccard overlap of two tag sets, compared on their canonical form.
+ *
+ * Kept synchronous and exported because several call sites rank whole lists of
+ * jobs and cannot await per pair. It gets the alias benefit for free — see
+ * `canonicalTag` — but not the embedding layer; `scoreSkills` in
+ * `lib/ai/skills.ts` is the version that does.
+ */
 export function tagOverlap(a: string[], b: string[]): number {
   const left = new Set(a.map(canonicalTag).filter(Boolean));
   const right = new Set(b.map(canonicalTag).filter(Boolean));
@@ -75,11 +84,14 @@ export function tagOverlap(a: string[], b: string[]): number {
   return union === 0 ? 0 : intersection / union;
 }
 
+/**
+ * Case and punctuation used to be the whole of the normalisation here, which
+ * meant `Postgres` and `PostgreSQL` counted as two unrelated skills. The rule
+ * now lives in `lib/ai/skills.ts` so that the free, synchronous alias layer
+ * applies everywhere a tag is compared, not only on the paths that can await.
+ */
 function canonicalTag(tag: string): string {
-  return tag
-    .toLowerCase()
-    .replace(/[^a-z0-9+#.]+/g, ' ')
-    .trim();
+  return canonicalSkill(tag);
 }
 
 /** Which tags actually appear in both sets — used to explain a match. */

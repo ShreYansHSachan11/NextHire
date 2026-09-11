@@ -11,7 +11,7 @@ import {
   isUuid,
 } from '@/lib/auth';
 import { cleanString, cleanText, cleanTagList, isJobType } from '@/lib/validation';
-import { computeMatch, loadProfileContext, type MatchBreakdown } from '@/lib/ai/matching';
+import { computeMatchAsync, loadProfileContext, type MatchBreakdown } from '@/lib/ai/matching';
 import { queueJobEmbedding } from '@/lib/ai/embeddings';
 
 /** Columns the detail page needs. `skills` rides along as a Job scalar. */
@@ -84,7 +84,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ jobI
       try {
         const profile = await loadProfileContext(session.id);
         if (profile) {
-          match = computeMatch(profile, {
+          // One profile against one posting, so the embedding-backed skill
+          // layer is affordable — and this is the page where the missing-skills
+          // list is actually read.
+          match = await computeMatchAsync(profile, {
             vector: job.embedding?.vector ?? null,
             skills: job.skills ?? [],
             location: job.location,

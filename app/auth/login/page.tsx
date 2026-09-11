@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useEffect, useMemo, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
@@ -8,8 +8,9 @@ import { signIn } from "next-auth/react";
 import { login } from "@/store/authSlice";
 import type { AppDispatch, RootState } from "@/store/store";
 import { apiFetch, setToken } from "@/lib/clientAuth";
+import { isValidEmail } from "@/lib/validation";
 import { ThemeToggle } from "@/app/components/ThemeProvider";
-import { Alert, Eyebrow, Icon, Label, NumberedItem, buttonPrimary, inputClass } from "@/app/components/ui";
+import { Alert, Eyebrow, Icon, Label, NumberedItem, Spinner, buttonPrimary, inputClass } from "@/app/components/ui";
 
 interface AuthUser {
   id: string;
@@ -57,7 +58,14 @@ function LoginForm() {
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  /** Per-field problems caught before the request, keyed by input name. */
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const [loading, setLoading] = useState(false);
+  /** Separate from `loading`: the two sign-in routes must not disable each other's spinner. */
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -84,12 +92,34 @@ function LoginForm() {
   }, [searchParams]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData((current) => ({ ...current, [e.target.name]: e.target.value }));
+    const { name, value } = e.target;
+    setFormData((current) => ({ ...current, [name]: value }));
+    // Clear a field's own complaint as soon as it is being addressed; the
+    // banner-level error stays until the next submit answers it.
+    setFieldErrors((current) => ({ ...current, [name]: undefined }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+
+    // Catch the two things we can be certain about without a round trip. The
+    // server remains the authority on whether the pair is actually valid.
+    const email = formData.email.trim();
+    const fieldIssues: { email?: string; password?: string } = {};
+    if (!email) fieldIssues.email = "Enter the email address you signed up with";
+    else if (!isValidEmail(email)) fieldIssues.email = "Enter a valid email address";
+    if (!formData.password) fieldIssues.password = "Enter your password";
+
+    if (fieldIssues.email || fieldIssues.password) {
+      setFieldErrors(fieldIssues);
+      // Focus rather than only paint: a keyboard or screen-reader user should
+      // land on the field that needs them, not hunt for the red text.
+      (fieldIssues.email ? emailRef : passwordRef).current?.focus();
+      return;
+    }
+
+    setFieldErrors({});
     setLoading(true);
 
     try {
@@ -117,6 +147,15 @@ function LoginForm() {
   };
 
   const errorId = error ? "login-error" : undefined;
+  const busy = loading || googleLoading;
+
+  const handleGoogle = () => {
+    setError("");
+    setGoogleLoading(true);
+    // `signIn` navigates away; if it ever resolves without doing so, the button
+    // would otherwise stay stuck in its loading state.
+    void Promise.resolve(signIn("google")).finally(() => setGoogleLoading(false));
+  };
 
   return (
     <main id="main-content" className="min-h-screen lg:grid lg:grid-cols-2">
@@ -158,24 +197,34 @@ function LoginForm() {
               </Alert>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+            <form onSubmit={handleSubmit} className="space-y-5" noValidate aria-busy={loading}>
               <div>
                 <Label htmlFor="email" required>
                   Email address
                 </Label>
                 <input
+                  ref={emailRef}
                   type="email"
                   id="email"
                   name="email"
                   autoComplete="email"
+                  inputMode="email"
                   placeholder="you@example.com"
                   value={formData.email}
                   onChange={handleChange}
                   required
-                  aria-invalid={error ? true : undefined}
-                  aria-describedby={errorId}
+                  aria-invalid={fieldErrors.email || error ? true : undefined}
+                  aria-describedby={
+                    [fieldErrors.email ? "email-error" : null, errorId].filter(Boolean).join(" ") ||
+                    undefined
+                  }
                   className={inputClass}
                 />
+                {fieldErrors.email && (
+                  <p id="email-error" className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+                    {fieldErrors.email}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -184,6 +233,7 @@ function LoginForm() {
                 </Label>
                 <div className="relative">
                   <input
+                    ref={passwordRef}
                     type={showPassword ? "text" : "password"}
                     id="password"
                     name="password"
@@ -192,8 +242,12 @@ function LoginForm() {
                     value={formData.password}
                     onChange={handleChange}
                     required
-                    aria-invalid={error ? true : undefined}
-                    aria-describedby={errorId}
+                    aria-invalid={fieldErrors.password || error ? true : undefined}
+                    aria-describedby={
+                      [fieldErrors.password ? "password-error" : null, errorId]
+                        .filter(Boolean)
+                        .join(" ") || undefined
+                    }
                     className={`${inputClass} pr-12`}
                   />
                   <button
@@ -206,11 +260,30 @@ function LoginForm() {
                     {showPassword ? <EyeOffIcon /> : <EyeIcon />}
                   </button>
                 </div>
+                {fieldErrors.password && (
+                  <p id="password-error" className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+                    {fieldErrors.password}
+                  </p>
+                )}
               </div>
 
-              <button type="submit" disabled={loading} className={`${buttonPrimary} w-full py-3`}>
-                {loading ? "Signing in…" : "Sign in"}
-                {!loading && <Icon.arrowRight className="h-4 w-4" />}
+              <button
+                type="submit"
+                disabled={busy}
+                aria-busy={loading}
+                className={`${buttonPrimary} w-full py-3`}
+              >
+                {loading ? (
+                  <>
+                    <Spinner className="h-4 w-4" />
+                    Signing in…
+                  </>
+                ) : (
+                  <>
+                    Sign in
+                    <Icon.arrowRight className="h-4 w-4" />
+                  </>
+                )}
               </button>
             </form>
 
@@ -229,11 +302,13 @@ function LoginForm() {
 
             <button
               type="button"
-              onClick={() => signIn("google")}
+              onClick={handleGoogle}
+              disabled={busy}
+              aria-busy={googleLoading}
               className="btn-outline btn-touch w-full py-3"
             >
-              <GoogleIcon />
-              <span>Google</span>
+              {googleLoading ? <Spinner className="h-4 w-4" /> : <GoogleIcon />}
+              <span>{googleLoading ? "Redirecting to Google…" : "Google"}</span>
             </button>
 
             <p className="mt-8 border-t border-gray-200 pt-6 text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
@@ -365,7 +440,15 @@ function GoogleIcon() {
 export default function LoginPage() {
   // `useSearchParams` requires a Suspense boundary in the App Router.
   return (
-    <Suspense fallback={<div className="min-h-screen bg-white dark:bg-gray-900" />}>
+    <Suspense
+      fallback={
+        // A blank screen here said nothing to anyone; the same centred spinner
+        // the rest of the app uses at least announces itself.
+        <div className="flex min-h-screen items-center justify-center bg-white dark:bg-gray-900">
+          <Spinner className="h-10 w-10" label="Loading sign-in" />
+        </div>
+      }
+    >
       <LoginForm />
     </Suspense>
   );

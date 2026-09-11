@@ -13,7 +13,7 @@ import {
 } from '@/lib/auth';
 import { cleanText, isApplicationStatus, STATUS_LABELS } from '@/lib/validation';
 import {
-  computeMatch,
+  computeMatchAsync,
   loadProfileContext,
   rankApplicantsForJob,
   type MatchBreakdown,
@@ -222,7 +222,9 @@ export async function POST(req: NextRequest) {
     try {
       const profile = await loadProfileContext(session.id);
       if (profile) {
-        const match = computeMatch(profile, {
+        // The same skill matcher the job detail page used, so the score frozen
+        // here is the one the candidate was shown when they applied.
+        const match = await computeMatchAsync(profile, {
           vector: job.embedding?.vector ?? null,
           skills: job.skills ?? [],
           location: job.location,

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useDispatch } from "react-redux";
@@ -9,6 +9,7 @@ import { useToast } from "@/app/components/Toast";
 import { useAuthGuard } from "@/app/hooks/useAuthGuard";
 import { updateProfile } from "@/store/authSlice";
 import { apiFetch, setToken } from "@/lib/clientAuth";
+import { isValidEmail } from "@/lib/validation";
 import {
   Alert,
   Card,
@@ -99,13 +100,22 @@ export default function CompanyProfileEdit() {
   const toast = useToast();
 
   const [formData, setFormData] = useState<CompanyProfileForm>(EMPTY_FORM);
+  /** The values as last loaded or saved, so "has anything changed?" is answerable. */
+  const [baseline, setBaseline] = useState<CompanyProfileForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [errors, setErrors] = useState<Partial<Record<keyof CompanyProfileForm, string>>>({});
 
+  const nameRef = useRef<HTMLInputElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const websiteRef = useRef<HTMLInputElement>(null);
+
+  // Keyed on the user *id*, not the user object: the store hands back a new
+  // object on every unrelated update, and re-seeding on those wiped whatever
+  // was half-typed in the form.
   useEffect(() => {
     if (!user) return;
-    setFormData({
+    const seeded: CompanyProfileForm = {
       name: user.name ?? "",
       email: user.email ?? "",
       profile: user.profile ?? "",
@@ -114,43 +124,75 @@ export default function CompanyProfileEdit() {
       size: user.size ?? "",
       location: user.location ?? "",
       description: user.description ?? "",
-    });
-  }, [user]);
+    };
+    setFormData(seeded);
+    setBaseline(seeded);
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const dirty = useMemo(
+    () => (Object.keys(baseline) as (keyof CompanyProfileForm)[]).some(
+      (key) => formData[key] !== baseline[key]
+    ),
+    [formData, baseline]
+  );
+
+  // A reload or a tab close with edits pending used to lose them silently.
+  // In-app navigation is covered by the confirm on Cancel and Back.
+  useEffect(() => {
+    if (!dirty || saving) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty, saving]);
+
+  const confirmDiscard = (event: React.MouseEvent) => {
+    if (!dirty) return;
+    if (!window.confirm("Leave without saving? Your changes will be lost.")) {
+      event.preventDefault();
+    }
+  };
 
   const handleInputChange = (
     event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
     const { name, value } = event.target;
     setFormData((current) => ({ ...current, [name]: value }));
+    setErrors((current) => ({ ...current, [name]: undefined }));
     if (error) setError("");
-    if (success) setSuccess("");
   };
 
-  const validate = (): string | null => {
-    if (!formData.name.trim()) return "Company name is required";
-    if (!formData.email.trim()) return "Email is required";
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(formData.email.trim())) {
-      return "Please enter a valid email address";
-    }
+  /**
+   * Client-side mirror of the server's rules. Errors land on the fields
+   * themselves rather than in one banner, so it is obvious which box is wrong —
+   * the server is still the authority on whether the save is accepted.
+   */
+  const validate = (): Partial<Record<keyof CompanyProfileForm, string>> => {
+    const next: Partial<Record<keyof CompanyProfileForm, string>> = {};
+    if (!formData.name.trim()) next.name = "Company name is required";
+    if (!formData.email.trim()) next.email = "Email address is required";
+    else if (!isValidEmail(formData.email.trim())) next.email = "Enter a valid email address";
     if (!isPlausibleWebsite(formData.website)) {
-      return "Please enter a valid website, for example example.com";
+      next.website = "Enter a valid website, for example example.com";
     }
-    return null;
+    return next;
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!user) return;
 
-    const validationError = validate();
-    if (validationError) {
-      setError(validationError);
+    const found = validate();
+    setErrors(found);
+    if (Object.keys(found).length > 0) {
+      // Send the user to the first box that needs them rather than leaving them
+      // to work out which of eight fields the message is about.
+      const target = found.name ? nameRef : found.email ? emailRef : websiteRef;
+      target.current?.focus();
       return;
     }
 
     setSaving(true);
     setError("");
-    setSuccess("");
 
     try {
       const { token, ...updatedUser } = await apiFetch<UpdateUserResponse>(
@@ -175,7 +217,9 @@ export default function CompanyProfileEdit() {
         })
       );
 
-      setSuccess("Profile updated");
+      // Clearing the baseline before navigating stops the unsaved-changes guard
+      // firing on the way out of a save that succeeded.
+      setBaseline(formData);
       toast.success("Company profile updated");
       router.push("/company/dashboard");
     } catch (submitError) {
@@ -206,6 +250,7 @@ export default function CompanyProfileEdit() {
       <main id="main-content" className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
         <Link
           href="/company/dashboard"
+          onClick={confirmDiscard}
           className="mb-5 inline-flex items-center gap-1.5 rounded text-sm font-medium text-gray-500 transition-colors hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-gray-400 dark:hover:text-white"
         >
           <Icon.arrowLeft className="h-4 w-4" />
@@ -226,12 +271,9 @@ export default function CompanyProfileEdit() {
             description="These details show on your job listings and company profile."
           />
 
-          <form onSubmit={handleSubmit} className="space-y-6 p-4 sm:p-6" noValidate>
-            {/* Announced so a validation failure is not silent for screen readers. */}
-            <div aria-live="polite">
-              {error && <Alert variant="error">{error}</Alert>}
-              {success && <Alert variant="success">{success}</Alert>}
-            </div>
+          <form onSubmit={handleSubmit} className="space-y-6 p-4 sm:p-6" noValidate aria-busy={saving}>
+            {/* Server-side refusals only; anything caught here lands on its field. */}
+            {error && <Alert variant="error">{error}</Alert>}
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6">
               <div>
@@ -245,15 +287,25 @@ export default function CompanyProfileEdit() {
                   Company name
                 </Label>
                 <input
+                  ref={nameRef}
                   type="text"
                   id="name"
                   name="name"
                   value={formData.name}
                   onChange={handleInputChange}
+                  autoComplete="organization"
+                  maxLength={120}
+                  aria-invalid={Boolean(errors.name) || undefined}
+                  aria-describedby={errors.name ? "name-error" : undefined}
                   className={inputClass}
                   placeholder="Acme Inc."
                   required
                 />
+                {errors.name && (
+                  <p id="name-error" className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+                    {errors.name}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -261,15 +313,25 @@ export default function CompanyProfileEdit() {
                   Email address
                 </Label>
                 <input
+                  ref={emailRef}
                   type="email"
                   id="email"
                   name="email"
                   value={formData.email}
                   onChange={handleInputChange}
+                  autoComplete="email"
+                  inputMode="email"
+                  aria-invalid={Boolean(errors.email) || undefined}
+                  aria-describedby={errors.email ? "email-error" : undefined}
                   className={inputClass}
                   placeholder="hiring@acme.com"
                   required
                 />
+                {errors.email && (
+                  <p id="email-error" className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+                    {errors.email}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -277,6 +339,7 @@ export default function CompanyProfileEdit() {
                   Website
                 </Label>
                 <input
+                  ref={websiteRef}
                   // Deliberately not type="url": the browser would reject a bare
                   // `example.com`, which the server happily normalises.
                   type="text"
@@ -285,9 +348,17 @@ export default function CompanyProfileEdit() {
                   name="website"
                   value={formData.website}
                   onChange={handleInputChange}
+                  autoComplete="url"
+                  aria-invalid={Boolean(errors.website) || undefined}
+                  aria-describedby={errors.website ? "website-error" : undefined}
                   className={inputClass}
                   placeholder="example.com"
                 />
+                {errors.website && (
+                  <p id="website-error" className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+                    {errors.website}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -334,6 +405,8 @@ export default function CompanyProfileEdit() {
                   name="location"
                   value={formData.location}
                   onChange={handleInputChange}
+                  autoComplete="address-level2"
+                  maxLength={120}
                   className={inputClass}
                   placeholder="City, State/Country"
                 />
@@ -370,12 +443,15 @@ export default function CompanyProfileEdit() {
               />
             </div>
 
+            {/* Save and Cancel used to share the row equally, which read as two
+                equal choices; the primary now carries its own weight, matching
+                the seeker profile editor. */}
             <div className="flex flex-col gap-3 border-t border-gray-200 pt-5 dark:border-gray-700 sm:flex-row">
-              <button type="submit" disabled={saving} className={`${buttonPrimary} sm:flex-1`}>
+              <button type="submit" disabled={saving} aria-busy={saving} className={buttonPrimary}>
                 {saving ? (
                   <>
                     <Spinner className="h-4 w-4" />
-                    Saving
+                    Saving…
                   </>
                 ) : (
                   <>
@@ -385,7 +461,11 @@ export default function CompanyProfileEdit() {
                 )}
               </button>
 
-              <Link href="/company/dashboard" className={`${buttonSecondary} sm:flex-1`}>
+              <Link
+                href="/company/dashboard"
+                onClick={confirmDiscard}
+                className={buttonSecondary}
+              >
                 <Icon.x className="h-4 w-4" />
                 Cancel
               </Link>

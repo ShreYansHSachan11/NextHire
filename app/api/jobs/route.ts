@@ -14,10 +14,9 @@ import { cleanString, cleanText, cleanTagList, isJobType } from '@/lib/validatio
 import {
   loadProfileContext,
   rankJobs,
-  semanticJobSearch,
-  type SemanticHit,
   type ProfileVectorContext,
 } from '@/lib/ai/matching';
+import { hybridJobSearch, type HybridSearchResult } from '@/lib/ai/search';
 import { queueJobEmbedding } from '@/lib/ai/embeddings';
 
 /** Public feed columns. Deliberately no `embedding` — see FEED_INCLUDE_WITH_VECTOR. */
@@ -58,10 +57,10 @@ function withoutVector<T extends { embedding?: unknown }>(job: T): Omit<T, 'embe
 /**
  * GET /api/jobs
  *   ?companyId=…  jobs for one company, with applicant details (owner/admin only)
- *   ?q=…          semantic search over active jobs (falls back to the full
- *                 listing when AI is off, so the client can keyword-filter)
+ *   ?q=…          hybrid search over active jobs (lexical + vector, fused by
+ *                 rank; degrades to lexical-only when AI is off)
  *   ?sort=match   order by match score, for a signed-in seeker
- *   ?meta=1       return { jobs, semantic, matched } instead of a bare array
+ *   ?meta=1       return { jobs, semantic, matched, search } instead of a bare array
  *   (no params)   the public feed of active jobs
  *
  * The default response is still a **bare array** of jobs: the existing feed and
@@ -122,17 +121,21 @@ export async function GET(req: NextRequest) {
     const wantsMeta = searchParams.get('meta') === '1';
     const sortByMatch = searchParams.get('sort') === 'match';
 
-    // Semantic search is best-effort: a model outage must degrade the feed to a
-    // plain listing, never fail it.
-    let hits: SemanticHit[] | null = null;
+    // Hybrid search is best-effort: a model outage must degrade the feed to a
+    // plain listing, never fail it. `hybridJobSearch` already falls back to its
+    // lexical arm when the vector arm is unavailable, so reaching the catch here
+    // means something worse than "AI is off" went wrong.
+    let search: HybridSearchResult | null = null;
     if (query) {
       try {
-        hits = await semanticJobSearch(query, { limit: SEMANTIC_LIMIT });
+        search = await hybridJobSearch(query, { limit: SEMANTIC_LIMIT });
       } catch (searchError) {
-        console.error('GET /api/jobs semantic search failed:', searchError);
-        hits = null;
+        console.error('GET /api/jobs hybrid search failed:', searchError);
+        search = null;
       }
     }
+
+    const hits = search?.hits ?? null;
 
     // `null` means AI is off; an empty array means nothing cleared the relevance
     // floor. Both fall back to the full listing for the client to keyword-filter.
@@ -197,6 +200,12 @@ export async function GET(req: NextRequest) {
         jobs: payload,
         semantic,
         matched: !!profile?.vector?.length,
+        // What the query was understood to mean. Returned so the UI can show the
+        // interpretation back to the user as removable chips — a search that
+        // silently applies filters it inferred is worse than one that shows its
+        // working.
+        chips: search?.chips ?? [],
+        mode: search?.mode ?? null,
       });
     }
 

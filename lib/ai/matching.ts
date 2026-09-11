@@ -1,7 +1,8 @@
 import { prisma } from '@/lib/prisma';
 import { MATCH_WEIGHTS, isAiEnabled } from './config';
 import { embedText } from './gemini';
-import { cosineSimilarity, sharedTags, similarityToScore, tagOverlap } from './vector';
+import { scoreSkills, scoreSkillsSync, type SkillMatch } from './skills';
+import { cosineSimilarity, similarityToScore } from './vector';
 
 /**
  * Turns stored vectors into the numbers the UI shows.
@@ -144,22 +145,18 @@ function scoreSeniority(profile: ProfileVectorContext, job: JobVectorContext): n
 /* Composite score                                                             */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Blends the facets into the headline score.
- *
- * Returns `null` when there is no semantic signal at all — better to show no
- * match than to show one computed purely from a location string.
- */
-export function computeMatch(
+/** Blends the facets, given a skill comparison that has already been made. */
+function blend(
   profile: ProfileVectorContext,
-  job: JobVectorContext
-): MatchBreakdown | null {
-  if (!profile.vector?.length || !job.vector?.length) return null;
-
-  const cosine = cosineSimilarity(profile.vector, job.vector);
+  job: JobVectorContext,
+  skillMatch: SkillMatch
+): MatchBreakdown {
+  const cosine = cosineSimilarity(profile.vector ?? [], job.vector ?? []);
   const semantic = similarityToScore(cosine) / 100;
 
-  const skills = job.skills.length > 0 ? tagOverlap(profile.skills, job.skills) : 0.5;
+  // A posting that names no skills gets the same neutral 0.5 it always has:
+  // absent data is not evidence against a candidate.
+  const skills = job.skills.length > 0 ? skillMatch.score : 0.5;
   const location = scoreLocation(profile.location, job.location);
   const seniority = scoreSeniority(profile, job);
 
@@ -169,9 +166,6 @@ export function computeMatch(
     location * MATCH_WEIGHTS.location +
     seniority * MATCH_WEIGHTS.seniority;
 
-  const shared = sharedTags(job.skills, profile.skills);
-  const sharedKeys = new Set(shared.map((tag) => tag.toLowerCase()));
-
   return {
     score: Math.max(0, Math.min(100, Math.round(composite * 100))),
     facets: {
@@ -180,11 +174,54 @@ export function computeMatch(
       location: Math.round(location * 100),
       seniority: Math.round(seniority * 100),
     },
-    sharedSkills: shared.slice(0, 8),
-    missingSkills: job.skills
-      .filter((skill) => !sharedKeys.has(skill.toLowerCase()))
-      .slice(0, 6),
+    // A fuzzy pair is still a reason this matched, so it belongs in the shown
+    // list — after the certain ones — and, more importantly, out of `missing`,
+    // which is what used to tell people they lacked `PostgreSQL` while their
+    // profile said `Postgres`.
+    sharedSkills: [...skillMatch.shared, ...skillMatch.fuzzy.map((pair) => pair.job)].slice(0, 8),
+    missingSkills: skillMatch.missing.slice(0, 6),
   };
+}
+
+/**
+ * Blends the facets into the headline score.
+ *
+ * Returns `null` when there is no semantic signal at all — better to show no
+ * match than to show one computed purely from a location string.
+ *
+ * **Deliberately still synchronous.** `rankJobs` scores a whole page of jobs
+ * against one profile, and `app/api/jobs/route.ts` calls it on the main feed;
+ * making this async would push an await into every list path and turn one page
+ * of results into dozens of round trips. Layers 1–2 of the skill matcher are
+ * free and cover `Postgres`/`PostgreSQL` and friends, which was the actual
+ * complaint. Use `computeMatchAsync` where a single pair is being scored and
+ * the embedding fallback is worth the wait.
+ */
+export function computeMatch(
+  profile: ProfileVectorContext,
+  job: JobVectorContext
+): MatchBreakdown | null {
+  if (!profile.vector?.length || !job.vector?.length) return null;
+  return blend(profile, job, scoreSkillsSync(profile.skills, job.skills));
+}
+
+/**
+ * `computeMatch` plus the embedding-backed skill layer.
+ *
+ * Worth it on the one-job paths — the detail page and the moment of applying —
+ * where the candidate reads the "missing skills" list closely and the extra
+ * work is bounded to a single profile-against-posting comparison. Scoring a
+ * list of jobs this way is not worth it and is not offered.
+ *
+ * Fails soft to exactly what `computeMatch` returns: `scoreSkills` never throws
+ * and falls back to layers 1–2 whenever the model or the cache is unavailable.
+ */
+export async function computeMatchAsync(
+  profile: ProfileVectorContext,
+  job: JobVectorContext
+): Promise<MatchBreakdown | null> {
+  if (!profile.vector?.length || !job.vector?.length) return null;
+  return blend(profile, job, await scoreSkills(profile.skills, job.skills));
 }
 
 /* -------------------------------------------------------------------------- */
@@ -309,6 +346,11 @@ export async function semanticJobSearch(
 /**
  * Scores a job's applicants by fit, for the company side. The job vector is
  * loaded once and every applicant profile compared against it.
+ *
+ * Uses the synchronous skill path even though this function can await: an
+ * applicant pool has no upper bound, and embedding every unseen tag across it
+ * would make the first load of a busy posting arbitrarily slow for a ranking
+ * the alias layer already gets substantially right.
  */
 export async function rankApplicantsForJob(
   jobId: string

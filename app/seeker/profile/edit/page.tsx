@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch } from "react-redux";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -131,20 +131,31 @@ export default function EditSeekerProfilePage() {
   /** Set as soon as the user touches this section, so a late fetch defers. */
   const signalEdited = useRef(false);
 
+  /** Focus targets, so a failed validation puts the cursor in the offending box. */
+  const nameRef = useRef<HTMLInputElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const headlineRef = useRef<HTMLInputElement>(null);
+  const yearsRef = useRef<HTMLInputElement>(null);
+
+  /** The values as last seeded or saved, so "has anything changed?" is answerable. */
+  const [baseline, setBaseline] = useState<{ form: FormState; skills: string[] } | null>(null);
+
   // Seed the form once the store has rehydrated. Keyed on the user id so it
   // doesn't clobber what the user is typing on every unrelated store update.
   useEffect(() => {
     if (!user) return;
     const stored = readSignal(user);
-    setForm({
+    const seeded: FormState = {
       name: user.name ?? "",
       email: user.email ?? "",
       profile: user.profile ?? "",
       headline: stored?.headline ?? "",
       seniority: stored?.seniority ?? "",
       years: stored?.years ?? "",
-    });
+    };
+    setForm(seeded);
     if (stored) setSkills(stored.skills);
+    setBaseline({ form: seeded, skills: stored?.skills ?? [] });
   }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Then the authoritative copy. The store is seeded from the JWT, which does
@@ -168,6 +179,22 @@ export default function EditSeekerProfilePage() {
             years: stored.years,
           }));
           setSkills(stored.skills);
+          // The unsaved-changes guard has to compare against what is really on
+          // record, or the late arrival of these three fields would read as an
+          // edit the user never made.
+          setBaseline((current) =>
+            current
+              ? {
+                  form: {
+                    ...current.form,
+                    headline: stored.headline,
+                    seniority: stored.seniority,
+                    years: stored.years,
+                  },
+                  skills: stored.skills,
+                }
+              : current
+          );
         }
         setSignalLoaded(true);
       })
@@ -181,6 +208,33 @@ export default function EditSeekerProfilePage() {
       cancelled = true;
     };
   }, [user?.id]);
+
+  const dirty = useMemo(() => {
+    if (!baseline) return false;
+    const changedField = (Object.keys(baseline.form) as (keyof FormState)[]).some(
+      (key) => form[key] !== baseline.form[key]
+    );
+    const changedSkills =
+      skills.length !== baseline.skills.length ||
+      skills.some((skill, index) => skill !== baseline.skills[index]);
+    return changedField || changedSkills;
+  }, [form, skills, baseline]);
+
+  // A reload or a tab close with edits pending used to lose them silently.
+  // In-app navigation is covered by the confirm on Cancel and Back.
+  useEffect(() => {
+    if (!dirty || saving) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty, saving]);
+
+  const confirmDiscard = (event: React.MouseEvent) => {
+    if (!dirty) return;
+    if (!window.confirm("Leave without saving? Your changes will be lost.")) {
+      event.preventDefault();
+    }
+  };
 
   const handleChange = (
     event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -278,6 +332,20 @@ export default function EditSeekerProfilePage() {
       }
     }
     setErrors(next);
+
+    // Send the user to the first box that needs them; on a phone the offending
+    // field is often off-screen from the submit button they just pressed.
+    const target = next.name
+      ? nameRef
+      : next.email
+        ? emailRef
+        : next.headline
+          ? headlineRef
+          : next.years
+            ? yearsRef
+            : null;
+    target?.current?.focus();
+
     return Object.keys(next).length === 0;
   };
 
@@ -325,6 +393,9 @@ export default function EditSeekerProfilePage() {
       // edit would look as though it had been silently reverted (audit 2.8).
       if (updated.token) setToken(updated.token);
 
+      // Clearing the baseline before navigating stops the unsaved-changes guard
+      // firing on the way out of a save that succeeded.
+      setBaseline({ form, skills });
       toast.success("Profile updated");
       router.push("/seeker/dashboard");
     } catch (error) {
@@ -356,6 +427,7 @@ export default function EditSeekerProfilePage() {
       <main id="main-content" className="mx-auto max-w-3xl px-4 py-8 sm:px-6 lg:px-8">
         <Link
           href="/seeker/dashboard"
+          onClick={confirmDiscard}
           className="mb-5 inline-flex items-center gap-1.5 rounded text-sm font-medium text-blue-600 transition-colors hover:text-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-blue-400 dark:hover:text-blue-300"
         >
           <Icon.arrowLeft className="h-4 w-4" />
@@ -376,7 +448,12 @@ export default function EditSeekerProfilePage() {
             description="Changes take effect the moment you save."
           />
 
-          <form onSubmit={handleSubmit} noValidate className="space-y-6 p-4 sm:p-6">
+          <form
+            onSubmit={handleSubmit}
+            noValidate
+            aria-busy={saving}
+            className="space-y-6 p-4 sm:p-6"
+          >
             {formError && <Alert variant="error">{formError}</Alert>}
 
             <div>
@@ -384,6 +461,7 @@ export default function EditSeekerProfilePage() {
                 Full name
               </Label>
               <input
+                ref={nameRef}
                 id="name"
                 name="name"
                 type="text"
@@ -410,12 +488,14 @@ export default function EditSeekerProfilePage() {
                 Email address
               </Label>
               <input
+                ref={emailRef}
                 id="email"
                 name="email"
                 type="email"
                 value={form.email}
                 onChange={handleChange}
                 autoComplete="email"
+                inputMode="email"
                 aria-invalid={!!errors.email}
                 aria-describedby={errors.email ? "email-error" : "email-hint"}
                 className={inputClass}

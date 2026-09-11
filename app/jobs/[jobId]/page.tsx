@@ -84,6 +84,25 @@ interface JobDetail {
   match?: MatchBreakdown | null;
 }
 
+/**
+ * One row of `GET /api/jobs/:jobId/similar`, which answers in the feed's shape
+ * so the same fields render either list. `similarity` is a cosine between two
+ * postings, not a fit score, and is used for ordering only — see `SimilarRoles`.
+ */
+interface SimilarJob {
+  id: string;
+  title: string;
+  location?: string | null;
+  type?: string | null;
+  salary?: string | null;
+  company?: { id?: string; name: string; profile?: string | null };
+  createdAt: string;
+  similarity?: number;
+}
+
+/** Three neighbours fills the row exactly at every breakpoint. */
+const SIMILAR_LIMIT = 3;
+
 export default function JobDetailsPage({ params }: { params: Promise<{ jobId: string }> }) {
   const { jobId } = React.use(params);
   const router = useRouter();
@@ -436,6 +455,11 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
           </Card>
         </aside>
       </div>
+
+      {/* Below the fold and outside the grid: neighbours are the exit route from
+          this page, so they sit after everything that might keep the reader on
+          it. Renders nothing at all when there are none. */}
+      <SimilarRoles jobId={jobId} />
     </PageShell>
   );
 }
@@ -541,6 +565,114 @@ function MatchPanel({ match }: { match: MatchBreakdown }) {
         Scored by comparing your profile with this posting. It is guidance to help you decide where
         to spend your time, not a decision — the company reads every application it receives.
       </p>
+    </Card>
+  );
+}
+
+/**
+ * "More like this", from the stored job vectors.
+ *
+ * Fetched separately from the job itself so the page paints without waiting on
+ * it, and rendered only once there is something to render: no skeleton, no
+ * empty frame, no error message. Every degraded path — a corpus that has not
+ * been indexed, no `GEMINI_API_KEY`, a request that failed — looks identical
+ * from here, which is to say it looks like nothing. This is a decoration on a
+ * page whose actual job is the posting above it.
+ */
+function SimilarRoles({ jobId }: { jobId: string }) {
+  const [jobs, setJobs] = useState<SimilarJob[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    // Clear first: navigating between two job pages reuses this component, and
+    // the previous role's neighbours must not linger under the new title.
+    setJobs([]);
+
+    void (async () => {
+      try {
+        const data = await apiFetch<SimilarJob[]>(
+          `/api/jobs/${jobId}/similar?limit=${SIMILAR_LIMIT}`
+        );
+        if (!cancelled && Array.isArray(data)) setJobs(data);
+      } catch {
+        // Swallowed on purpose — see the note above the component.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [jobId]);
+
+  if (jobs.length === 0) return null;
+
+  return (
+    <section className="mt-10 border-t border-gray-200 pt-6 dark:border-gray-700">
+      <Eyebrow className="mb-1.5">Vector neighbours</Eyebrow>
+      <h2 className="text-lg font-semibold text-gray-900 dark:text-white sm:text-xl">
+        Similar roles
+      </h2>
+      {/* Says where the list comes from without printing a second percentage:
+          a number next to the fit panel above would be read as another fit
+          score, and this one measures posting against posting. */}
+      <p className="mt-1 max-w-[60ch] text-sm text-gray-500 dark:text-gray-400">
+        Open postings that read closest to this one, ordered by how near they
+        sit in the match graph.
+      </p>
+
+      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {jobs.map((job) => (
+          <SimilarJobCard key={job.id} job={job} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * A neighbour, as a compact version of the feed card — same company tile, same
+ * metadata chips, same stretched title anchor so the whole tile is clickable
+ * while the card still exposes exactly one link named by the role.
+ */
+function SimilarJobCard({ job }: { job: SimilarJob }) {
+  return (
+    <Card className="group relative flex flex-col p-4 transition-[border-color,transform] duration-150 hover:-translate-y-0.5 hover:border-gray-300 dark:hover:border-gray-600">
+      <div className="flex min-w-0 items-start gap-3">
+        <span
+          className="mono flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md bg-gray-900 text-sm font-semibold text-white dark:bg-gray-100 dark:text-gray-900"
+          aria-hidden="true"
+        >
+          {job.company?.name?.charAt(0).toUpperCase() ?? "C"}
+        </span>
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold leading-snug text-gray-900 dark:text-white">
+            <Link href={`/jobs/${job.id}`} className="after:absolute after:inset-0 after:rounded-xl">
+              <span className="line-clamp-2">{job.title}</span>
+            </Link>
+          </h3>
+          <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
+            {job.company?.name ?? "Company"}
+          </p>
+        </div>
+      </div>
+
+      <div className="mb-4 mt-3 flex flex-wrap gap-1.5">
+        {job.location && <Chip icon={<Icon.location className="h-3.5 w-3.5" />}>{job.location}</Chip>}
+        {job.type && <Chip icon={<Icon.clock className="h-3.5 w-3.5" />}>{job.type}</Chip>}
+        {job.salary && <Chip icon={<Icon.money className="h-3.5 w-3.5" />}>{job.salary}</Chip>}
+      </div>
+
+      {/* `mt-auto` keeps the footers aligned across a row of uneven titles. */}
+      <div className="mt-auto flex items-center justify-between gap-3 border-t border-gray-200 pt-3 dark:border-gray-700">
+        <Eyebrow as="span">Posted {formatDate(job.createdAt)}</Eyebrow>
+        <span
+          className="flex items-center gap-1 text-xs font-semibold text-gray-400 transition-colors group-hover:text-gray-900 dark:text-gray-500 dark:group-hover:text-white"
+          aria-hidden="true"
+        >
+          View
+          <Icon.arrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+        </span>
+      </div>
     </Card>
   );
 }
