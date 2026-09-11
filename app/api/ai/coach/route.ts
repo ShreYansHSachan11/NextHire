@@ -502,7 +502,11 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const key = cacheKey(mode, session.id, job.id, `${profileDocument} ${jobDocument}`);
+    //  (unit separator) rather than a literal NUL: a raw 0x00 byte makes
+    // grep and ripgrep classify this whole file as binary and skip it silently,
+    // so every codebase-wide search quietly missed 750 lines of route. Any
+    // control character that cannot occur in a document works as a separator.
+    const key = cacheKey(mode, session.id, job.id, `${profileDocument}${jobDocument}`);
     const cached = cacheGet(key);
     if (cached) return NextResponse.json(cached);
 

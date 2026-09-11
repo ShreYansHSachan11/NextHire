@@ -38,7 +38,25 @@ export function useAuthGuard(allowedRoles?: Role[]): AuthGuardResult {
   const [ready, setReady] = useState(false);
   useEffect(() => setReady(true), []);
 
-  const roleOk = !allowedRoles || (!!user && allowedRoles.includes(user.role as Role));
+  /*
+   * ADMIN satisfies every role gate.
+   *
+   * Without this an admin could not open a single page in the product. The
+   * Navbar hands them the seeker link set (they are not COMPANY), `middleware`
+   * waves them through to /seeker/*, and then this guard rejected them — and
+   * the redirect below sent them to /seeker/dashboard, which is the page they
+   * were already on. The result was a white screen on every link, with no
+   * error and no redirect: the one role that operates the product, and that
+   * gates /api/ai/reindex, /api/ai/duplicates and /api/alerts/run, was locked
+   * out of the UI entirely.
+   *
+   * This matches what the server already does — `canActAs` in `lib/auth.ts`
+   * and the ADMIN branch of `middleware.ts` both treat ADMIN as universal — so
+   * the client guard was the odd one out rather than the authority.
+   */
+  const roleOk =
+    !allowedRoles ||
+    (!!user && (user.role === "ADMIN" || allowedRoles.includes(user.role as Role)));
   const allowed = ready && isAuthenticated && roleOk;
 
   useEffect(() => {
@@ -53,7 +71,12 @@ export function useAuthGuard(allowedRoles?: Role[]): AuthGuardResult {
     if (!roleOk && user) {
       // Signed in, wrong role: send them to their own dashboard rather than to
       // a login page they don't need.
-      router.replace(user.role === "COMPANY" ? "/company/dashboard" : "/seeker/dashboard");
+      const home = user.role === "COMPANY" ? "/company/dashboard" : "/seeker/dashboard";
+      // Never replace a route with itself. That was how the ADMIN lockout
+      // presented: a redirect that silently did nothing, leaving `allowed`
+      // false and the page rendering `null` forever. Even with ADMIN handled
+      // above, a guard that can target its own path must not loop.
+      if (pathname !== home) router.replace(home);
     }
   }, [ready, isAuthenticated, roleOk, user, router, pathname]);
 
