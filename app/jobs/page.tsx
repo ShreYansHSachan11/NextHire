@@ -27,7 +27,6 @@ import {
   inputClass,
 } from "@/app/components/ui";
 import { apiFetch } from "@/lib/clientAuth";
-import { JOB_TYPES } from "@/lib/validation";
 
 /**
  * Mirror of `MatchBreakdown` in `lib/ai/matching.ts`.
@@ -79,15 +78,45 @@ interface JobListItem {
  *
  * `token` is the literal text from the query that produced the filter, which is
  * the whole removal mechanism — see `queryWithoutToken`.
+ *
+ * `location` is in the union ahead of the parser that produces it, so that a
+ * chip arriving from a newer server is typed rather than cast at the one place
+ * it matters (`overridden`, below).
  */
 interface SearchFilterChip {
-  key: "remote" | "seniority" | "type" | "minSalary";
+  key: "remote" | "seniority" | "type" | "minSalary" | "location";
   label: string;
   token: string;
 }
 
 /** `lexical` means the vector arm was unavailable, not that it found nothing. */
 type SearchMode = "hybrid" | "lexical" | "filters";
+
+/** One option for a select, counted over the corpus — see `facets` below. */
+interface Facet {
+  value: string;
+  count: number;
+}
+
+/**
+ * The filterable corpus, as the server describes it.
+ *
+ * These used to be derived from the rows on screen, which made the options
+ * describe the *result set*: searching "frontend" collapsed the Location list to
+ * the handful of locations among the hits, offering almost nothing to filter by
+ * at exactly the moment the user wanted to narrow. Each list is now counted
+ * server-side over every active posting (narrowed by the *other* two selects, so
+ * a count is what picking that option would actually yield).
+ */
+interface FeedFacets {
+  location: Facet[];
+  experience: Facet[];
+  type: Facet[];
+  /** Active postings in total, ignoring every filter. */
+  total: number;
+}
+
+const EMPTY_FACETS: FeedFacets = { location: [], experience: [], type: [], total: 0 };
 
 /** The `?meta=1` envelope. Without it the route still returns a bare array. */
 interface JobFeedResponse {
@@ -100,9 +129,27 @@ interface JobFeedResponse {
   chips: SearchFilterChip[];
   /** Null when no search ran. */
   mode: SearchMode | null;
+  /** What the server actually filtered on, normalised. */
+  filters: { location: string | null; experience: string | null; type: string | null };
+  /** The text actually searched, once overruled filters were cut out of it. */
+  query: string;
+  /** Options for the three selects. */
+  facets: FeedFacets;
+  /** Filters the query implied that an explicit select overruled. */
+  overridden: SearchFilterChip[];
+  /** True when the listing hit the server's page cap. */
+  truncated: boolean;
 }
 
-type SortKey = "newest" | "applicants" | "match";
+/**
+ * `relevance` is a real value, not a label on top of `newest`.
+ *
+ * The select used to show "Best relevance" while holding `newest`, which was
+ * true about the order and false about the control: there was then no way to ask
+ * for date order during a search. The URL contract is untouched — this page has
+ * never put `sort` in the URL, and the server's own `?sort=match` is unchanged.
+ */
+type SortKey = "relevance" | "newest" | "applicants" | "match";
 
 interface Filters {
   location: string;
@@ -161,13 +208,34 @@ function JobsFeed() {
   const [searchInput, setSearchInput] = useState(initialQuery);
   const [search, setSearch] = useState(initialQuery);
   const [filters, setFilters] = useState<Filters>({ ...EMPTY_FILTERS, location: initialLocation });
-  const [sort, setSort] = useState<SortKey>("newest");
+  /**
+   * `null` is "whatever this result set's natural order is" — relevance under a
+   * search, date otherwise — rather than a fourth sort key. Once the user picks
+   * one it stays picked, including across a search starting or ending.
+   */
+  const [sort, setSort] = useState<SortKey | null>(null);
 
   // Read off the `?meta=1` envelope: `semantic` says the server ranked these
   // rows, `matched` says the caller has an indexed profile.
   const [semantic, setSemantic] = useState(false);
   const [matched, setMatched] = useState<boolean | null>(null);
   const [indexHintDismissed, setIndexHintDismissed] = useState(false);
+
+  // The filter bar's options, and the size of the corpus they describe. Held
+  // across a refresh rather than cleared, so the selects do not blink empty
+  // between requests.
+  const [facets, setFacets] = useState<FeedFacets>(EMPTY_FACETS);
+  /** Inferred filters the selects overruled; shown, never silently dropped. */
+  const [overridden, setOverridden] = useState<SearchFilterChip[]>([]);
+  /**
+   * The text the server searched on, which is what the box says minus anything
+   * a select overruled. It is the honest needle for the keyword fallback below:
+   * filtering on a word the server deliberately stopped applying would undo the
+   * override one layer further down.
+   */
+  const [searchedQuery, setSearchedQuery] = useState("");
+  /** True when more rows match than the server will return in one page. */
+  const [truncated, setTruncated] = useState(false);
 
   // How the server read the query. `chips` are the filters it inferred and
   // silently applied; showing them back is the point of the feature.
@@ -189,7 +257,7 @@ function JobsFeed() {
   useEffect(() => setMounted(true), []);
 
   const fetchJobs = useCallback(
-    async (term: string) => {
+    async (term: string, selects: Filters) => {
       try {
         setRefreshing(true);
         setError("");
@@ -197,6 +265,12 @@ function JobsFeed() {
         const params = new URLSearchParams({ meta: "1" });
         // An empty term is simply omitted, which returns the plain listing.
         if (term) params.set("q", term);
+        // The selects go to the server now: they are `where` clauses applied
+        // before its page cap, so a match on posting 201 is findable instead of
+        // invisible. Empty means "any", and is left off the query string.
+        if (selects.location) params.set("location", selects.location);
+        if (selects.experience) params.set("experience", selects.experience);
+        if (selects.type) params.set("type", selects.type);
 
         const data = await apiFetch<JobFeedResponse>(`/api/jobs?${params.toString()}`);
         dispatch(setJobs(data.jobs));
@@ -207,6 +281,14 @@ function JobsFeed() {
         setChips(data.chips ?? []);
         setMode(data.mode ?? null);
         setChipQuery(term);
+        // `?? term` for an older server, which searched the term as typed.
+        setSearchedQuery(data.query ?? term);
+        setOverridden(data.overridden ?? []);
+        setTruncated(data.truncated ?? false);
+        // Kept from the previous response when absent, rather than blanked: an
+        // older server sends no facets, and empty selects would read as "this
+        // corpus has no locations" instead of "unknown".
+        if (data.facets) setFacets(data.facets);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load jobs");
       } finally {
@@ -217,67 +299,63 @@ function JobsFeed() {
     [dispatch]
   );
 
-  // The debounced term is the only fetch key. Deliberately not keyed on the
-  // signed-in user: the cookie is already on the first request, so re-running
-  // when Redux rehydrates would just double every page load.
+  // The debounced term and the selects are the fetch key — the selects are a
+  // server round-trip now, but a click is the deliberate action the search box's
+  // debounce exists to wait for, so they fire immediately. Deliberately not
+  // keyed on the signed-in user: the cookie is already on the first request, so
+  // re-running when Redux rehydrates would just double every page load.
   useEffect(() => {
-    void fetchJobs(search);
-  }, [fetchJobs, search]);
+    void fetchJobs(search, filters);
+  }, [fetchJobs, search, filters]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setSearch(searchInput.trim()), 250);
     return () => window.clearTimeout(timer);
   }, [searchInput]);
 
-  /**
-   * Filter options come from the postings themselves.
-   *
-   * They used to be a fixed list (Bangalore / Mumbai / Remote, Full Time /
-   * Remote / Internship) that had nothing to do with what the post-a-job form
-   * writes, so most selections matched zero jobs.
-   */
-  const locationOptions = useMemo(() => collect(jobList, (job) => job.location), [jobList]);
-  const experienceOptions = useMemo(() => collect(jobList, (job) => job.experience), [jobList]);
-  const typeOptions = useMemo(() => {
-    const options = collect(jobList, (job) => job.type);
-    // Known types keep the canonical order; anything free-text follows it.
-    const rank = (label: string) => {
-      const index = (JOB_TYPES as readonly string[]).indexOf(label);
-      return index === -1 ? JOB_TYPES.length : index;
-    };
-    return [...options].sort((a, b) => rank(a.label) - rank(b.label) || a.label.localeCompare(b.label));
-  }, [jobList]);
-
   const hasFilters = Boolean(search || filters.location || filters.experience || filters.type);
 
   // "Best match" only exists when there is something to sort by. Anonymous
   // visitors, company accounts and un-indexed seekers never see the option.
   const hasMatches = useMemo(() => jobList.some((job) => job.match), [jobList]);
-  // Covers the case where the option disappears (a sign-out, or a result set
-  // with no scored rows) while "match" is still the selected value.
-  const activeSort: SortKey = sort === "match" && !hasMatches ? "newest" : sort;
+
+  /**
+   * The order actually in force.
+   *
+   * Unpicked means the natural order of this result set. The two guards cover a
+   * choice that has stopped being available — a sign-out taking "Best match"
+   * away, a cleared search taking "Best relevance" away — which would otherwise
+   * leave the select showing a value it no longer offers.
+   */
+  const defaultSort: SortKey = semantic ? "relevance" : "newest";
+  const activeSort: SortKey =
+    sort === null || (sort === "match" && !hasMatches) || (sort === "relevance" && !semantic)
+      ? defaultSort
+      : sort;
 
   const visibleJobs = useMemo(() => {
-    // When the server ranked semantically, its result set *is* the answer for
-    // this term, so no substring test is applied on top: that would discard
-    // exactly the rows semantic retrieval exists to surface - the role that
-    // never says "frontend" but is one. The selects still apply, because those
-    // are facts about the posting rather than a guess at relevance.
-    const needle = semantic ? "" : search.toLowerCase();
+    // The three selects are the server's job now: they are `where` clauses on
+    // the corpus, not a pass over the page, so repeating them here would be a
+    // second copy of the rule free to disagree with the first.
+    //
+    // The substring test stays, and only for a *non*-semantic response. When the
+    // server ranked semantically its result set *is* the answer for this term,
+    // and testing it again would discard exactly the rows semantic retrieval
+    // exists to surface - the role that never says "frontend" but is one. What
+    // is left is the case where no ranking happened at all (AI off, or a query
+    // too short to search), where the server returns the plain listing and this
+    // is the only keyword filtering there is.
+    const needle = semantic ? "" : searchedQuery.toLowerCase();
 
-    const filtered = jobList.filter((job) => {
-      if (needle) {
-        const haystack = [job.title, job.company?.name, job.description, job.location, job.type]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-        if (!haystack.includes(needle)) return false;
-      }
-      if (!equalsIgnoreCase(job.location, filters.location)) return false;
-      if (!equalsIgnoreCase(job.experience, filters.experience)) return false;
-      if (!equalsIgnoreCase(job.type, filters.type)) return false;
-      return true;
-    });
+    const filtered = needle
+      ? jobList.filter((job) => {
+          const haystack = [job.title, job.company?.name, job.description, job.location, job.type]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
+          return haystack.includes(needle);
+        })
+      : jobList;
 
     // Sorting by match is done in memory rather than by re-requesting with
     // `&sort=match`: the scores are already on the rows, so ordering them here
@@ -293,13 +371,15 @@ function JobsFeed() {
         (a, b) => (b._count?.applications ?? 0) - (a._count?.applications ?? 0)
       );
     }
-    // Default order. Under a semantic search that order is already the server's
-    // relevance ranking, so re-sorting by date here would throw it away.
-    if (semantic) return filtered;
+    // The rows arrive in the server's relevance ranking, so "relevance" is the
+    // order they are already in - and re-sorting by date here would throw it
+    // away. "Newest first" under a search is now a thing the user can actually
+    // ask for, and it does what it says.
+    if (activeSort === "relevance") return filtered;
     return [...filtered].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
-  }, [jobList, search, semantic, filters, activeSort]);
+  }, [jobList, searchedQuery, semantic, activeSort]);
 
   const clearFilters = () => {
     setSearchInput("");
@@ -345,6 +425,11 @@ function JobsFeed() {
   const canSaveSearch =
     mounted && isAuthenticated && user?.role === "SEEKER" && search.trim().length >= 2;
 
+  // The strip under the filter bar: how the query was read, what a select
+  // overruled, whether the ranking was keyword-only, and the save button.
+  const showSearchNotes =
+    !loading && !error && (chips.length > 0 || overridden.length > 0 || mode === "lexical" || canSaveSearch);
+
   // One quiet nudge, shown only to the person it can help: a signed-in seeker
   // whose profile has no vector yet. Everyone else sees the feed unchanged.
   const showIndexHint =
@@ -368,7 +453,11 @@ function JobsFeed() {
         <Alert variant="error" className="mb-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <span>{error}</span>
-            <button type="button" onClick={() => void fetchJobs(search)} className={buttonPrimary}>
+            <button
+              type="button"
+              onClick={() => void fetchJobs(search, filters)}
+              className={buttonPrimary}
+            >
               Try again
             </button>
           </div>
@@ -404,7 +493,7 @@ function JobsFeed() {
               label="Location"
               allLabel="All locations"
               value={filters.location}
-              options={locationOptions}
+              options={facets.location}
               onChange={(value) => setFilters((current) => ({ ...current, location: value }))}
             />
             <FilterSelect
@@ -412,7 +501,7 @@ function JobsFeed() {
               label="Experience"
               allLabel="All levels"
               value={filters.experience}
-              options={experienceOptions}
+              options={facets.experience}
               onChange={(value) => setFilters((current) => ({ ...current, experience: value }))}
             />
             <FilterSelect
@@ -420,7 +509,7 @@ function JobsFeed() {
               label="Job type"
               allLabel="All types"
               value={filters.type}
-              options={typeOptions}
+              options={facets.type}
               onChange={(value) => setFilters((current) => ({ ...current, type: value }))}
             />
 
@@ -432,19 +521,32 @@ function JobsFeed() {
                 onChange={(event) => setSort(event.target.value as SortKey)}
                 className={inputClass}
               >
-                {/* Same value, honest label: the default order under a semantic
-                    search is the server's relevance ranking, not the date. */}
-                <option value="newest">{semantic ? "Best relevance" : "Newest first"}</option>
+                {/* One option per order, each holding the value it names. Under a
+                    search, relevance is offered and is the default — but date
+                    order is still there to be asked for, which it was not when
+                    "Best relevance" was a label painted over `newest`. */}
+                {semantic && <option value="relevance">Best relevance</option>}
+                <option value="newest">Newest first</option>
                 <option value="applicants">Most applicants</option>
                 {hasMatches && <option value="match">Best match</option>}
               </select>
             </div>
           </div>
+
+          {/* The counts describe the corpus, not the hits — so say so, rather
+              than let "Berlin (12)" be read as a promise about a search that
+              returned three. Only under a search: without one, picking an option
+              does yield exactly its count. */}
+          {Boolean(search) && (
+            <Eyebrow as="p" className="mt-3">
+              Filter counts cover every open role, not just this search.
+            </Eyebrow>
+          )}
         </Card>
       </section>
 
       {/* What the search did with the query, and what can be done about it. */}
-      {!loading && !error && (chips.length > 0 || mode === "lexical" || canSaveSearch) && (
+      {showSearchNotes && (
         <section aria-label="How this search was read" className="mb-4 sm:mb-5">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             {chips.length > 0 && (
@@ -468,6 +570,16 @@ function JobsFeed() {
               </div>
             )}
           </div>
+
+          {/* An inferred filter that a select overruled. The server dropped it
+              before searching, so it is not quietly applied *and* not quietly
+              discarded: the user is told which of the two won, and the loser is
+              a word in a box they can still edit. */}
+          {overridden.map((chip) => (
+            <Eyebrow as="p" className="mt-2" key={`${chip.key}-${chip.token}`}>
+              {overrideNote(chip, filters)}
+            </Eyebrow>
+          ))}
 
           {/* A quiet note, not an error: lexical mode means the vector arm was
               unavailable, and the results are still a real ranking. */}
@@ -515,10 +627,23 @@ function JobsFeed() {
               {visibleJobs.length === 0
                 ? "No roles matched"
                 : `${visibleJobs.length} ${visibleJobs.length === 1 ? "role" : "roles"} matched`}
-              {hasFilters && !semantic && visibleJobs.length > 0 && (
-                <span className="text-gray-400 dark:text-gray-500"> / {jobList.length} total</span>
+              {/* The denominator is the corpus, from the server. It used to be
+                  `jobList.length`, which was the page the filters had already
+                  been applied to — so it read "12 / 12 total" and measured
+                  nothing. */}
+              {hasFilters && visibleJobs.length > 0 && facets.total > visibleJobs.length && (
+                <span className="text-gray-400 dark:text-gray-500">
+                  {" "}
+                  / {facets.total} open {facets.total === 1 ? "role" : "roles"}
+                </span>
               )}
             </Eyebrow>
+
+            {/* More rows match than one page returns, so the list is the newest
+                slice of the answer rather than the answer. */}
+            {truncated && (
+              <Eyebrow as="span">Showing the newest {visibleJobs.length} — narrow to see more</Eyebrow>
+            )}
 
             {/* Explains why a result with no keyword overlap is on the list. */}
             {semantic && (
@@ -553,19 +678,46 @@ function JobsFeed() {
         </div>
       ) : (
         !error && (
+          /*
+           * Two different empty states, told apart by the corpus size the server
+           * reports rather than by whether a filter happens to be set.
+           *
+           * "Nothing matched your filters" is a dead end the user can get out
+           * of, and the way out is the button. "There are no open roles at all"
+           * is not their doing and clearing filters would not help — offering it
+           * would send them round a loop that cannot succeed.
+           */
           <Card>
             <EmptyState
               icon={<Icon.briefcase className="h-6 w-6" />}
-              title={hasFilters ? "No jobs found" : "No open roles right now"}
+              title={
+                facets.total === 0
+                  ? "No open roles right now"
+                  : hasFilters
+                    ? "No roles match these filters"
+                    : "Nothing to show"
+              }
               description={
-                hasFilters
-                  ? "Try a different search term, or widen the filters."
-                  : "Nothing is being advertised at the moment. Check back soon."
+                facets.total === 0
+                  ? "Nothing is being advertised at the moment. Check back soon."
+                  : hasFilters
+                    ? `None of the ${facets.total} open ${
+                        facets.total === 1 ? "role" : "roles"
+                      } match every filter at once. Try widening one of them, or clear them all.`
+                    : "The feed came back empty. Reloading usually sorts it out."
               }
               action={
-                hasFilters ? (
+                facets.total > 0 && hasFilters ? (
                   <button type="button" onClick={clearFilters} className={buttonPrimary}>
                     Clear filters
+                  </button>
+                ) : facets.total > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => void fetchJobs(search, filters)}
+                    className={buttonPrimary}
+                  >
+                    Reload
                   </button>
                 ) : undefined
               }
@@ -593,34 +745,6 @@ function FeedShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-interface Option {
-  label: string;
-  count: number;
-}
-
-/** Unique, sorted, counted values for one field of the current job list. */
-function collect(jobs: JobListItem[], pick: (job: JobListItem) => string | null | undefined): Option[] {
-  // Keyed by lowercase so "remote" and "Remote" collapse into one option, but
-  // the first spelling seen is what gets shown.
-  const seen = new Map<string, Option>();
-
-  for (const job of jobs) {
-    const raw = pick(job)?.trim();
-    if (!raw) continue;
-    const key = raw.toLowerCase();
-    const existing = seen.get(key);
-    if (existing) existing.count += 1;
-    else seen.set(key, { label: raw, count: 1 });
-  }
-
-  return [...seen.values()].sort((a, b) => a.label.localeCompare(b.label));
-}
-
-/** Empty filter means "any"; otherwise compare without caring about case. */
-function equalsIgnoreCase(value: string | null | undefined, filter: string): boolean {
-  if (!filter) return true;
-  return (value ?? "").trim().toLowerCase() === filter.trim().toLowerCase();
-}
 
 /**
  * Whitespace and dangling punctuation, the same tidy-up `tidyRemainder` applies
@@ -698,6 +822,26 @@ function spanOf(haystack: string, needle: string): { start: number; end: number 
   return start === -1 ? null : { start, end: start + needle.length };
 }
 
+/**
+ * What an explicit select did to a filter the query implied.
+ *
+ * The rule is one line — the select the user set wins over the one inferred
+ * from prose — but it has to be *said*, or the words they typed appear to have
+ * been ignored for no reason.
+ *
+ * `remote` is a location claim here, the same way the query parser treats it,
+ * so the Location select is the control that overruled it.
+ */
+function overrideNote(chip: SearchFilterChip, filters: Filters): string {
+  const field = chip.key === "type" ? "Job type" : "Location";
+  const winner = chip.key === "type" ? filters.type : filters.location;
+
+  if (winner.toLowerCase() === chip.label.toLowerCase()) {
+    return `The ${field} filter already covers “${chip.label}” from your search.`;
+  }
+  return `Your search read “${chip.label}”, but the ${field} filter is set to “${winner}” — the filter wins.`;
+}
+
 function FilterSelect({
   id,
   label,
@@ -710,14 +854,14 @@ function FilterSelect({
   label: string;
   allLabel: string;
   value: string;
-  options: Option[];
+  options: Facet[];
   onChange: (value: string) => void;
 }) {
-  // A value arriving from the URL (or from a list that has since narrowed) may
-  // not be among the derived options. Without this the select would render
+  // A value arriving from the URL (or one whose postings have since closed) may
+  // not be among the offered options. Without this the select would render
   // blank while the filter was silently still applied.
   const isUnlisted =
-    Boolean(value) && !options.some((option) => option.label.toLowerCase() === value.toLowerCase());
+    Boolean(value) && !options.some((option) => option.value.toLowerCase() === value.toLowerCase());
 
   return (
     <div className="min-w-0">
@@ -732,8 +876,8 @@ function FilterSelect({
         <option value="">{allLabel}</option>
         {isUnlisted && <option value={value}>{value}</option>}
         {options.map((option) => (
-          <option key={option.label} value={option.label}>
-            {option.label} ({option.count})
+          <option key={option.value} value={option.value}>
+            {option.value} ({option.count})
           </option>
         ))}
       </select>
