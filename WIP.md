@@ -89,21 +89,30 @@ addition is additive with a rendering-preserving default.
 
 ## What is left
 
-### UI/UX — the sweep is clean, so this is judgement work now
-The mechanical inconsistencies are gone. What remains is not greppable:
+### UI/UX — every DESIGN-NOTES item is done except one
+All of §1–§4 and §5.1/5.2/5.4/5.5 are implemented and verified against the
+document section by section. What is left:
 
 - **§5.3 optimistic UI with React 19.** `useOptimistic` is still unused. Three
   textbook cases named in DESIGN-NOTES: application status change, withdrawing
   an application, saving a search. Keep the toast on both paths — an optimistic
   update that silently reverts is worse than a spinner.
+
+**A failure mode to watch for.** Four research items were found *built into the
+kit and never called* — `MeterRow` took a `weight` prop no call site passed,
+`MatchScore` took `rank`/`rankOf` nothing passed, and three surfaces hand-set
+their own `%` readout rather than using the component that had been fixed to
+stop printing one. Upgrading a component is only half of landing a change; grep
+for the call sites. The same shape as the earlier "features built but switched
+off" problem.
 - **`border-gray-200 dark:border-gray-700` appears ~100 times.** It is
   *correct* (it resolves to `--line` in both themes) but it is a pair you have
   to get right by hand, and `border-gray-300` has already crept in nearby. A
   `.hairline` class would close it; weigh that against ~100 lines of churn.
-- The match panel still shows a raw `76%` while the feed shows a band via
-  `MatchScore`. Consistent presentation of the same quantity is worth a look —
-  but see the correctness item below first, because they are not the same
-  quantity.
+- Every match surface now leads with a band and a `/100`, never a `%`. But the
+  feed and the detail page still compute the underlying number on two different
+  scales — see the correctness item below. Consistent *presentation* of two
+  inconsistent *quantities* is the state this is currently in.
 
 ### Blocked on you — I cannot fix these in code
 1. **Gemini key is free-tier: 20 generate calls/day.** Verification probing
