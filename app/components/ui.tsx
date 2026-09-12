@@ -1073,17 +1073,38 @@ export function Chip({
   );
 }
 
-const STATUS_STYLES: Record<string, string> = {
-  PENDING:
+/**
+ * The tinted-pill palette, as five tones rather than as a string per badge.
+ *
+ * The same five strings were written out in eight places — `STATUS_STYLES` and
+ * `JobStateBadge` here, and the step / section pills on the post and edit forms
+ * — and they had already begun to disagree: the two neutral copies used
+ * `text-gray-600 dark:text-gray-400` and the other two used
+ * `text-gray-700 dark:text-gray-300` for the same pill.
+ *
+ * Each tone pairs a border, a fill and a text step that hold 4.5:1 against each
+ * other in both themes. Exported because the two authoring forms need them and
+ * deliberately keep their *components* local — a stepped form is those pages'
+ * problem, not the kit's — but the palette is not theirs to fork.
+ */
+export const BADGE_TONES = {
+  neutral:
+    "border-gray-300 bg-gray-100 text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300",
+  amber:
     "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200",
-  SHORTLISTED:
-    "border-blue-300 bg-blue-50 text-blue-800 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-200",
-  INTERVIEW:
+  blue: "border-blue-300 bg-blue-50 text-blue-800 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-200",
+  violet:
     "border-violet-300 bg-violet-50 text-violet-800 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-200",
-  ACCEPTED:
+  green:
     "border-green-300 bg-green-50 text-green-800 dark:border-green-700 dark:bg-green-950/40 dark:text-green-200",
-  REJECTED:
-    "border-gray-300 bg-gray-100 text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400",
+} as const;
+
+const STATUS_STYLES: Record<string, string> = {
+  PENDING: BADGE_TONES.amber,
+  SHORTLISTED: BADGE_TONES.blue,
+  INTERVIEW: BADGE_TONES.violet,
+  ACCEPTED: BADGE_TONES.green,
+  REJECTED: BADGE_TONES.neutral,
 };
 
 /**
@@ -1117,9 +1138,7 @@ export function StatusBadge({
   showIcon?: boolean;
 }) {
   const label = STATUS_LABELS[status as ApplicationStatus] ?? status;
-  const styles =
-    STATUS_STYLES[status] ??
-    "border-gray-300 bg-gray-100 text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300";
+  const styles = STATUS_STYLES[status] ?? BADGE_TONES.neutral;
 
   return (
     <span className={`${BADGE_BASE} ${styles} ${className}`}>
@@ -1186,11 +1205,7 @@ export function PipelineTrack({
 export function JobStateBadge({ isActive }: { isActive: boolean }) {
   return (
     <span
-      className={`${BADGE_BASE} ${
-        isActive
-          ? "border-green-300 bg-green-50 text-green-800 dark:border-green-700 dark:bg-green-950/40 dark:text-green-200"
-          : "border-gray-300 bg-gray-100 text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400"
-      }`}
+      className={`${BADGE_BASE} ${isActive ? BADGE_TONES.green : BADGE_TONES.neutral}`}
     >
       <span
         className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-green-500" : "bg-gray-400"}`}

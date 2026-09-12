@@ -16,22 +16,23 @@ import {
 } from "@/lib/validation";
 import {
   Alert,
+  BADGE_TONES,
+  buttonDanger,
+  buttonGhost,
+  buttonPrimary,
+  buttonSecondary,
   Card,
   Chip,
   Eyebrow,
+  formatDate,
   Icon,
+  inputClass,
   JobStateBadge,
   Label,
   PageHeading,
   Readout,
   Skeleton,
   Spinner,
-  buttonDanger,
-  buttonGhost,
-  buttonPrimary,
-  buttonSecondary,
-  formatDate,
-  inputClass,
 } from "@/app/components/ui";
 
 interface JobDetail {
@@ -1950,12 +1951,9 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
 
 /** Tone map for a section's state pill. Not colour alone — each carries a word. */
 const SECTION_PILL_STYLES: Record<SectionTone, string> = {
-  saved:
-    "border-green-300 bg-green-50 text-green-800 dark:border-green-700 dark:bg-green-950/40 dark:text-green-200",
-  dirty:
-    "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200",
-  neutral:
-    "border-gray-300 bg-gray-100 text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300",
+  saved: BADGE_TONES.green,
+  dirty: BADGE_TONES.amber,
+  neutral: BADGE_TONES.neutral,
 };
 
 function SectionPill({ tone, label }: { tone: SectionTone; label: string }) {

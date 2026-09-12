@@ -1211,7 +1211,7 @@ export default function SeekerDashboardPage() {
                             aria-describedby={
                               uploadError ? "resume-upload-error resume-hint" : "resume-hint"
                             }
-                            className="block w-full cursor-pointer rounded-lg border border-gray-300 bg-white text-sm text-gray-600 file:mr-4 file:cursor-pointer file:rounded-l-md file:border-0 file:border-r file:border-gray-200 file:bg-gray-50 file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-gray-900 hover:file:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400 dark:file:border-gray-700 dark:file:bg-gray-700 dark:file:text-white dark:hover:file:bg-gray-600"
+                            className="field-file block"
                           />
                           <p
                             id="resume-hint"

@@ -15,20 +15,21 @@ import {
 } from "@/lib/validation";
 import {
   Alert,
+  BADGE_TONES,
+  buttonGhost,
+  buttonPrimary,
+  buttonSecondary,
   Card,
   Chip,
   Eyebrow,
   Icon,
+  inputClass,
   Label,
   Meter,
   PageHeading,
   Readout,
   Skeleton,
   Spinner,
-  buttonGhost,
-  buttonPrimary,
-  buttonSecondary,
-  inputClass,
 } from "@/app/components/ui";
 
 interface CreatedJob {
@@ -1851,10 +1852,9 @@ export default function PostJobPage() {
 
 /** Tone map for a step's state pill. Not colour alone — each carries a word. */
 const STEP_PILL_STYLES: Record<StepTone, string> = {
-  done: "border-green-300 bg-green-50 text-green-800 dark:border-green-700 dark:bg-green-950/40 dark:text-green-200",
-  todo: "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200",
-  optional:
-    "border-gray-300 bg-gray-100 text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300",
+  done: BADGE_TONES.green,
+  todo: BADGE_TONES.amber,
+  optional: BADGE_TONES.neutral,
 };
 
 function StepPill({ tone, label }: { tone: StepTone; label: string }) {

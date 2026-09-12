@@ -1481,6 +1481,53 @@ nav {
   }
 
   /* ==========================================================================
+     File input
+
+     `<input type="file">` is two controls in one box — a button the UA draws
+     and a filename it writes beside it — and the only handle on the button is
+     the `::file-selector-button` pseudo-element. The single call site styled it
+     with sixteen `file:` utilities that named five ramp steps the rest of the
+     app does not use, so the one control the seeker has to touch to upload a
+     CV was the one that looked least like the app around it.
+
+     The box is `.field`'s; the button is `.btn-outline`'s, minus the radius on
+     the side that meets the field edge.
+     ========================================================================== */
+
+  .field-file {
+    width: 100%;
+    cursor: pointer;
+    border: 1px solid var(--line-control);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    color: var(--ink-muted);
+    font-size: 0.875rem;
+  }
+
+  .field-file::file-selector-button {
+    margin-right: var(--space-4);
+    cursor: pointer;
+    border: 0;
+    border-right: 1px solid var(--line);
+    border-radius: var(--radius-md) 0 0 var(--radius-md);
+    background: var(--surface-sunken);
+    color: var(--ink);
+    padding: 0.625rem var(--space-5);
+    font-size: 0.875rem;
+    font-weight: 600;
+    transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .field-file:hover:not(:disabled)::file-selector-button {
+    background: var(--wash-hover);
+  }
+
+  .field-file:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
+  /* ==========================================================================
      Disclosure
 
      `<summary>` carries a UA triangle that sits on the text baseline and cannot

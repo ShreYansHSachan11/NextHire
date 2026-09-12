@@ -268,6 +268,12 @@ const pairs = () => [
   ["link on surface-raised", "--link", "--surface-raised", 4.5],
   ["link on surface-overlay", "--link", "--surface-overlay", 4.5],
   ["link on surface-sunken", "--link", "--surface-sunken", 4.5],
+
+  // ---- File input --------------------------------------------------------
+  // The filename sits on the field surface; the button label sits on the
+  // sunken fill beside it.
+  ["file input filename", "--ink-muted", "--surface", 4.5],
+  ["file input button label", "--ink", "--surface-sunken", 4.5],
 ];
 
 function resolve(spec, scope) {
