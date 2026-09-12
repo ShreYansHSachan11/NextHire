@@ -1,4 +1,4 @@
-# WIP — 12 Sep 2026
+# WIP — 12 Sep 2026 (updated after the multi-agent checkup)
 
 Where the UI/UX pass got to, and what to pick up.
 
@@ -9,9 +9,11 @@ with its sources in §Sources. Nothing below needs re-researching.
 
 ## State of the tree
 
-Green: `tsc` 0, `eslint` clean, `next build` 39/39, `npm run audit:contrast`
-200 pairs 0 failing, `npm run eval` unchanged. Everything is committed and
-pushed.
+Green: `tsc` 0, `eslint` clean, `next build` **38/38**, `npm run audit:contrast`
+200 pairs 0 failing, `npm run eval` unchanged, `npm run test:e2e` 58/58.
+Everything is committed and pushed.
+
+**38, not 39** — `/api/companies` was deleted as orphaned. Re-baseline to 38.
 
 ---
 
@@ -131,31 +133,47 @@ off" problem.
 
 ### Security — from `SECURITY-AUDIT.md` (0 Critical, 3 High, 6 Med, 6 Low)
 - **H1 is fixed** (Socket.IO read path authenticates; verified).
-- **H2 — `GET /api/jobs?q=` spends Gemini tokens unauthenticated.** Every
-  distinct query string is a guaranteed cache miss: one billed embedding call
-  plus a permanent ~6 KB `QueryVector` row, from anyone, signed out.
-- **H3 — every authenticated AI endpoint is an unmetered LLM proxy.**
-  Registration is open; `POST /api/ai/review` takes 10 000 characters to a
-  generation call with no ownership check.
-- **There is no rate limiting anywhere in the project.** H2 and H3 are both
-  really this, and it is the single highest-value thing left in the repo.
+- **H2 and H3 are fixed.** `lib/rateLimit.ts` meters the AI routes, the
+  embedding path on `GET /api/jobs`, auth, and the write endpoints.
+- **Remaining weakness, by design and documented in the file: the limiter is
+  per-instance, not global.** On Vercel each isolate keeps its own counters, so
+  a distributed caller gets roughly N budgets. It stops the tight loop, which is
+  the actual exploit. The real fix is one atomic counter in a shared store; the
+  `consume`/`RateLimitResult` shape is built so that swap needs no call-site
+  changes.
+
+### Migrations deliberately NOT run — decide and sequence these
+Two fixes are encoded as workarounds because the clean shape needs a schema
+change, and this database has diverged from the repo before:
+
+1. **Retired screening questions** use a `position` sentinel
+   (`RETIRED_POSITION` = 1000). The right shape is `retiredAt DateTime?` on
+   `JobQuestion`, with readers filtering `retiredAt: null`. See
+   `app/api/_lib/screening.ts` — it names the three `position` clauses to
+   replace.
+2. **Conversation deletion** is restricted to ADMIN. The right answer is a
+   per-side `archivedAt`, so either party can hide a thread without
+   destroying the copy belonging to the other side. Exposed as a `PATCH`.
 
 ### Correctness — from `LOGIC-AUDIT.md`
-- **Two match scales under one label.** `computeMatch` (sync) drives the feed;
+- ~~Two match scales under one label.~~ **Fixed** — `rankJobsAsync` batches a
+  page of postings into one embedding call, so the feed, the detail page and
+  the coach now agree. Measured mean gap was 4.1 composite points; 13.5 is the
+  arithmetic ceiling, not the typical case. Original note: `computeMatch`
+  (sync) drove the feed;
   `computeMatchAsync` (embedding skills) drives the detail page and the frozen
   `Application.matchScore`. Measured gap 13.5 composite points — a seeker sees
   62 on the card and 76 on the detail page, and the employer sort comparator
   mixes both scales in one expression.
-- A seeker cannot see their own submitted screening answers.
-- `PUT`/`DELETE` on job questions cascade-deletes answers already collected —
-  documented as deliberate, but it was theoretical before and is now live.
-- Fourth client/server cap mismatch: the company message composer has no cap
-  against the server's 5000.
-- `cosineSimilarity` claims to guard against a dimension mismatch but actually
-  truncates — mismatched widths return a perfect 100%.
-- `/api/companies` is entirely orphaned (160 lines, including a second
-  divergent writer for `Company.name`). ~15 exported HTTP methods have no
-  caller.
+- ~~A seeker cannot see their own submitted screening answers.~~ **Fixed**,
+  server and UI — without `knockout`/`expected`, which would be the answer key.
+- ~~`PUT`/`DELETE` on job questions cascade-deletes collected answers.~~
+  **Fixed** — a question with answers is retired rather than deleted.
+- ~~Fourth client/server cap mismatch.~~ **Fixed** — `MESSAGE_MAX_LENGTH` in
+  `lib/validation.ts`, imported by the route and both composers.
+- ~~`cosineSimilarity` truncates instead of guarding.~~ **Fixed** — returns 0,
+  which every threshold in the AI layer already filters out.
+- ~~`/api/companies` is orphaned.~~ **Deleted**; README rows removed.
 
 ---
 
