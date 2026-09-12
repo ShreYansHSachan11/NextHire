@@ -1318,7 +1318,7 @@ export default function PostJobPage() {
                             return (
                               <li
                                 key={finding.phrase}
-                                className="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900"
+                                className="panel-sunken p-3"
                               >
                                 <Eyebrow>
                                   {FINDING_LABELS[finding.category] ?? "Worth a second look"}

@@ -10,23 +10,24 @@ import Navbar from "@/app/components/Navbar";
 import { useToast } from "@/app/components/Toast";
 import {
   Alert,
+  Avatar,
+  buttonGhost,
+  buttonPrimary,
+  buttonSecondary,
   Card,
   Chip,
   EmptyState,
   Eyebrow,
+  formatCount,
+  formatDate,
   Icon,
+  inputClass,
   Label,
   MatchScore,
   Meter,
   PageHeading,
   Skeleton,
   Spinner,
-  buttonGhost,
-  buttonPrimary,
-  buttonSecondary,
-  formatCount,
-  formatDate,
-  inputClass,
 } from "@/app/components/ui";
 import { apiFetch } from "@/lib/clientAuth";
 
@@ -1498,15 +1499,10 @@ function JobCard({ job, scored }: { job: JobListItem; scored: boolean }) {
     // is stretched over the card with `after:absolute`. That keeps one link per
     // card with the role title as its accessible name, while the whole tile
     // stays clickable.
-    <Card className="group relative flex flex-col p-4 transition-[border-color,transform] duration-150 hover:-translate-y-0.5 hover:border-gray-300 dark:hover:border-gray-600 sm:p-5">
+    <Card interactive className="group relative flex flex-col p-4 sm:p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
-          <span
-            className="mono flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-md bg-gray-900 text-base font-semibold text-white dark:bg-gray-100 dark:text-gray-900"
-            aria-hidden="true"
-          >
-            {job.company?.name?.charAt(0).toUpperCase() ?? "C"}
-          </span>
+          <Avatar name={job.company?.name ?? "C"} className="h-11 w-11 text-base" />
           <div className="min-w-0">
             {/* `text-balance` on the one piece of display type on the card:
                 a two-line title that breaks 9/2 is measurably harder to scan

@@ -6,6 +6,7 @@ import Link from "next/link";
 import Navbar from "@/app/components/Navbar";
 import { useToast } from "@/app/components/Toast";
 import { useAuthGuard } from "@/app/hooks/useAuthGuard";
+import CoachLoading from "./loading";
 import { apiFetch } from "@/lib/clientAuth";
 import {
   Alert,
@@ -334,13 +335,11 @@ export default function SeekerCoachPage() {
   /* Render                                                                  */
   /* ---------------------------------------------------------------------- */
 
-  if (!ready) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <Spinner label="Loading your coach" />
-      </div>
-    );
-  }
+  // The same skeleton the route’s `loading.tsx` shows, so the rehydration wait
+  // and the navigation wait are one state rather than two (DESIGN-NOTES 1.4).
+  // The centred spinner this replaced sat on an empty field and then handed
+  // over to a full page of panels — the largest layout shift on the route.
+  if (!ready) return <CoachLoading />;
 
   if (!allowed) return null;
 

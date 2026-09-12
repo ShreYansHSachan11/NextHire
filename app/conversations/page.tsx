@@ -414,7 +414,7 @@ function ConversationsView() {
                     onBack={() => setShowChat(false)}
                   />
 
-                  <div className="flex-1 space-y-4 overflow-y-auto bg-gray-50 p-4 dark:bg-gray-950 sm:p-6">
+                  <div className="band-sunken flex-1 space-y-4 overflow-y-auto p-4 sm:p-6">
                     {groups.length === 0 ? (
                       <p className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
                         No messages yet — say hello.
@@ -455,7 +455,7 @@ function ConversationsView() {
                   />
                 </>
               ) : (
-                <div className="flex flex-1 items-center justify-center bg-gray-50 dark:bg-gray-950">
+                <div className="band-sunken flex flex-1 items-center justify-center">
                   <EmptyState
                     icon={<Icon.chat className="h-6 w-6" />}
                     title="No conversation selected"
@@ -637,7 +637,7 @@ function Composer({
   };
 
   return (
-    <div className="border-t border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800 sm:px-4">
+    <div className="border-t border-gray-200 bg-[var(--surface)] p-3 dark:border-gray-700 sm:px-4">
       <div className="flex items-end gap-2 sm:gap-3">
         <label htmlFor="message-input" className="sr-only">
           Message
