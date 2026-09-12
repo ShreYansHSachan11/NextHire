@@ -6,6 +6,7 @@ import { cleanString, cleanTagList, cleanText } from '@/lib/validation';
 import { isAiEnabled } from '@/lib/ai/config';
 import { generateJson } from '@/lib/ai/gemini';
 import { containsProtectedTerm } from '@/lib/ai/fairness';
+import { RATE_TIERS, checkRateLimit, rateLimited } from '@/lib/rateLimit';
 
 /**
  * Suggested screening questions for a posting.
@@ -230,6 +231,14 @@ export async function POST(req: NextRequest) {
   const { session } = guard;
 
   if (!isAiEnabled()) return aiUnavailable();
+
+  // One generation call per press, from a button the employer clicks while
+  // writing a posting — the interactive budget. Checked after the key test so a
+  // deployment with no key is untouched, and answered with a 429 rather than
+  // the 503 `aiUnavailable` returns, which the client reads as "this deployment
+  // has no model" and acts on permanently.
+  const limit = checkRateLimit(req, RATE_TIERS.AI_INTERACTIVE, session);
+  if (!limit.ok) return rateLimited(limit);
 
   let body: Record<string, unknown>;
   try {

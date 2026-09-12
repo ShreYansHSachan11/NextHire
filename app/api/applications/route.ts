@@ -18,6 +18,8 @@ import {
   rankApplicantsForJob,
   type MatchBreakdown,
 } from '@/lib/ai/matching';
+import { RATE_TIERS, checkRateLimit, rateLimited } from '@/lib/rateLimit';
+import { ASKED_QUESTIONS } from '../_lib/screening';
 
 /**
  * Prisma tags its known request errors with a string `code`. Reading it this way
@@ -92,6 +94,48 @@ const SCREENING_INCLUDE = {
 const EMPLOYER_INCLUDE = {
   ...APPLICANT_INCLUDE,
   ...SCREENING_INCLUDE,
+} as const;
+
+/**
+ * The same answers, read back by the person who wrote them.
+ *
+ * A seeker answered these questions from memory, under time pressure, and then
+ * had no way to see what they had said — not on the dashboard, not anywhere.
+ * They are being screened on those words and they are their own words, so
+ * withholding them was never a security property; it was an omission.
+ *
+ * What is withheld is the *answer key*. `knockout` and `expected` are missing
+ * from the question selection here and that is the whole difference from
+ * `SCREENING_INCLUDE`: `GET /api/jobs/:jobId/questions` already strips both for
+ * anyone who does not own the posting, and handing them to the candidate on
+ * their own application row would publish the screen to the person being
+ * screened — and, worse, tell them retrospectively which answer had failed.
+ *
+ * Two readers, and only two: the author, and the company that owns the job.
+ * Both are established from the verified session — the seeker branch below
+ * filters on `userId: session.id` and the employer branch on the job's
+ * `companyId` — so neither can be asked for by a request that merely names an
+ * application id.
+ */
+const OWN_SCREENING_INCLUDE = {
+  answers: {
+    orderBy: { question: { position: 'asc' } },
+    select: {
+      id: true,
+      value: true,
+      createdAt: true,
+      question: {
+        select: {
+          id: true,
+          prompt: true,
+          kind: true,
+          options: true,
+          required: true,
+          position: true,
+        },
+      },
+    },
+  },
 } as const;
 
 /* -------------------------------------------------------------------------- */
@@ -278,6 +322,10 @@ export async function GET(req: NextRequest) {
               company: { select: { id: true, name: true } },
             },
           },
+          // What they told this employer when they applied, in the order they
+          // were asked. Scoped by `userId: session.id` above, so a seeker can
+          // only ever reach their own.
+          ...OWN_SCREENING_INCLUDE,
         },
         orderBy: { createdAt: 'desc' },
       });
@@ -358,6 +406,14 @@ export async function POST(req: NextRequest) {
   if (guard.response) return guard.response;
   const { session } = guard;
 
+  // The (userId, jobId) unique already stops a double-click becoming two rows,
+  // but it does nothing about one account applying to every posting on the
+  // board in a loop: each application notifies the employer, and each one runs
+  // a match score. A 429 rather than a silent no-op, because the applicant is
+  // waiting on a definite answer.
+  const budget = checkRateLimit(req, RATE_TIERS.WRITE, session);
+  if (!budget.ok) return rateLimited(budget);
+
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -388,6 +444,12 @@ export async function POST(req: NextRequest) {
         // single field of the request. The answer key is not selected: nothing
         // in this handler needs it, and the applicant must never see it.
         questions: {
+          // Retired questions are not part of the set any more — they are kept
+          // only so the answers already given to them survive. Asking here
+          // would reject an applicant for not answering a required question the
+          // posting stopped asking, and store an answer to a question nobody
+          // was shown. See `app/api/_lib/screening.ts`.
+          where: ASKED_QUESTIONS,
           orderBy: { position: 'asc' },
           select: { id: true, prompt: true, kind: true, options: true, required: true },
         },

@@ -7,7 +7,8 @@ import { cleanString, cleanText, cleanTagList } from '@/lib/validation';
 import { isAiEnabled } from '@/lib/ai/config';
 import { generateJson } from '@/lib/ai/gemini';
 import { buildJobDocument, buildProfileDocument } from '@/lib/ai/documents';
-import { computeMatch, loadProfileContext, type MatchBreakdown } from '@/lib/ai/matching';
+import { computeMatchAsync, loadProfileContext, type MatchBreakdown } from '@/lib/ai/matching';
+import { RATE_TIERS, checkRateLimit, rateLimited } from '@/lib/rateLimit';
 
 /**
  * Seeker-side career coaching against one posting: gap analysis, a cover letter
@@ -371,6 +372,14 @@ export async function POST(req: NextRequest) {
 
   if (!isAiEnabled()) return aiUnavailable();
 
+  // The expensive tier: the prompt carries a whole profile document and a whole
+  // posting, and the route is the largest single generation a seeker can ask
+  // for. Nobody coaches themselves five times a minute by hand.
+  //
+  // After the key check, so a deployment without AI is bit-for-bit unchanged.
+  const limit = checkRateLimit(req, RATE_TIERS.AI_EXPENSIVE, session);
+  if (!limit.ok) return rateLimited(limit);
+
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -574,7 +583,11 @@ async function runGap(
   try {
     const profileContext = await loadProfileContext(userId);
     if (profileContext) {
-      match = computeMatch(profileContext, {
+      // The whole output of this screen is the missing-skills narrative, so it
+      // has to agree with the detail page it is explaining. One pair, on a path
+      // that already makes a generate call, so the extra embed is free by
+      // comparison.
+      match = await computeMatchAsync(profileContext, {
         vector: job.embedding?.vector ?? null,
         skills: job.skills ?? [],
         location: job.location,

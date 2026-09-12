@@ -1,6 +1,15 @@
 "use client";
 
-import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import React, {
+  startTransition,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useOptimistic,
+  useRef,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -65,6 +74,13 @@ interface Application {
    * application made before the profile was indexed, or with AI switched off.
    */
   matchScore?: number | null;
+  /**
+   * What this seeker told this employer when they applied, in the order asked.
+   * Scoped server-side to `userId: session.id`, and deliberately WITHOUT the
+   * question's `knockout`/`expected` fields — showing someone the answer key
+   * afterwards would tell them which answer disqualified them.
+   */
+  answers?: ScreeningAnswer[];
   job: {
     id: string;
     title: string;
@@ -74,6 +90,13 @@ interface Application {
     companyId: string;
     company: { name: string };
   };
+}
+
+/** One submitted screening answer, as the seeker's own record of it. */
+interface ScreeningAnswer {
+  id: string;
+  value: string;
+  question: { id: string; prompt: string };
 }
 
 interface Resume {
@@ -306,7 +329,22 @@ export default function SeekerDashboardPage() {
   const [uploadOpen, setUploadOpen] = useState(false);
 
   const [messagingId, setMessagingId] = useState<string | null>(null);
-  const [withdrawingId, setWithdrawingId] = useState<string | null>(null);
+
+  /**
+   * A withdrawn row leaves the list on the confirm, not on the response.
+   *
+   * The action is already behind a `window.confirm`, and the response carries
+   * nothing the page does not have — so the round trip was pure waiting, and
+   * every count, filter and sparkline on the page waited with it
+   * (DESIGN-NOTES 5.3). Layered rather than spliced: `loadApplications` can
+   * land mid-flight, and the removal re-applies to whatever the newer list is
+   * instead of being lost in it.
+   */
+  const [optimisticApplications, withdrawOptimistically] = useOptimistic(
+    applications,
+    (current: Application[], withdrawnId: string) =>
+      current.filter((application) => application.id !== withdrawnId)
+  );
 
   const [recommendations, setRecommendations] = useState<RecommendedJob[]>([]);
   const [recommendState, setRecommendState] = useState<RecommendState>("loading");
@@ -443,11 +481,11 @@ export default function SeekerDashboardPage() {
       REJECTED: 0,
       ACCEPTED: 0,
     };
-    for (const application of applications) {
+    for (const application of optimisticApplications) {
       if (isApplicationStatus(application.status)) byStatus[application.status] += 1;
     }
     return {
-      total: applications.length,
+      total: optimisticApplications.length,
       byStatus,
       pending: byStatus.PENDING,
       interviews: byStatus.INTERVIEW,
@@ -455,22 +493,25 @@ export default function SeekerDashboardPage() {
       /** Still open with the employer: not yet accepted or rejected. */
       inFlight: byStatus.PENDING + byStatus.SHORTLISTED + byStatus.INTERVIEW,
     };
-  }, [applications]);
+  }, [optimisticApplications]);
 
   /** Sparkline heights, normalised against the tallest bucket. */
   const pipelineBars = useMemo(() => {
-    if (applications.length === 0) return undefined;
+    if (optimisticApplications.length === 0) return undefined;
     const counts = PIPELINE_ORDER.map((status) => stats.byStatus[status]);
     const peak = Math.max(...counts, 1);
     return counts.map((count) => count / peak);
-  }, [applications.length, stats.byStatus]);
+  }, [optimisticApplications.length, stats.byStatus]);
 
+  // Everything downstream reads the optimistic list, so a withdrawal takes the
+  // tiles, the chip counts, the sparkline and the live "Showing N of M" line
+  // with it in the same frame — and brings them all back together if it fails.
   const visibleApplications = useMemo(
     () =>
       statusFilter === "ALL"
-        ? applications
-        : applications.filter((application) => application.status === statusFilter),
-    [applications, statusFilter]
+        ? optimisticApplications
+        : optimisticApplications.filter((application) => application.status === statusFilter),
+    [optimisticApplications, statusFilter]
   );
 
   const visibleMatches = showAllMatches
@@ -509,28 +550,45 @@ export default function SeekerDashboardPage() {
     }
   };
 
-  const withdrawApplication = async (application: Application) => {
+  const withdrawApplication = (application: Application) => {
     const confirmed = window.confirm(
       `Withdraw your application for "${application.job.title}"? This cannot be undone.`
     );
     if (!confirmed) return;
 
-    setWithdrawingId(application.id);
-    try {
-      await apiFetch("/api/applications", {
-        method: "DELETE",
-        body: JSON.stringify({ id: application.id }),
-      });
-      setApplications((current) => current.filter((item) => item.id !== application.id));
-      toast.success("Application withdrawn");
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Could not withdraw the application";
-      console.error("Failed to withdraw application:", error);
-      toast.error(message);
-    } finally {
-      setWithdrawingId(null);
-    }
+    /*
+     * Both halves belong to the one transition. `useOptimistic` holds a value
+     * only while a transition that set it is still running, so an update made
+     * outside one is thrown away on the next render — and committing the real
+     * removal outside one would release the optimistic layer a frame early,
+     * flashing the withdrawn row back into the list before the real list
+     * caught up.
+     *
+     * There is deliberately no rollback branch: ending the transition drops the
+     * optimistic layer, which is what puts the row back. The `catch` only has
+     * to explain it.
+     */
+    startTransition(async () => {
+      withdrawOptimistically(application.id);
+
+      try {
+        await apiFetch("/api/applications", {
+          method: "DELETE",
+          body: JSON.stringify({ id: application.id }),
+        });
+        setApplications((current) => current.filter((item) => item.id !== application.id));
+        toast.success("Application withdrawn");
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Could not withdraw the application";
+        console.error("Failed to withdraw application:", error);
+        // The row reappears on its own. Without this the reader watches it come
+        // back with no account of why, which is worse than having waited
+        // (DESIGN-NOTES 5.3) — and the error toast is `aria-live="assertive"`,
+        // so a screen-reader user is told rather than left to re-read the list.
+        toast.error(message);
+      }
+    });
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1026,7 +1084,7 @@ export default function SeekerDashboardPage() {
                     </button>
                   </Alert>
                 </div>
-              ) : applications.length === 0 ? (
+              ) : optimisticApplications.length === 0 ? (
                 <EmptyState
                   icon={<Icon.briefcase className="h-7 w-7" />}
                   title="No applications yet"
@@ -1064,9 +1122,8 @@ export default function SeekerDashboardPage() {
                       key={application.id}
                       application={application}
                       messaging={messagingId === application.id}
-                      withdrawing={withdrawingId === application.id}
                       onMessage={() => void startConversation(application)}
-                      onWithdraw={() => void withdrawApplication(application)}
+                      onWithdraw={() => withdrawApplication(application)}
                     />
                   ))}
                 </ul>
@@ -1481,13 +1538,11 @@ function PipelineTrack({ status, title }: { status: ApplicationStatus | null; ti
 function ApplicationRow({
   application,
   messaging,
-  withdrawing,
   onMessage,
   onWithdraw,
 }: {
   application: Application;
   messaging: boolean;
-  withdrawing: boolean;
   onMessage: () => void;
   onWithdraw: () => void;
 }) {
@@ -1556,6 +1611,34 @@ function ApplicationRow({
               {application.message}
             </p>
           )}
+
+          {/*
+            * The seeker's own screening answers. Collapsed, because this is a
+            * record to check rather than something to read on every visit — and
+            * because a list of applications each unrolling four answers stops
+            * being a list.
+            *
+            * Only what they wrote. The question's expected answer and whether it
+            * was a knockout are not in the payload and must not be added: this
+            * is the candidate's copy of what they submitted, not a mark scheme.
+            */}
+          {application.answers && application.answers.length > 0 && (
+            <details className="mt-3">
+              <summary className="disclosure-summary eyebrow hit-24">
+                Your answers ({application.answers.length})
+              </summary>
+              <dl className="panel-sunken mt-2 space-y-3 p-3">
+                {application.answers.map((answer) => (
+                  <div key={answer.id}>
+                    <Eyebrow as="dt">{answer.question.prompt}</Eyebrow>
+                    <dd className="mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">
+                      {answer.value}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </details>
+          )}
         </div>
 
         {/* A single right rail on desktop: state, then how far it travelled,
@@ -1581,11 +1664,13 @@ function ApplicationRow({
               Message
               <span className="sr-only"> about {application.job.title}</span>
             </Button>
+            {/* No `loading` state to pass: the row it sits in is gone by the
+                time a response could arrive, so a spinner here would only ever
+                be seen on the way out. The confirm dialog is the deliberation;
+                the disappearance is the confirmation. */}
             <Button
               variant="danger"
               className="sm:flex-1 lg:w-full"
-              loading={withdrawing}
-              loadingLabel="Withdrawing the application"
               icon={<Icon.trash className="h-4 w-4" />}
               onClick={onWithdraw}
             >

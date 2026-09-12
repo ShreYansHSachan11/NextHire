@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { requireRole, serverError } from '@/lib/auth';
 import { isAiEnabled } from '@/lib/ai/config';
-import { loadProfileContext, rankJobs, type MatchBreakdown } from '@/lib/ai/matching';
+import { loadProfileContext, rankJobsAsync, type MatchBreakdown } from '@/lib/ai/matching';
 
 /**
  * GET /api/jobs/recommended — "roles matched to you", for the seeker dashboard.
@@ -82,7 +82,8 @@ export async function GET(req: NextRequest) {
       take: CANDIDATE_LIMIT,
     });
 
-    const scored = rankJobs(profile, candidates).filter(
+    // Same scale as the feed and the detail page — see `app/api/jobs/route.ts`.
+    const scored = (await rankJobsAsync(profile, candidates)).filter(
       (entry): entry is { job: RecommendedJob; match: MatchBreakdown } =>
         (entry.match?.score ?? 0) >= MIN_SCORE
     );

@@ -6,6 +6,7 @@ import { cleanString, cleanText } from '@/lib/validation';
 import { isAiEnabled } from '@/lib/ai/config';
 import { generateJsonFromDocument } from '@/lib/ai/gemini';
 import { syncProfileEmbedding } from '@/lib/ai/embeddings';
+import { RATE_TIERS, checkRateLimit, rateLimited } from '@/lib/rateLimit';
 
 /**
  * Turns the seeker's uploaded resume into the structured profile the matcher
@@ -149,6 +150,15 @@ export async function POST(req: NextRequest) {
   const { session } = guard;
 
   if (!isAiEnabled()) return aiUnavailable();
+
+  // The expensive tier, and the clearest case for one: this uploads an entire
+  // document to the model and then rewrites the caller's profile from what
+  // comes back. A person parses their résumé once, or a handful of times after
+  // editing it — not five times a minute.
+  //
+  // After the key check, so a deployment without AI behaves exactly as before.
+  const limit = checkRateLimit(req, RATE_TIERS.AI_EXPENSIVE, session);
+  if (!limit.ok) return rateLimited(limit);
 
   try {
     const [resume] = await prisma.resume.findMany({

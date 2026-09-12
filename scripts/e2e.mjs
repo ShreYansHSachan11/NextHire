@@ -240,7 +240,11 @@ await section('Profile & validation', async () => {
 await section('AI — index, matching, search', async () => {
   // ADMIN cannot be self-assigned, so promote directly in the database, which is
   // exactly what the README tells an operator to do.
-  const { PrismaClient } = await import(process.env.PRISMA_CLIENT_PATH);
+  // Resolved by package name now that this script lives in the repo. It used
+  // to require PRISMA_CLIENT_PATH because it ran from a scratchpad outside the
+  // project, where `@prisma/client` does not resolve; the env var is kept as an
+  // escape hatch for anyone running it from somewhere else.
+  const { PrismaClient } = await import(process.env.PRISMA_CLIENT_PATH || '@prisma/client');
   const db = new PrismaClient();
   const adminEmail = `admin.${stamp}@example.com`;
   await db.user.update({ where: { email: adminEmail }, data: { role: 'ADMIN' } });

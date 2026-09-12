@@ -138,8 +138,6 @@ caller server-side** — ownership is never taken from the request body.
 | `GET` `POST` | `/api/messages` | Conversation participants only |
 | `GET` `PATCH` `DELETE` | `/api/notifications` | Own notifications only |
 | `GET` `POST` `DELETE` | `/api/resumes` | Own résumé; readable by companies you applied to |
-| `GET` | `/api/companies` | Public directory |
-| `PUT` | `/api/companies` | Own company |
 | `GET` | `/api/users/:id` | Full record for self; minimal public shape otherwise |
 | `PUT` `DELETE` | `/api/users/:id` | Self or admin — `PUT` re-issues the JWT |
 | `GET` | `/api/stats` | Public — counts for the homepage |

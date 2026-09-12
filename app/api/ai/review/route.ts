@@ -6,6 +6,7 @@ import { cleanString, cleanText } from '@/lib/validation';
 import { isAiEnabled } from '@/lib/ai/config';
 import { generateJson } from '@/lib/ai/gemini';
 import { stripProtectedSentences, withoutProtectedTerms } from '@/lib/ai/fairness';
+import { RATE_TIERS, checkRateLimit, rateLimited } from '@/lib/rateLimit';
 
 /**
  * Company-side review help. Two modes, both advisory.
@@ -513,6 +514,23 @@ export async function POST(req: NextRequest) {
   if (typeof mode !== 'string' || !(MODES as readonly string[]).includes(mode)) {
     return badRequest(`Choose a valid review mode: ${MODES.join(' or ')}`);
   }
+
+  // Metered after the mode is known, because the two modes do not cost the
+  // same: `inclusivity` sends one draft posting, `pipeline` sends up to
+  // `PIPELINE_SAMPLE` candidate records and reads the applicant table to build
+  // them. They are also used differently — an employer iterates on a draft and
+  // asks for a pool summary once — so one shared budget would either throttle
+  // the drafting or leave the expensive mode effectively unlimited.
+  //
+  // 429 rather than 503 on purpose: `requestAi` on the client reads 503 as "no
+  // model on this deployment" and hides the assistive buttons for the whole
+  // session. A rate limit is temporary and must not look permanent.
+  const limit = checkRateLimit(
+    req,
+    (mode as Mode) === 'pipeline' ? RATE_TIERS.AI_EXPENSIVE : RATE_TIERS.AI_INTERACTIVE,
+    session
+  );
+  if (!limit.ok) return rateLimited(limit);
 
   try {
     return (mode as Mode) === 'pipeline'

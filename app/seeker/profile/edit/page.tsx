@@ -67,15 +67,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * The matching half of a user row, read off whatever object is to hand.
+ * The stored half of a user row, read off whatever object is to hand.
  *
  * The JWT carries only session fields, so the rehydrated store normally has
  * none of these — `GET /api/users/:id` is the fallback. Seeding matters more
- * than it looks: the four fields are sent on every save, so a form that never
+ * than it looks: these fields are sent on every save, so a form that never
  * learned the stored values would wipe them the first time someone edited
  * their name.
+ *
+ * `profile` is in this list because it was missing from it, and the hazard the
+ * paragraph above describes was live for the "About you" text: the store never
+ * carried it (`respondWithSession` does not return it either), so the textarea
+ * seeded empty on every reload, and `handleSubmit` sent it unconditionally —
+ * `'profile' in body` was true, `cleanText("", 2000)` returned null, and the
+ * bio was set to NULL while the toast said "Profile updated". It also silently
+ * re-embedded the profile document without the bio, moving every match score
+ * for that seeker. The company-side editor had already been fixed; this one
+ * had not.
  */
 function readSignal(source: unknown): {
+  profile: string;
   headline: string;
   seniority: string;
   years: string;
@@ -84,6 +95,7 @@ function readSignal(source: unknown): {
   if (!isRecord(source)) return null;
   const years = Number(source.yearsOfExp);
   return {
+    profile: typeof source.profile === "string" ? source.profile : "",
     headline: typeof source.headline === "string" ? source.headline : "",
     seniority: cleanSeniority(source.seniority) ?? "",
     years: Number.isFinite(years) && source.yearsOfExp !== null ? String(Math.trunc(years)) : "",
@@ -123,6 +135,15 @@ export default function EditSeekerProfilePage() {
   const [signalFailed, setSignalFailed] = useState(false);
   /** Set as soon as the user touches this section, so a late fetch defers. */
   const signalEdited = useRef(false);
+  /**
+   * The same guard for "About you", and a separate one on purpose.
+   *
+   * The matching fields are `disabled` until they have loaded, so nobody can
+   * edit them early. The textarea is not — it is usable from the first paint —
+   * so it needs its own flag, or the authoritative read would land on top of a
+   * sentence somebody was halfway through typing.
+   */
+  const profileEdited = useRef(false);
 
   /** Focus targets, so a failed validation puts the cursor in the offending box. */
   const nameRef = useRef<HTMLInputElement>(null);
@@ -163,6 +184,16 @@ export default function EditSeekerProfilePage() {
         if (cancelled) return;
         const stored = readSignal(record);
         if (!stored) return;
+
+        // Two independent merges, because the two halves have two different
+        // "has the user started?" answers — see `profileEdited`.
+        if (!profileEdited.current) {
+          setForm((current) => ({ ...current, profile: stored.profile }));
+          setBaseline((current) =>
+            current ? { ...current, form: { ...current.form, profile: stored.profile } } : current
+          );
+        }
+
         // Never overwrite something the user has already started changing.
         if (!signalEdited.current) {
           setForm((current) => ({
@@ -236,6 +267,7 @@ export default function EditSeekerProfilePage() {
     if (name === "headline" || name === "seniority" || name === "years") {
       signalEdited.current = true;
     }
+    if (name === "profile") profileEdited.current = true;
     setForm((current) => ({ ...current, [name]: value }));
     setErrors((current) => ({ ...current, [name]: undefined }));
   };
@@ -363,12 +395,26 @@ export default function EditSeekerProfilePage() {
           }
         : {};
 
+      /*
+       * `profile` is presence-gated server-side in exactly the same way, and so
+       * it is gated here in exactly the same way. It used to go unconditionally,
+       * from a textarea that seeded empty because neither the JWT nor the store
+       * carries the bio — so every save by someone who had not waited for
+       * `GET /api/users/:id` sent `profile: ""` and nulled it.
+       *
+       * Sent when this form knows the stored value, or when the user has typed
+       * in the box themselves (including deliberately clearing it). Otherwise
+       * omitted, and the server leaves what is on record alone.
+       */
+      const profileField =
+        signalLoaded || profileEdited.current ? { profile: form.profile.trim() } : {};
+
       const updated = await apiFetch<UpdateProfileResponse>(`/api/users/${user.id}`, {
         method: "PUT",
         body: JSON.stringify({
           name: form.name.trim(),
           email: form.email.trim(),
-          profile: form.profile.trim(),
+          ...profileField,
           ...signalFields,
         }),
       });

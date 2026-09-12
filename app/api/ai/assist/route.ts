@@ -4,6 +4,7 @@ import { requireRole, badRequest } from '@/lib/auth';
 import { cleanString, cleanText } from '@/lib/validation';
 import { isAiEnabled } from '@/lib/ai/config';
 import { generateJson } from '@/lib/ai/gemini';
+import { RATE_TIERS, checkRateLimit, rateLimited } from '@/lib/rateLimit';
 
 /**
  * Drafting help for employers.
@@ -116,6 +117,18 @@ export async function POST(req: NextRequest) {
   if (guard.response) return guard.response;
 
   if (!isAiEnabled()) return aiUnavailable();
+
+  // After the key check, never before it: with no key this route spends
+  // nothing, so metering it would be a budget against a call that cannot
+  // happen. A deployment without AI behaves exactly as it did before AI existed.
+  //
+  // A 429 rather than the 503 `aiUnavailable` returns, and the difference
+  // matters to the client: `requestAi` treats 503 as "this deployment has no
+  // model" and hides every assistive button for the session, which would turn a
+  // momentary rate limit into a feature that vanished. A 429 surfaces as one
+  // toast and the button stays.
+  const limit = checkRateLimit(req, RATE_TIERS.AI_INTERACTIVE, guard.session);
+  if (!limit.ok) return rateLimited(limit);
 
   let body: Record<string, unknown>;
   try {

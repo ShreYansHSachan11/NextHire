@@ -13,7 +13,7 @@ import {
 import { cleanString, cleanText, cleanTagList, isJobType, JOB_TYPES } from '@/lib/validation';
 import {
   loadProfileContext,
-  rankJobs,
+  rankJobsAsync,
   type ProfileVectorContext,
 } from '@/lib/ai/matching';
 import {
@@ -23,6 +23,8 @@ import {
   type SearchFilterChip,
 } from '@/lib/ai/search';
 import { queueJobEmbedding } from '@/lib/ai/embeddings';
+import { isAiEnabled } from '@/lib/ai/config';
+import { RATE_TIERS, checkRateLimit, rateLimited } from '@/lib/rateLimit';
 
 /** Public feed columns. Deliberately no `embedding` — see FEED_INCLUDE_WITH_VECTOR. */
 const FEED_INCLUDE = {
@@ -517,12 +519,50 @@ export async function GET(req: NextRequest) {
     // `OVERRIDABLE_CHIPS` for why, and what comes back to the UI as a result.
     const { query: searchQuery, overridden } = applyOverrides(query, filters);
 
+    /*
+     * The one rate limit on the read path, and the reason it exists.
+     *
+     * A `?q=` the `QueryVector` table has not seen before is a guaranteed cache
+     * miss: one billed embedding call, and one permanent ~6 KB row written to
+     * the database. Anyone, signed out, can produce distinct query strings in a
+     * loop — which spends money and grows a table nothing prunes.
+     *
+     * Three deliberate choices about how it is applied:
+     *
+     * - **Only when a spend is possible.** Gated on `isAiEnabled()`, so a
+     *   deployment with no key meters nothing and the feed behaves exactly as
+     *   it did before AI existed.
+     * - **Degrade, never reject.** Over budget, the search is simply not run:
+     *   `search` stays null and the request falls through to the full listing
+     *   for the client to keyword-filter, which is bit-for-bit the path a model
+     *   outage already takes in the catch below. No 429 — a browsing visitor
+     *   must never be shown an error for reading a public job board, and the
+     *   non-AI path must keep working.
+     * - **Generously, per caller.** `SEARCH_ANON`/`SEARCH_AUTH` sit well above
+     *   what a person types through a 250 ms debounce; see `lib/rateLimit.ts`
+     *   for the numbers and the reasoning.
+     *
+     * The honest cost of degrading rather than rejecting is that a caller over
+     * budget also loses the *lexical* arm, because `hybridJobSearch` runs both
+     * arms together and this route cannot ask it for one. The result is a
+     * broader list and a client-side keyword filter rather than a ranked one —
+     * worse, never broken, and unreachable by any plausible human.
+     */
+    let searchAllowed = true;
+    if (searchQuery && isAiEnabled()) {
+      searchAllowed = checkRateLimit(
+        req,
+        session ? RATE_TIERS.SEARCH_AUTH : RATE_TIERS.SEARCH_ANON,
+        session
+      ).ok;
+    }
+
     // Hybrid search is best-effort: a model outage must degrade the feed to a
     // plain listing, never fail it. `hybridJobSearch` already falls back to its
     // lexical arm when the vector arm is unavailable, so reaching the catch here
     // means something worse than "AI is off" went wrong.
     let search: HybridSearchResult | null = null;
-    if (searchQuery) {
+    if (searchQuery && searchAllowed) {
       try {
         search = await hybridJobSearch(searchQuery, { limit: SEMANTIC_LIMIT });
       } catch (searchError) {
@@ -589,7 +629,13 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const ranked = rankJobs(profile, rows);
+    // `rankJobsAsync`, not `rankJobs`: the feed and the detail page used to
+    // score the same posting on two different skill layers and print both under
+    // one label. This warms the whole page vocabulary in one call and then
+    // scores synchronously, so the scale matches the detail page at roughly one
+    // round trip per page rather than one per job. Falls back to exactly the
+    // old numbers when the model is unreachable.
+    const ranked = await rankJobsAsync(profile, rows);
 
     if (sortByMatch && profile?.vector?.length) {
       // Jobs with no vector yet have no score; they sort to the end rather than
@@ -658,6 +704,13 @@ export async function POST(req: NextRequest) {
   const guard = requireCompany(req);
   if (guard.response) return guard.response;
   const { session } = guard;
+
+  // A 429 here, unlike on the GET above: this is a deliberate action with a
+  // result the caller is waiting for, so silently doing nothing would be the
+  // worse answer. Each accepted posting also queues an embedding, so a flood is
+  // a model spend as well as a table of junk on the public feed.
+  const budget = checkRateLimit(req, RATE_TIERS.WRITE, session);
+  if (!budget.ok) return rateLimited(budget);
 
   let body: Record<string, unknown>;
   try {

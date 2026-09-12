@@ -9,6 +9,10 @@ import { useAuthGuard } from "@/app/hooks/useAuthGuard";
 import MessagesLoading from "./loading";
 import { useSocket } from "@/lib/socketContext";
 import { apiFetch } from "@/lib/clientAuth";
+// The cap the route enforces, read from one place rather than re-declared here
+// — a re-declared cap is exactly what produced the three earlier client/server
+// mismatches. See the note in that file about where it should ultimately live.
+import { MESSAGE_MAX_LENGTH } from "@/lib/validation";
 import {
   Alert,
   Avatar,
@@ -23,6 +27,7 @@ import {
   Icon,
   inputClass,
   PageHeading,
+  Readout,
   SkeletonRows,
   Spinner,
 } from "@/app/components/ui";
@@ -602,6 +607,12 @@ function MessageBubble({ message, own }: { message: Message; own: boolean }) {
   );
 }
 
+/**
+ * Where the counter appears. Below this it is noise; above it, it is a warning.
+ * The same threshold the seeker-side composer uses.
+ */
+const MESSAGE_COUNTER_AT = MESSAGE_MAX_LENGTH - 500;
+
 function Composer({
   value,
   onChange,
@@ -614,6 +625,7 @@ function Composer({
   sending: boolean;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const remaining = MESSAGE_MAX_LENGTH - value.length;
 
   // Grow with the text, up to a few lines, then scroll.
   useEffect(() => {
@@ -624,9 +636,12 @@ function Composer({
   }, [value]);
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // `onKeyPress` was deprecated and never fired reliably; Shift+Enter now
-    // inserts a newline instead of sending.
-    if (event.key === "Enter" && !event.shiftKey) {
+    // `onKeyPress` was deprecated and never fired reliably; Shift+Enter inserts
+    // a newline instead of sending. `isComposing` is the third case, and was
+    // missing here while the seeker-side composer already handled it: mid-IME
+    // an Enter commits the candidate, and swallowing it sent a half-typed
+    // message to the applicant instead.
+    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
       onSend();
     }
@@ -638,6 +653,9 @@ function Composer({
         <label htmlFor="message-input" className="sr-only">
           Message
         </label>
+        {/* `maxLength` mirrors what the route stores. Without it the box took
+            any amount of text and `cleanText` silently truncated it on the way
+            into the database — the employer saw a message they did not send. */}
         <textarea
           id="message-input"
           ref={textareaRef}
@@ -645,7 +663,9 @@ function Composer({
           value={value}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Type a message — Enter to send, Shift+Enter for a new line"
+          placeholder="Type a message…"
+          maxLength={MESSAGE_MAX_LENGTH}
+          aria-describedby="message-hint"
           className={`${inputClass} max-h-40 flex-1 resize-none text-sm!`}
         />
         <button
@@ -657,6 +677,21 @@ function Composer({
           {sending ? <Spinner className="h-4 w-4" /> : <Icon.send className="h-4 w-4" />}
           <span className="hidden sm:inline">{sending ? "Sending" : "Send"}</span>
         </button>
+      </div>
+      <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        {/* Out of the placeholder and into a description: a placeholder is gone
+            by the time the keystroke it describes is wanted, and it was the
+            only place these two keys were named. */}
+        <p id="message-hint" className="eyebrow">
+          Enter sends · Shift + Enter adds a new line
+        </p>
+        {/* Silent until it matters, so the composer stays quiet for the 99% of
+            messages nowhere near the cap. */}
+        {value.length >= MESSAGE_COUNTER_AT && (
+          <Eyebrow as="span">
+            <Readout className="text-[11px] font-medium">{remaining}</Readout> characters left
+          </Eyebrow>
+        )}
       </div>
     </div>
   );

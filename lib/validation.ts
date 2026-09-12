@@ -24,6 +24,20 @@ export const MIN_PASSWORD_LENGTH = 8;
  */
 export const MAX_PASSWORD_BYTES = 72;
 
+/**
+ * The longest message either composer will accept, and the length
+ * `app/api/messages/route.ts` truncates at.
+ *
+ * It has to be one number because the server **truncates rather than rejects**:
+ * past this length there is no error for a client to show, only the quiet loss
+ * of the tail. The company-side composer had no cap at all while the route cut
+ * at 5000, which is the fourth client/server mismatch this codebase has found —
+ * every one of them caused by a call site holding its own copy of a number.
+ * That is why this module is the single authority: import it, never re-declare
+ * it.
+ */
+export const MESSAGE_MAX_LENGTH = 5000;
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 export function isValidEmail(value: unknown): value is string {

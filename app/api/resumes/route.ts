@@ -15,6 +15,7 @@ import {
 } from '@/lib/auth';
 import { validateResumeFile } from '@/lib/validation';
 import { queueProfileEmbedding } from '@/lib/ai/embeddings';
+import { RATE_TIERS, checkRateLimit, rateLimited } from '@/lib/rateLimit';
 
 // Cloudinary's SDK needs Node APIs (streams, Buffer), so this route can never
 // run on the edge runtime.
@@ -157,6 +158,13 @@ export async function POST(req: NextRequest) {
   const guard = requireRole(req, 'SEEKER');
   if (guard.response) return guard.response;
   const { session } = guard;
+
+  // Checked before the file is read off the wire, not after: the point is to
+  // avoid paying for the upload at all. Every accepted résumé is up to 5 MB
+  // through the function and an object in Cloudinary that nothing
+  // garbage-collects, so the ceiling here is lower than for a database row.
+  const budget = checkRateLimit(req, RATE_TIERS.UPLOAD, session);
+  if (!budget.ok) return rateLimited(budget);
 
   // The one place `validateEnv()` earns its keep, and the reason it exists as
   // an explicit call rather than an import-time check. `env.CLOUDINARY.*`

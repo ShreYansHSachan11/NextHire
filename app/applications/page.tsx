@@ -1,6 +1,13 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useOptimistic,
+  useState,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Navbar from "@/app/components/Navbar";
@@ -238,8 +245,25 @@ export default function ApplicationsPage() {
   const [jobs, setJobs] = useState<JobOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
-  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
   const [messagingUserId, setMessagingUserId] = useState<string | null>(null);
+
+  /**
+   * The pending status sits *on top of* the loaded list rather than replacing it.
+   *
+   * This was hand-rolled: the row was written in place and a snapshot of the
+   * whole array was kept to restore on failure. That snapshot is the bug — a
+   * `loadData` can land between the write and the failure, and restoring it
+   * would then throw away the fresher list. `useOptimistic` layers instead of
+   * overwriting, so leaving the transition is the rollback, and anything that
+   * arrived meanwhile survives it (DESIGN-NOTES 5.3).
+   */
+  const [optimisticApplications, applyOptimisticStatus] = useOptimistic(
+    applications,
+    (current: Application[], change: { id: string; status: string }) =>
+      current.map((application) =>
+        application.id === change.id ? { ...application, status: change.status } : application
+      )
+  );
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [sort, setSort] = useState<SortMode>("recent");
   // Latched: once a scored row has been seen the sort control stays available,
@@ -260,39 +284,76 @@ export default function ApplicationsPage() {
   // against, so the job id is only worth sending while ranking by fit.
   const rankJobId = sort === "fit" ? filters.jobId : "";
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    setLoadError("");
-    // The endpoint defaults to the caller's own company, so the query param is
-    // only a hint — never a way to read someone else's applications.
-    const companyQuery = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  /** Bumped by "Try again", so a retry is the same effect run as any other. */
+  const [reloadKey, setReloadKey] = useState(0);
 
-    const params = new URLSearchParams();
-    if (companyId) params.set("companyId", companyId);
-    if (sort === "fit") {
-      params.set("rank", "fit");
-      if (rankJobId) params.set("jobId", rankJobId);
-    }
-    const applicationQuery = params.toString() ? `?${params.toString()}` : "";
+  const loadData = useCallback(
+    /**
+     * `isCancelled` is checked after the await, before anything is written.
+     *
+     * The two arms of this fetch take very different times — `?rank=fit` runs a
+     * scoring pass, the plain listing does not — so toggling "Best fit" on and
+     * off raced the scored response against the unscored one and let whichever
+     * finished last win, regardless of which the control was showing. Same
+     * `cancelled` cleanup as both conversation pages.
+     */
+    async (isCancelled: () => boolean) => {
+      setLoading(true);
+      setLoadError("");
 
-    try {
-      const [applicationList, jobList] = await Promise.all([
-        apiFetch<Application[]>(`/api/applications${applicationQuery}`),
-        apiFetch<JobOption[]>(`/api/jobs${companyQuery}`),
-      ]);
-      setApplications(Array.isArray(applicationList) ? applicationList : []);
-      setJobs(Array.isArray(jobList) ? jobList.map(({ id, title }) => ({ id, title })) : []);
-    } catch (error) {
-      console.error("Failed to load applications:", error);
-      setLoadError(error instanceof Error ? error.message : "Could not load applications");
-    } finally {
-      setLoading(false);
-    }
-  }, [companyId, sort, rankJobId]);
+      const params = new URLSearchParams();
+      // The endpoint defaults to the caller's own company, so the query param is
+      // only a hint — never a way to read someone else's applications.
+      if (companyId) params.set("companyId", companyId);
+      if (sort === "fit") {
+        params.set("rank", "fit");
+        if (rankJobId) params.set("jobId", rankJobId);
+      }
+      const applicationQuery = params.toString() ? `?${params.toString()}` : "";
+
+      try {
+        const [applicationList, jobList] = await Promise.all([
+          apiFetch<Application[]>(`/api/applications${applicationQuery}`),
+          /*
+           * No company, no job request. This used to fall back to a bare
+           * `/api/jobs`, which is the *public* feed — so an ADMIN, who passes
+           * every `useAuthGuard` gate on this page but carries no `companyId`,
+           * got every other company's postings listed in "Filter by role".
+           *
+           * An empty list rather than an early return: unlike the company
+           * dashboard, the applications request above is scoped by the session
+           * and still worth making, so bailing out of the whole load would
+           * leave the page in a skeleton that never resolves.
+           */
+          companyId
+            ? apiFetch<JobOption[]>(`/api/jobs?companyId=${encodeURIComponent(companyId)}`)
+            : Promise.resolve<JobOption[]>([]),
+        ]);
+        if (isCancelled()) return;
+
+        setApplications(Array.isArray(applicationList) ? applicationList : []);
+        setJobs(Array.isArray(jobList) ? jobList.map(({ id, title }) => ({ id, title })) : []);
+      } catch (error) {
+        if (isCancelled()) return;
+        console.error("Failed to load applications:", error);
+        setLoadError(error instanceof Error ? error.message : "Could not load applications");
+      } finally {
+        // A superseded run does not get to clear the spinner the run that
+        // replaced it is still using.
+        if (!isCancelled()) setLoading(false);
+      }
+    },
+    [companyId, sort, rankJobId]
+  );
 
   useEffect(() => {
-    if (allowed) void loadData();
-  }, [allowed, loadData]);
+    if (!allowed) return;
+    let cancelled = false;
+    void loadData(() => cancelled);
+    return () => {
+      cancelled = true;
+    };
+  }, [allowed, loadData, reloadKey]);
 
   // A deployment with no Gemini key returns `match: null` and a null
   // `matchScore` on every row. That is not an error state — it just means there
@@ -314,15 +375,17 @@ export default function ApplicationsPage() {
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const status of APPLICATION_STATUSES) counts[status] = 0;
-    for (const application of applications) {
+    for (const application of optimisticApplications) {
       if (application.status in counts) counts[application.status] += 1;
     }
     return counts;
-  }, [applications]);
+  }, [optimisticApplications]);
 
   const filteredApplications = useMemo(() => {
     const term = filters.search.trim().toLowerCase();
-    return applications.filter((application) => {
+    // The optimistic list, so a row the employer just moved leaves (or joins) a
+    // status filter on the click rather than a round trip later.
+    return optimisticApplications.filter((application) => {
       const matchesSearch =
         !term ||
         application.user.name.toLowerCase().includes(term) ||
@@ -336,7 +399,7 @@ export default function ApplicationsPage() {
         (filters.hasResume === "no" && resumeCount === 0);
       return matchesSearch && matchesStatus && matchesJob && matchesResume;
     });
-  }, [applications, filters]);
+  }, [optimisticApplications, filters]);
 
   const filtersActive =
     Boolean(filters.search) || Boolean(filters.status) || Boolean(filters.jobId) || Boolean(filters.hasResume);
@@ -369,32 +432,48 @@ export default function ApplicationsPage() {
 
   /* ------------------------------- mutations ------------------------------ */
 
-  const updateApplicationStatus = async (applicationId: string, status: string) => {
-    const previous = applications;
-    setUpdatingStatus(applicationId);
-    // Update the single row in place rather than refetching the whole list, and
-    // roll it back if the request fails.
-    setApplications((current) =>
-      current.map((application) =>
-        application.id === applicationId ? { ...application, status } : application
-      )
-    );
+  /**
+   * The badge and the select flip on the click; the request follows.
+   *
+   * All of it happens inside the one transition, and that is the part worth
+   * being careful about. `useOptimistic` only holds a value while a transition
+   * that set it is still running, so an update made outside one is discarded on
+   * the next render — and a *commit* made outside one would let the optimistic
+   * layer drop for a frame before the real list arrived, so the badge would
+   * visibly flick back to the old status and forward again on a success.
+   *
+   * There is no rollback branch, for the same reason: the optimistic layer is
+   * released when the transition ends, which puts the badge and the select back
+   * on the server's status by themselves. The `catch` only has to say why.
+   */
+  const updateApplicationStatus = (applicationId: string, status: string) => {
+    startTransition(async () => {
+      applyOptimisticStatus({ id: applicationId, status });
 
-    try {
-      await apiFetch("/api/applications", {
-        method: "PATCH",
-        body: JSON.stringify({ id: applicationId, status }),
-      });
-      toast.success(
-        `Marked as ${STATUS_LABELS[status as keyof typeof STATUS_LABELS] ?? status} — the applicant has been notified`
-      );
-    } catch (error) {
-      console.error("Failed to update application status:", error);
-      setApplications(previous);
-      toast.error(error instanceof Error ? error.message : "Could not update the application");
-    } finally {
-      setUpdatingStatus(null);
-    }
+      try {
+        await apiFetch("/api/applications", {
+          method: "PATCH",
+          body: JSON.stringify({ id: applicationId, status }),
+        });
+        // The same change, committed to the real list from inside the
+        // transition, so the optimistic value is handed over rather than
+        // dropped and re-applied.
+        setApplications((current) =>
+          current.map((application) =>
+            application.id === applicationId ? { ...application, status } : application
+          )
+        );
+        toast.success(
+          `Marked as ${STATUS_LABELS[status as keyof typeof STATUS_LABELS] ?? status} — the applicant has been notified`
+        );
+      } catch (error) {
+        console.error("Failed to update application status:", error);
+        // The row reverts on its own, but a revert nobody explains reads as a
+        // change that worked and then un-worked (DESIGN-NOTES 5.3). Error
+        // toasts are `aria-live="assertive"`, so it is heard as well as seen.
+        toast.error(error instanceof Error ? error.message : "Could not update the application");
+      }
+    });
   };
 
   const startConversation = async (applicantId: string) => {
@@ -656,7 +735,7 @@ export default function ApplicationsPage() {
                   <p>{loadError}</p>
                   <button
                     type="button"
-                    onClick={() => void loadData()}
+                    onClick={() => setReloadKey((key) => key + 1)}
                     className="mt-3 font-semibold underline"
                   >
                     Try again
@@ -700,7 +779,6 @@ export default function ApplicationsPage() {
                   <ApplicationRow
                     key={application.id}
                     application={application}
-                    updating={updatingStatus === application.id}
                     messaging={messagingUserId === application.user.id}
                     onStatusChange={updateApplicationStatus}
                     onMessage={startConversation}
@@ -898,15 +976,14 @@ function PoolList({
 
 function ApplicationRow({
   application,
-  updating,
   messaging,
   onStatusChange,
   onMessage,
 }: {
+  /** Carries the optimistic status while a change is in flight. */
   application: Application;
-  updating: boolean;
   messaging: boolean;
-  onStatusChange: (applicationId: string, status: string) => Promise<void>;
+  onStatusChange: (applicationId: string, status: string) => void;
   onMessage: (applicantId: string) => Promise<void>;
 }) {
   const resume = application.user.resumes?.[0];
@@ -1033,11 +1110,15 @@ function ApplicationRow({
 
           <div>
             <Label htmlFor={`status-${application.id}`}>Update status</Label>
+            {/* Not disabled, and no "Saving…" beneath it: `application.status`
+                is the optimistic status, so this control and the badge above it
+                already read as the new value the moment the choice is made.
+                Locking the select for a round trip in order to show the answer
+                it is already showing is the spinner this replaces. */}
             <select
               id={`status-${application.id}`}
               value={application.status}
-              onChange={(event) => void onStatusChange(application.id, event.target.value)}
-              disabled={updating}
+              onChange={(event) => onStatusChange(application.id, event.target.value)}
               className={inputClass}
             >
               {APPLICATION_STATUSES.map((status) => (
@@ -1046,7 +1127,6 @@ function ApplicationRow({
                 </option>
               ))}
             </select>
-            {updating && <Eyebrow className="mt-1.5">Saving…</Eyebrow>}
           </div>
 
           {/* One link, opened in a new tab. The old pair hard-coded a `.pdf`

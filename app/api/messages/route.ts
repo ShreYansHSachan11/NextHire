@@ -9,7 +9,8 @@ import {
   isUuid,
   type SessionUser,
 } from '@/lib/auth';
-import { cleanText } from '@/lib/validation';
+import { cleanText, MESSAGE_MAX_LENGTH } from '@/lib/validation';
+import { RATE_TIERS, checkRateLimit, rateLimited } from '@/lib/rateLimit';
 
 const SOCKET_TIMEOUT_MS = 2000;
 
@@ -117,6 +118,13 @@ export async function POST(req: NextRequest) {
   if (guard.response) return guard.response;
   const { session } = guard;
 
+  // Membership of the thread is checked below, so this is not an access
+  // control — it is a flood ceiling. Every accepted message writes a row and a
+  // notification that a real person then has to read, and the counterparty
+  // cannot opt out of a conversation they are already in.
+  const budget = checkRateLimit(req, RATE_TIERS.WRITE, session);
+  if (!budget.ok) return rateLimited(budget);
+
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -127,7 +135,7 @@ export async function POST(req: NextRequest) {
   if (!isUuid(body.conversationId)) return badRequest('Invalid conversation id');
   const conversationId = body.conversationId;
 
-  const content = cleanText(body.content, 5000);
+  const content = cleanText(body.content, MESSAGE_MAX_LENGTH);
   if (!content) return badRequest('Please write a message before sending');
 
   try {

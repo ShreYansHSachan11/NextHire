@@ -15,6 +15,7 @@ import Navbar from "@/app/components/Navbar";
 import { useToast } from "@/app/components/Toast";
 import { useAuthGuard } from "@/app/hooks/useAuthGuard";
 import { apiFetch } from "@/lib/clientAuth";
+import { MESSAGE_MAX_LENGTH } from "@/lib/validation";
 import { useSocket } from "@/lib/socketContext";
 import {
   Alert,
@@ -708,17 +709,17 @@ function ChatPanel({
 }
 
 /**
- * Mirror of `cleanText(body.content, 5000)` in `app/api/messages/route.ts:130`.
+ * The cap is no longer re-declared here.
  *
- * It was 4000 here, which is the safer of the two directions — the client
- * refused what the server would have stored — but it is still a second number
- * for one rule. Like the saved-search caps, the real fix is for the shared
- * limit to live in `lib/validation.ts` beside `RESUME_MAX_BYTES`.
+ * It was 4000, which is the safer of the two directions — the client refused
+ * what the server would have stored — but it was still a second number for one
+ * rule, and the company-side composer had no number at all. Both now read the
+ * same constant; `app/components/limits.tsx` carries the note about where that
+ * constant should ultimately live.
  */
-const MESSAGE_MAX = 5000;
 
 /** Where the counter appears. Below this it is noise; above it, it is a warning. */
-const MESSAGE_COUNTER_AT = MESSAGE_MAX - 500;
+const MESSAGE_COUNTER_AT = MESSAGE_MAX_LENGTH - 500;
 
 function Composer({
   draft,
@@ -732,7 +733,7 @@ function Composer({
   onSend: () => void;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const remaining = MESSAGE_MAX - draft.length;
+  const remaining = MESSAGE_MAX_LENGTH - draft.length;
 
   // Grow with the text up to a few lines, then scroll inside the box.
   useEffect(() => {
@@ -765,7 +766,7 @@ function Composer({
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Type your message…"
-          maxLength={MESSAGE_MAX}
+          maxLength={MESSAGE_MAX_LENGTH}
           aria-describedby="message-hint"
           className="field max-h-36 min-h-[2.75rem] flex-1 resize-none"
         />

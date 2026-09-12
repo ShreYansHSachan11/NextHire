@@ -8,6 +8,7 @@ import {
   serverError,
   isUuid,
 } from '@/lib/auth';
+import { RATE_TIERS, checkRateLimit, rateLimited } from '@/lib/rateLimit';
 
 /** Both sides of a thread, for the response body. */
 const CONVERSATION_INCLUDE = {
@@ -167,6 +168,12 @@ export async function POST(req: NextRequest) {
   if (guard.response) return guard.response;
   const { session } = guard;
 
+  // The application check below already stops cold outreach, so this is a flood
+  // ceiling rather than an access control: a company with many applicants can
+  // legitimately open many threads, just not hundreds a minute.
+  const budget = checkRateLimit(req, RATE_TIERS.WRITE, session);
+  if (!budget.ok) return rateLimited(budget);
+
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -244,7 +251,31 @@ export async function POST(req: NextRequest) {
   }
 }
 
-/** DELETE /api/conversations — either participant may remove a thread. */
+/**
+ * DELETE /api/conversations — remove a thread entirely. ADMIN only.
+ *
+ * It used to authorise either participant, and then call
+ * `conversation.delete()`. `Message.conversation` is `onDelete: Cascade`, so
+ * that one call destroyed every message in the thread **for both sides** — no
+ * soft delete, no audit row, no notice to the other party. A rejected
+ * candidate could erase an employer's entire correspondence about them; an
+ * employer could erase the record a candidate would need to show what was
+ * said. That record is also what answers an adverse-action or discrimination
+ * query, which is exactly when it will be missing.
+ *
+ * Deleting a shared thing is not a decision one participant gets to make
+ * alone. Two ways to say that in code:
+ *
+ * - **Per-viewer hide.** What either side actually wants — the thread leaves
+ *   *their* inbox and nobody else's — but it needs a column per side
+ *   (`archivedAt`) and therefore a migration, which is not in this change.
+ * - **Restrict the hard delete.** What is implemented: only an ADMIN, acting
+ *   for both parties, may destroy a thread. A participant asking gets 403.
+ *
+ * Nothing regresses in the product: no screen calls this endpoint. When the
+ * per-viewer hide lands, it belongs here as a PATCH and this handler stays as
+ * the administrative escape hatch it now is.
+ */
 export async function DELETE(req: NextRequest) {
   const guard = requireAuth(req);
   if (guard.response) return guard.response;
@@ -268,16 +299,26 @@ export async function DELETE(req: NextRequest) {
 
     if (!conversation) return notFound('Conversation not found');
 
+    // Participation is still checked, and still first: a stranger must not be
+    // able to tell an existing thread from a missing one, so someone who is not
+    // in this conversation gets the same "not yours" answer they always did
+    // rather than a message about administrator rights.
     const isParticipant =
-      session.role === 'ADMIN' ||
       conversation.userId === session.id ||
       (!!session.companyId && conversation.companyId === session.companyId);
 
-    if (!isParticipant) {
+    if (!isParticipant && session.role !== 'ADMIN') {
       return forbidden('You can only delete your own conversations');
     }
 
-    // Messages cascade with the thread.
+    if (session.role !== 'ADMIN') {
+      return forbidden(
+        'A conversation belongs to both sides, so it cannot be deleted from one. Contact support if it needs to be removed.'
+      );
+    }
+
+    // Messages cascade with the thread — which is why only an ADMIN reaches
+    // this line.
     await prisma.conversation.delete({ where: { id: conversationId } });
 
     return NextResponse.json({ message: 'Conversation deleted' });

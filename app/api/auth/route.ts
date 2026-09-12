@@ -11,6 +11,7 @@ import {
   type SessionUser,
 } from '@/lib/auth';
 import { isValidEmail, validatePassword, cleanString } from '@/lib/validation';
+import { RATE_TIERS, callerKey, consume, release, rateLimited } from '@/lib/rateLimit';
 
 /** Returns the current session, or 401. Used by the client to re-check auth. */
 export async function GET(req: NextRequest) {
@@ -30,8 +31,30 @@ export async function POST(req: NextRequest) {
   }
 
   const action = body.action;
-  if (action === 'register') return register(body);
-  if (action === 'login') return login(body);
+
+  // Only the two credential actions are metered. `logout` clears a cookie and
+  // touches nothing, and rate-limiting it would leave a user unable to sign out
+  // of a machine that is not theirs — the exact moment they most need to.
+  if (action === 'register' || action === 'login') {
+    // Keyed by IP, and deliberately not by the submitted email: a per-email
+    // budget would let anyone lock a named victim out of their own account, and
+    // the difference between a limited key and an unlimited one would confirm
+    // whether that account exists. The 429 body says nothing but the rate.
+    const key = callerKey(req, null);
+    const budget = consume(key, RATE_TIERS.AUTH_ATTEMPT);
+    if (!budget.ok) return rateLimited(budget);
+
+    if (action === 'register') return register(body);
+
+    const response = await login(body);
+    // A successful sign-in is not an attack. Refunding it means the budget is
+    // spent by failures and by account creation, which is what it is guarding,
+    // and a household or an office behind one address cannot run itself out of
+    // logins simply by all arriving at nine o'clock.
+    if (response.status === 200) release(key, RATE_TIERS.AUTH_ATTEMPT);
+    return response;
+  }
+
   if (action === 'logout') return logout();
   return badRequest('Unknown action');
 }

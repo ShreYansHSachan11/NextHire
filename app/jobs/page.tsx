@@ -380,8 +380,26 @@ function JobsFeed() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
+  /**
+   * Bumped by the two "Try again" buttons so a manual retry runs through the
+   * same effect as everything else. One call site means one cancellation rule
+   * rather than one for the effect and none for the retries.
+   */
+  const [reloadKey, setReloadKey] = useState(0);
+
   const fetchJobs = useCallback(
-    async (term: string, selects: Filters) => {
+    /**
+     * `isCancelled` is read *after* the await and before every write.
+     *
+     * Without it this function wrote nine pieces of state unconditionally, and
+     * the responses do not come back in the order they were sent: a cold `?q=`
+     * spends a Gemini embedding call while a warm one returns in tens of
+     * milliseconds. Type a query, click a location filter before it lands, and
+     * the filtered response arrives first — then the stale unfiltered one
+     * overwrote the list, the facets and the chips while `filters` and the URL
+     * still said Berlin, so a reload produced a third different view.
+     */
+    async (term: string, selects: Filters, isCancelled: () => boolean) => {
       try {
         setRefreshing(true);
         setError("");
@@ -397,6 +415,10 @@ function JobsFeed() {
         if (selects.type) params.set("type", selects.type);
 
         const data = await apiFetch<JobFeedResponse>(`/api/jobs?${params.toString()}`);
+        // A superseded run owns none of this state — not even the spinner,
+        // which the run that replaced it has already taken over.
+        if (isCancelled()) return;
+
         dispatch(setJobs(data.jobs));
         setSemantic(data.semantic);
         setMatched(data.matched);
@@ -414,10 +436,13 @@ function JobsFeed() {
         // corpus has no locations" instead of "unknown".
         if (data.facets) setFacets(data.facets);
       } catch (err) {
+        if (isCancelled()) return;
         setError(err instanceof Error ? err.message : "Failed to load jobs");
       } finally {
-        setRefreshing(false);
-        setLoading(false);
+        if (!isCancelled()) {
+          setRefreshing(false);
+          setLoading(false);
+        }
       }
     },
     [dispatch]
@@ -429,8 +454,15 @@ function JobsFeed() {
   // keyed on the signed-in user: the cookie is already on the first request, so
   // re-running when Redux rehydrates would just double every page load.
   useEffect(() => {
-    void fetchJobs(search, filters);
-  }, [fetchJobs, search, filters]);
+    // The same `cancelled` cleanup both conversation pages use: the run is
+    // superseded the moment the key changes, whether that is a new search term,
+    // a filter click or a retry.
+    let cancelled = false;
+    void fetchJobs(search, filters, () => cancelled);
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchJobs, search, filters, reloadKey]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setSearch(searchInput.trim()), 250);
@@ -707,7 +739,7 @@ function JobsFeed() {
             <span>{error}</span>
             <button
               type="button"
-              onClick={() => void fetchJobs(search, filters)}
+              onClick={() => setReloadKey((key) => key + 1)}
               className={buttonPrimary}
             >
               Try again
@@ -1071,7 +1103,7 @@ function JobsFeed() {
                 ) : facets.total > 0 ? (
                   <button
                     type="button"
-                    onClick={() => void fetchJobs(search, filters)}
+                    onClick={() => setReloadKey((key) => key + 1)}
                     className={buttonPrimary}
                   >
                     Reload

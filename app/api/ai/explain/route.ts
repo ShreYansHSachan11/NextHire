@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole, badRequest, notFound, serverError, isUuid } from '@/lib/auth';
+import { isAiEnabled } from '@/lib/ai/config';
 import { explainMatch } from '@/lib/ai/explain';
+import { RATE_TIERS, checkRateLimit, rateLimited } from '@/lib/rateLimit';
 
 /**
  * POST /api/ai/explain — one sentence on why the caller matches a posting.
@@ -21,6 +23,20 @@ export async function POST(req: NextRequest) {
   const guard = requireRole(req, 'SEEKER');
   if (guard.response) return guard.response;
   const { session } = guard;
+
+  // Guarded by the key check rather than placed before it. `explainMatch`
+  // answers `disabled` when there is no key and spends nothing getting there,
+  // so on a keyless deployment this route must meter nothing at all — with no
+  // key the portal has to behave exactly as it did before AI existed.
+  //
+  // Most calls are served from `MatchExplanation` and cost nothing either, but
+  // the limiter cannot know that in advance and a loop over job ids is all
+  // misses by construction. Interactive rather than expensive: it is one short
+  // sentence, and a seeker legitimately opens several postings in a row.
+  if (isAiEnabled()) {
+    const limit = checkRateLimit(req, RATE_TIERS.AI_INTERACTIVE, session);
+    if (!limit.ok) return rateLimited(limit);
+  }
 
   let body: Record<string, unknown>;
   try {

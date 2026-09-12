@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { requireRole, serverError } from '@/lib/auth';
 import { cleanText, isJobType } from '@/lib/validation';
 import { hybridJobSearch, type HybridHit } from '@/lib/ai/search';
+import { RATE_TIERS, checkRateLimit, rateLimited } from '@/lib/rateLimit';
 
 /**
  * POST /api/alerts/run — deliver job alerts for every saved search that is due.
@@ -227,6 +228,15 @@ interface SearchOutcome {
 export async function POST(req: NextRequest) {
   const guard = requireRole(req, 'ADMIN');
   if (guard.response) return guard.response;
+
+  // A single run fans out over every due saved search, runs each one's query
+  // against the corpus and writes a notification per hit — by far the largest
+  // unit of work any one request in this app can ask for. It is meant to be
+  // called by a scheduler on a daily or weekly cadence, so two an hour is
+  // generous for its actual use and a hard stop for a retry loop that has got
+  // stuck. The watermark makes a repeat run cheap but not free.
+  const budget = checkRateLimit(req, RATE_TIERS.ADMIN_BULK, guard.session);
+  if (!budget.ok) return rateLimited(budget);
 
   try {
     const now = new Date();
