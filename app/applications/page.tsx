@@ -6,6 +6,17 @@ import { useRouter } from "next/navigation";
 import Navbar from "@/app/components/Navbar";
 import { useToast } from "@/app/components/Toast";
 import { useAuthGuard } from "@/app/hooks/useAuthGuard";
+// A bare constant object; `lib/ai/config` has no imports of its own, so the
+// weights shown beside each bar are the weights the scorer actually uses.
+import { MATCH_WEIGHTS } from "@/lib/ai/config";
+import { MATCH_CAVEAT_EMPLOYER } from "@/lib/copy";
+
+/**
+ * One page-level caveat node that every per-row fit readout points at, so a
+ * screen-reader user querying a score hears the qualifier as part of it rather
+ * than never (DESIGN-NOTES 2.4). The sentence itself lives in `lib/copy.ts`.
+ */
+const fitCaveatId = "fit-caveat";
 import ApplicationsLoading from "./loading";
 import { apiFetch, authHeaders } from "@/lib/clientAuth";
 import { APPLICATION_STATUSES, STATUS_LABELS } from "@/lib/validation";
@@ -589,10 +600,11 @@ export default function ApplicationsPage() {
                     : "Fit captured at apply time · choose a role to score live"}
                 </Eyebrow>
               )}
-              <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                Fit is a sorting aid, not an assessment. It reads the profile against the
-                posting and knows nothing else about the person — read the application before
-                you decide.
+              <p
+                id={fitCaveatId}
+                className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400"
+              >
+                {MATCH_CAVEAT_EMPLOYER}
               </p>
             </div>
           )}
@@ -1004,7 +1016,7 @@ function ApplicationRow({
               condemn anybody. */}
           {match ? (
             <div>
-              <MatchScore value={match.score} caption="ROLE FIT" />
+              <MatchScore value={match.score} caption="Role fit" describedBy={fitCaveatId} />
               <Meter
                 value={match.score}
                 label={`Role fit, ${match.score} out of 100`}
@@ -1012,10 +1024,9 @@ function ApplicationRow({
               />
             </div>
           ) : storedScore !== null ? (
-            <div className="text-right">
-              <Readout className="text-sm font-semibold">{storedScore}%</Readout>
-              <Eyebrow className="mt-0.5">FIT AT APPLY</Eyebrow>
-            </div>
+            // The figure frozen at apply time, in the same shape as the live one
+            // above rather than as a bare percentage.
+            <MatchScore value={storedScore} caption="Fit at apply" describedBy={fitCaveatId} />
           ) : null}
 
           <StatusBadge status={application.status} className="self-start" />
@@ -1072,11 +1083,29 @@ function ApplicationRow({
           <Card grid className="p-4">
             <Eyebrow>Fit breakdown</Eyebrow>
 
+            {/* Weighted, for the same reason as the seeker-side panel: four
+                equal bars would misstate a 70/18/7/5 blend. */}
             <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-x-6">
-              <MeterRow label="Semantic fit" value={match.facets.semantic} />
-              <MeterRow label="Skills overlap" value={match.facets.skills} />
-              <MeterRow label="Location" value={match.facets.location} />
-              <MeterRow label="Seniority" value={match.facets.seniority} />
+              <MeterRow
+                label="Semantic fit"
+                value={match.facets.semantic}
+                weight={MATCH_WEIGHTS.semantic}
+              />
+              <MeterRow
+                label="Skills overlap"
+                value={match.facets.skills}
+                weight={MATCH_WEIGHTS.skills}
+              />
+              <MeterRow
+                label="Location"
+                value={match.facets.location}
+                weight={MATCH_WEIGHTS.location}
+              />
+              <MeterRow
+                label="Seniority"
+                value={match.facets.seniority}
+                weight={MATCH_WEIGHTS.seniority}
+              />
             </div>
 
             <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-x-6">

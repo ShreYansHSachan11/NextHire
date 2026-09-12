@@ -19,11 +19,18 @@ import {
 import {
   Alert,
   Button,
+  buttonGhost,
+  buttonPrimary,
+  buttonSecondary,
   Card,
   CardHeader,
   Chip,
+  coarseFit,
   EmptyState,
   Eyebrow,
+  formatCount,
+  formatDate,
+  formatRelative,
   Icon,
   Label,
   MatchScore,
@@ -34,12 +41,6 @@ import {
   Skeleton,
   StatCard,
   StatusBadge,
-  buttonGhost,
-  buttonPrimary,
-  buttonSecondary,
-  formatCount,
-  formatDate,
-  formatRelative,
 } from "@/app/components/ui";
 
 import DashboardLoading from "./loading";
@@ -891,9 +892,16 @@ export default function SeekerDashboardPage() {
               ) : (
                 <>
                   <ul className="grid list-none gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
-                    {visibleMatches.map((job) => (
+                    {/* `rank` is the position in the full scored set, not in
+                        the visible slice, so "3rd closest of 24" stays true when
+                        the preview is collapsed. */}
+                    {visibleMatches.map((job, index) => (
                       <li key={job.id} className="flex min-w-0">
-                        <MatchedJobCard job={job} />
+                        <MatchedJobCard
+                          job={job}
+                          rank={index + 1}
+                          rankOf={recommendations.length}
+                        />
                       </li>
                     ))}
                   </ul>
@@ -1529,7 +1537,15 @@ function ApplicationRow({
               <>
                 <span aria-hidden="true">·</span>
                 <span>
-                  Fit at apply <Readout className="text-[11px]">{Math.round(fitAtApply)}%</Readout>
+                  {/* `/100`, not `%`. Beside the word "fit" a percentage reads as a
+                      probability of being hired, and one displayed point is
+                      0.002 of cosine — roughly 10x the precision the signal
+                      carries (DESIGN-NOTES top-5 #2). Rounded to 5 like every
+                      other list surface. */}
+                  Fit at apply{" "}
+                  <Readout className="text-[11px]">{coarseFit(fitAtApply)}</Readout>
+                  <span aria-hidden="true">/100</span>
+                  <span className="sr-only"> out of 100</span>
                 </span>
               </>
             )}
@@ -1588,7 +1604,24 @@ function ApplicationRow({
  * sits at the top right in mono and is repeated as a bar — the length carries
  * the meaning on its own, and emerald only arrives at the top of the range.
  */
-function MatchedJobCard({ job }: { job: RecommendedJob }) {
+function MatchedJobCard({
+  job,
+  rank,
+  rankOf,
+}: {
+  job: RecommendedJob;
+  /**
+   * Position in the scored set. The score is monotone in cosine, so *rank
+   * order* is meaningful even where the magnitude is not — which makes the
+   * ordinal the more defensible framing on a list the score exists to sort,
+   * and the honest description of what the feature does (DESIGN-NOTES 4.4).
+   * The section heading already says "strongest fit first"; this puts the same
+   * fact on the row, where the comparison being invited is between roles rather
+   * than against 100.
+   */
+  rank?: number;
+  rankOf?: number;
+}) {
   const match = job.match;
   const score = match ? Math.round(match.score) : null;
   const shared = match?.sharedSkills.slice(0, 3) ?? [];
@@ -1616,7 +1649,13 @@ function MatchedJobCard({ job }: { job: RecommendedJob }) {
         {score !== null && (
           // Sentence case: `.eyebrow` already uppercases, so the shouted string
           // this used to pass was the only caption in the app typed that way.
-          <MatchScore value={score} caption="Profile fit" className="flex-shrink-0" />
+          <MatchScore
+            value={score}
+            caption="Profile fit"
+            rank={rank}
+            rankOf={rankOf}
+            className="flex-shrink-0"
+          />
         )}
       </div>
 

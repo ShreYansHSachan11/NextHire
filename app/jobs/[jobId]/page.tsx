@@ -8,25 +8,25 @@ import type { RootState } from "@/store/store";
 import Navbar from "@/app/components/Navbar";
 import {
   Alert,
+  buttonGhost,
+  buttonPrimary,
+  buttonSecondary,
   Card,
   CardHeader,
   Chip,
   Eyebrow,
+  formatDate,
   Icon,
+  inputClass,
   JobStateBadge,
   Label,
-  Meter,
+  MatchScore,
   MeterRow,
   Readout,
   Skeleton,
   SkeletonText,
   Spinner,
   StatusBadge,
-  buttonGhost,
-  buttonPrimary,
-  buttonSecondary,
-  formatDate,
-  inputClass,
 } from "@/app/components/ui";
 import { useToast } from "@/app/components/Toast";
 import { apiFetch } from "@/lib/clientAuth";
@@ -34,6 +34,7 @@ import { apiFetch } from "@/lib/clientAuth";
 // only non-secret model names from the environment, so the weights shown in the
 // disclosure are the weights the scorer uses rather than a retyped copy.
 import { MATCH_WEIGHTS } from "@/lib/ai/config";
+import { MATCH_CAVEAT_SEEKER } from "@/lib/copy";
 
 /**
  * Both caps mirror `POST /api/applications`, which is the authority: it length-
@@ -936,6 +937,8 @@ function QuestionField({
  * a breakdown actually exists; there is no zero state here by design.
  */
 function MatchPanel({ jobId, match }: { jobId: string; match: MatchBreakdown }) {
+  const caveatId = "fit-caveat";
+
   return (
     <Card grid className="p-4 sm:p-5">
       <div className="mb-4 flex items-start justify-between gap-3">
@@ -959,34 +962,53 @@ function MatchPanel({ jobId, match }: { jobId: string; match: MatchBreakdown }) 
           sentence to show — see `MatchRationale`. */}
       <MatchRationale jobId={jobId} score={match.score} />
 
-      {/* Headline: the composite, as digits and as bar length. */}
+      {/*
+       * Headline. `MatchScore` rather than hand-set digits: this was the one
+       * surface still printing `76%`, which is the shape the kit was changed to
+       * stop producing — beside the word "fit" a percentage reads as a
+       * probability of being hired, and one displayed point is 0.002 of cosine,
+       * so the precision is roughly 10x what the signal carries (DESIGN-NOTES
+       * top-5 #2). `coarse={false}` because this is the detail panel: the exact
+       * value belongs here even though the band leads, and the list surfaces
+       * round to 5.
+       *
+       * `describedBy` ties it to the caveat at the foot of the panel, which was
+       * an unassociated `<p>` a screen-reader user querying the score never
+       * heard (§2.4).
+       */}
       <div className="mb-5 border-b border-gray-200 pb-4 dark:border-gray-700">
-        <span className="flex items-baseline gap-1.5">
-          <Icon.pulse
-            className="h-4 w-4 flex-shrink-0 self-center text-green-600 dark:text-green-400"
-            aria-hidden="true"
-          />
-          <Readout className="text-3xl font-semibold leading-none text-gray-900 dark:text-white sm:text-4xl">
-            {match.score}
-          </Readout>
-          <Readout className="text-lg font-semibold leading-none text-gray-400 dark:text-gray-500">
-            %
-          </Readout>
-        </span>
-        <Eyebrow className="mt-2">Profile fit</Eyebrow>
-        <Meter
+        <MatchScore
           value={match.score}
-          label={`Overall profile fit: ${match.score} out of 100`}
-          className="mt-3"
+          caption="Profile fit"
+          coarse={false}
+          size="lg"
+          align="left"
+          showBar
+          describedBy={caveatId}
         />
       </div>
 
-      {/* The four facets that produced the number above. */}
+      {/*
+       * The four facets that produced the number above, each labelled with its
+       * share of the blend. Four identically-sized bars imply four equal inputs
+       * and the blend is 70/18/7/5 — an explanation that misrepresents how the
+       * number was produced is worse than no explanation (DESIGN-NOTES top-5
+       * #3). The weights come from `MATCH_WEIGHTS`, so the label cannot drift
+       * from the scorer.
+       */}
       <div className="space-y-3">
-        <MeterRow label="Semantic fit" value={match.facets.semantic} />
-        <MeterRow label="Skills overlap" value={match.facets.skills} />
-        <MeterRow label="Location" value={match.facets.location} />
-        <MeterRow label="Seniority" value={match.facets.seniority} />
+        <MeterRow
+          label="Semantic fit"
+          value={match.facets.semantic}
+          weight={MATCH_WEIGHTS.semantic}
+        />
+        <MeterRow label="Skills overlap" value={match.facets.skills} weight={MATCH_WEIGHTS.skills} />
+        <MeterRow label="Location" value={match.facets.location} weight={MATCH_WEIGHTS.location} />
+        <MeterRow
+          label="Seniority"
+          value={match.facets.seniority}
+          weight={MATCH_WEIGHTS.seniority}
+        />
       </div>
 
       {match.sharedSkills.length > 0 && (
@@ -1022,9 +1044,11 @@ function MatchPanel({ jobId, match }: { jobId: string; match: MatchBreakdown }) 
         </div>
       )}
 
-      <p className="mt-5 border-t border-gray-200 pt-4 text-xs leading-relaxed text-gray-500 dark:border-gray-700 dark:text-gray-400">
-        Scored by comparing your profile with this posting. It is guidance to help you decide where
-        to spend your time, not a decision — the company reads every application it receives.
+      <p
+        id={caveatId}
+        className="mt-5 border-t border-gray-200 pt-4 text-xs leading-relaxed text-gray-500 dark:border-gray-700 dark:text-gray-400"
+      >
+        {MATCH_CAVEAT_SEEKER}
       </p>
 
       <MatchDisclosure />
