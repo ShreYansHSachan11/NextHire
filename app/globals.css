@@ -856,6 +856,80 @@ nav {
     font-variant-numeric: tabular-nums;
   }
 
+  /* ==========================================================================
+     Message bubbles
+
+     Both conversation pages drew these, and the two copies had diverged: the
+     seeker page had already moved its timestamps off `gray-400` (2.6:1 on a
+     white bubble) while the company page still carried the broken version, and
+     the two disagreed on the dark own-bubble fill (`white` vs `gray-100`).
+     Extracted so there is one bubble rather than two that drift.
+
+     The tail corner is squared off on the sender's side, so direction reads
+     from the silhouette and not from the fill alone.
+     ========================================================================== */
+
+  .bubble {
+    max-width: 85%;
+    border-radius: var(--radius-xl);
+    padding: 0.625rem 0.875rem;
+  }
+
+  .bubble-peer {
+    border: 1px solid var(--line);
+    border-bottom-left-radius: var(--radius-xs);
+    background: var(--surface);
+    color: var(--ink);
+  }
+
+  .bubble-own {
+    border-bottom-right-radius: var(--radius-xs);
+    background: var(--btn-bg);
+    color: var(--btn-fg);
+  }
+
+  /*
+   * The timestamp. On a peer bubble it is the quiet ramp step the audit
+   * guarantees on every surface; on the sender's bubble it is an alpha of the
+   * bubble's own text, which recedes without introducing a second colour and
+   * still measures 10.8:1. `gray-400` — what both pages started with — was
+   * 2.6:1 on the white peer bubble and 2.6:1 again on the light own-bubble in
+   * dark theme, i.e. it failed in three of the four combinations.
+   */
+  .bubble-time {
+    font-size: 0.6875rem;
+    margin-top: 0.25rem;
+    color: var(--ink-faint);
+  }
+
+  .bubble-own .bubble-time {
+    color: inherit;
+    opacity: 0.75;
+  }
+
+  /*
+   * A quoted excerpt — a candidate's cover note shown inside a card. Four call
+   * sites had four different answers (`bg-gray-50 dark:bg-gray-800/50`,
+   * `bg-white/70 dark:bg-gray-900/40`, and two boxed variants), which is four
+   * guesses at the same rung. This is the rail form; the boxed form is just
+   * `.panel-sunken`, which already existed.
+   *
+   * The rail is `--ink-faint`, a text token, which looks like a category error
+   * and is not. The sunken ground is only 1.03:1 away from the surface it sits
+   * on, so the rail is doing all the work of marking the quote, and a boundary
+   * that carries meaning owes 3:1 (SC 1.4.11). Neither hairline token reaches
+   * that against a sunken ground — `--line-strong` measured 1.35:1 and
+   * `--line-control` 2.99:1, both caught by `npm run audit:contrast`, which is
+   * why the pair is now in the table. The quiet text tier is the lightest thing
+   * in the palette that clears the bar.
+   */
+  .quote {
+    border-left: 2px solid var(--ink-faint);
+    background: var(--surface-sunken);
+    padding: 0.375rem 0.5rem 0.375rem 0.75rem;
+    color: var(--ink-muted);
+  }
+
   .segment[aria-pressed="true"] .segment-count,
   .segment[aria-selected="true"] .segment-count {
     color: inherit;

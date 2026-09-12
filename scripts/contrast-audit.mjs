@@ -244,6 +244,21 @@ const pairs = () => [
   // headroom to spend.
   ["segment count (selected) on ink fill", ["fade", "--btn-fg", 0.75, "--btn-bg"], "--btn-bg", 4.5],
   ["segment label (selected) on ink fill", "--btn-fg", "--btn-bg", 4.5],
+
+  // ---- Message bubbles ---------------------------------------------------
+  // The timestamp on each side. `gray-400` — what both conversation pages
+  // started with — was 2.6:1 on the white peer bubble, and 2.6:1 again on the
+  // light own-bubble under the dark theme.
+  ["bubble body on peer bubble", "--ink", "--surface", 4.5],
+  ["bubble time on peer bubble", "--ink-faint", "--surface", 4.5],
+  ["bubble body on own bubble", "--btn-fg", "--btn-bg", 4.5],
+  ["bubble time on own bubble", ["fade", "--btn-fg", 0.75, "--btn-bg"], "--btn-bg", 4.5],
+
+  // ---- Quoted excerpt ----------------------------------------------------
+  // The rail is the only thing marking the quote, so it is a meaningful
+  // boundary and takes the 3:1 non-text minimum rather than a hairline's.
+  ["quote text on quote ground", "--ink-muted", "--surface-sunken", 4.5],
+  ["quote rail vs quote ground", "--ink-faint", "--surface-sunken", 3],
 ];
 
 function resolve(spec, scope) {

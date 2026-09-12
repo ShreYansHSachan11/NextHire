@@ -513,7 +513,7 @@ export default function CompanyDashboard() {
                                     </Eyebrow>
 
                                     {application.message && (
-                                      <p className="mt-2 whitespace-pre-wrap border-l-2 border-gray-200 bg-white/70 py-1.5 pl-3 text-xs leading-relaxed text-gray-600 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-300">
+                                      <p className="quote mt-2 whitespace-pre-wrap text-xs leading-relaxed">
                                         {application.message}
                                       </p>
                                     )}
@@ -690,9 +690,9 @@ function QuickAction({
       href={href}
       // Hairline panel, no shadow and no coloured tile: the accent stays
       // reserved for signal, so navigation reads as neutral instrumentation.
-      className="panel group flex items-center gap-3 p-4 transition-colors hover:border-gray-300 dark:hover:border-gray-600"
+      className="panel panel-interactive group flex items-center gap-3 p-4"
     >
-      <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-gray-500 transition-colors group-hover:text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:group-hover:text-white">
+      <span className="tile h-10 w-10 flex-shrink-0 transition-colors group-hover:text-gray-900 dark:group-hover:text-white">
         {icon}
       </span>
       <span className="min-w-0 flex-1">

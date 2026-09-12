@@ -639,7 +639,7 @@ function RoleRow({
 /** Nothing run yet. Says what the button will do rather than showing a blank. */
 function IdlePanel({ mode }: { mode: Mode }) {
   return (
-    <div className="rounded-lg border border-dashed border-gray-300 px-4 py-8 text-center dark:border-gray-600">
+    <div className="panel-sunken border-dashed px-4 py-8 text-center">
       <p className="mx-auto max-w-sm text-sm text-gray-500 dark:text-gray-400">
         {mode === "letter"
           ? "Nothing is written until you ask for it. The draft comes from your profile only — the fuller that is, the better the letter."

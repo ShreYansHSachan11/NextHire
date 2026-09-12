@@ -18,19 +18,20 @@ import { apiFetch } from "@/lib/clientAuth";
 import { useSocket } from "@/lib/socketContext";
 import {
   Alert,
+  Avatar,
   Button,
+  buttonPrimary,
+  buttonSecondary,
   Card,
+  dayLabel,
   EmptyState,
   Eyebrow,
+  formatRelative,
+  formatTime,
   Icon,
   PageHeading,
   Readout,
   Skeleton,
-  buttonPrimary,
-  buttonSecondary,
-  dayLabel,
-  formatRelative,
-  formatTime,
 } from "@/app/components/ui";
 
 import ConversationsLoading from "./loading";
@@ -454,19 +455,6 @@ export default function SeekerConversationsPage() {
 /* copies of this markup.                                                       */
 /* -------------------------------------------------------------------------- */
 
-/** Ink initial tile — a square, matching the navbar mark rather than a circle. */
-function Avatar({ name, size = "md" }: { name: string; size?: "sm" | "md" }) {
-  const dimensions = size === "sm" ? "h-9 w-9 text-sm" : "h-10 w-10 text-sm";
-  return (
-    <span
-      className={`mono flex flex-shrink-0 items-center justify-center rounded-lg bg-gray-900 font-semibold text-white dark:bg-white dark:text-gray-900 ${dimensions}`}
-      aria-hidden="true"
-    >
-      {name.charAt(0).toUpperCase()}
-    </span>
-  );
-}
-
 function ConversationList({
   conversations,
   loading,
@@ -696,27 +684,11 @@ function ChatPanel({
                 const mine = (message.senderId ?? message.sender?.id) === currentUserId;
                 return (
                   <div key={message.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-                    <div
-                      // The tail corner is squared off on the sender's side, so
-                      // direction reads from the silhouette as well as the fill.
-                      className={`max-w-[85%] rounded-xl px-3.5 py-2.5 sm:max-w-md ${
-                        mine
-                          ? "rounded-br-sm bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900"
-                          : "rounded-bl-sm border border-gray-200 bg-white text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                      }`}
-                    >
+                    <div className={`bubble ${mine ? "bubble-own" : "bubble-peer"} sm:max-w-md`}>
                       <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
                         {message.content}
                       </p>
-                      <p
-                        // Own-side timestamps are set in an alpha of the bubble
-                        // text so they recede without a second colour; the
-                        // other side uses the AA-verified quiet ramp step
-                        // rather than `gray-400`, which was 2.6:1 on white.
-                        className={`mono mt-1 text-right text-[11px] ${
-                          mine ? "text-white/70 dark:text-gray-900/70" : "text-gray-500"
-                        }`}
-                      >
+                      <p className="mono bubble-time text-right">
                         <span className="sr-only">Sent at </span>
                         {formatTime(message.createdAt)}
                       </p>

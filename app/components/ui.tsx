@@ -1250,6 +1250,49 @@ export function StatCard({
   );
 }
 
+/**
+ * The initials square that stands in for a person or a company.
+ *
+ * Three pages drew this and two of them disagreed: the company conversations
+ * list used a neutral tile and the seeker one an ink tile, for the same thing
+ * in the same position. The rule the kit settles on, and the reason this is
+ * `.tile-ink`:
+ *
+ *   `.tile`      an icon slot — a decorative glyph inside a neutral well
+ *   `.tile-ink`  an identity — the initials of a person, a company, the product
+ *
+ * The navbar mark and the company tile on a job are already ink, so identity
+ * was the majority reading; the odd ones out were the two avatars.
+ *
+ * `aria-hidden`, always: a single letter read aloud tells a screen-reader user
+ * nothing, and the name it was taken from is invariably in the text beside it.
+ */
+export function Avatar({
+  name,
+  size = "md",
+  className = "",
+}: {
+  name: string;
+  /** `sm` inside a dense row, `lg` beside a page title. */
+  size?: "sm" | "md" | "lg";
+  className?: string;
+}) {
+  const dimensions = {
+    sm: "h-9 w-9 text-sm",
+    md: "h-10 w-10 text-sm",
+    lg: "h-12 w-12 text-lg sm:h-14 sm:w-14 sm:text-xl",
+  }[size];
+
+  return (
+    <span
+      className={`mono tile tile-ink flex-shrink-0 font-semibold ${dimensions} ${className}`}
+      aria-hidden="true"
+    >
+      {name.trim().charAt(0).toUpperCase() || "?"}
+    </span>
+  );
+}
+
 /** Page heading block with a mono eyebrow above a tight display title. */
 export function PageHeading({
   eyebrow,

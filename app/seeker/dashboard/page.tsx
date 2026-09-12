@@ -1536,7 +1536,7 @@ function ApplicationRow({
           </p>
 
           {application.message && (
-            <p className="mt-3 whitespace-pre-wrap rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-300">
+            <p className="panel-sunken mt-3 whitespace-pre-wrap p-3 text-sm text-gray-700 dark:text-gray-300">
               {application.message}
             </p>
           )}

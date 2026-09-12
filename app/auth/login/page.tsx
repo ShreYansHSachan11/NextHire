@@ -455,7 +455,7 @@ export default function LoginPage() {
       fallback={
         // A blank screen here said nothing to anyone; the same centred spinner
         // the rest of the app uses at least announces itself.
-        <div className="flex min-h-screen items-center justify-center bg-white dark:bg-gray-900">
+        <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
           <Spinner className="h-10 w-10" label="Loading sign-in" />
         </div>
       }

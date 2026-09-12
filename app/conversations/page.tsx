@@ -10,18 +10,19 @@ import { useSocket } from "@/lib/socketContext";
 import { apiFetch } from "@/lib/clientAuth";
 import {
   Alert,
+  Avatar,
+  buttonPrimary,
   Card,
   Chip,
+  dayLabel,
   EmptyState,
   Eyebrow,
-  Icon,
-  PageHeading,
-  Spinner,
-  buttonPrimary,
-  dayLabel,
   formatRelative,
   formatTime,
+  Icon,
   inputClass,
+  PageHeading,
+  Spinner,
 } from "@/app/components/ui";
 
 /* -------------------------------------------------------------------------- */
@@ -474,18 +475,6 @@ function ConversationsView() {
 /* Local pieces — shared by the phone and desktop layouts                      */
 /* -------------------------------------------------------------------------- */
 
-/** Neutral initial tile — the emerald accent stays reserved for live signal. */
-function InitialTile({ name, className = "" }: { name: string; className?: string }) {
-  return (
-    <span
-      className={`mono flex flex-shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 font-semibold text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 ${className}`}
-      aria-hidden="true"
-    >
-      {name.charAt(0).toUpperCase()}
-    </span>
-  );
-}
-
 function ConversationRow({
   item,
   active,
@@ -506,14 +495,14 @@ function ConversationRow({
   // Only phrasing content below: this markup also sits inside a <button>.
   const body = (
     <>
-      <InitialTile name={application.user.name} className="h-10 w-10 text-sm" />
+      <Avatar name={application.user.name} />
       <span className="min-w-0 flex-1 text-left">
         <span className="flex items-baseline justify-between gap-2">
           <span className="truncate text-sm font-semibold text-gray-900 dark:text-white">
             {application.user.name}
           </span>
           {latest && (
-            <span className="mono flex-shrink-0 text-[11px] text-gray-400 dark:text-gray-500">
+            <span className="mono flex-shrink-0 text-[11px] text-gray-500">
               {formatRelative(latest.createdAt)}
             </span>
           )}
@@ -565,7 +554,7 @@ function ConversationRow({
             type="button"
             onClick={() => void onStart(application.userId)}
             disabled={starting}
-            className="mono flex-shrink-0 self-center whitespace-nowrap rounded-md border border-gray-300 bg-white px-2 py-1 text-[11px] font-medium uppercase tracking-wider text-gray-700 transition-colors hover:border-gray-400 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:border-gray-500"
+            className="mono btn-outline btn-sm flex-shrink-0 self-center whitespace-nowrap text-[11px] uppercase tracking-wider"
           >
             {starting ? "Opening" : "Start"}
           </button>
@@ -594,7 +583,7 @@ function ThreadHeader({
       >
         <Icon.arrowLeft className="h-5 w-5" />
       </button>
-      <InitialTile name={name} className="h-9 w-9 text-xs" />
+      <Avatar name={name} size="sm" />
       <div className="min-w-0">
         <h2 className="truncate text-sm font-semibold text-gray-900 dark:text-white">{name}</h2>
         <p className="mono truncate text-xs text-gray-500 dark:text-gray-400">{email}</p>
@@ -606,16 +595,10 @@ function ThreadHeader({
 function MessageBubble({ message, own }: { message: Message; own: boolean }) {
   return (
     <div className={`flex ${own ? "justify-end" : "justify-start"}`}>
-      {/* Tight radii with the tail corner squared off, rather than a soft pill. */}
-      <div
-        className={`max-w-[85%] rounded-xl px-3.5 py-2.5 sm:max-w-[75%] ${
-          own
-            ? "rounded-br-sm bg-gray-900 text-white dark:bg-white dark:text-gray-900"
-            : "rounded-bl-sm border border-gray-200 bg-white text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-        }`}
-      >
+      <div className={`bubble ${own ? "bubble-own" : "bubble-peer"} sm:max-w-[75%]`}>
         <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.content}</p>
-        <p className="mono mt-1 text-[11px] text-gray-400 dark:text-gray-500">
+        <p className="mono bubble-time">
+          <span className="sr-only">Sent at </span>
           {formatTime(message.createdAt)}
         </p>
       </div>

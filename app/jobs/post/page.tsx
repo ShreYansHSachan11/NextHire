@@ -1182,7 +1182,7 @@ export default function PostJobPage() {
                         got wrong, and nothing is posted until you submit the form.
                       </p>
 
-                      <div className="mt-3 max-h-64 overflow-y-auto whitespace-pre-wrap rounded-lg border border-gray-200 bg-white p-3 text-sm leading-relaxed text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                      <div className="panel-sunken mt-3 max-h-64 overflow-y-auto whitespace-pre-wrap p-3 text-sm leading-relaxed text-gray-700 dark:text-gray-200">
                         {draft.description}
                       </div>
 
@@ -1755,7 +1755,7 @@ export default function PostJobPage() {
                   </Readout>
                 </div>
                 {descriptionFilled ? (
-                  <p className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg border border-gray-200 bg-white p-3 text-sm leading-relaxed text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                  <p className="panel-sunken mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap p-3 text-sm leading-relaxed text-gray-700 dark:text-gray-200">
                     {formData.description.trim()}
                   </p>
                 ) : (

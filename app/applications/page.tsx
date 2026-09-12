@@ -10,11 +10,18 @@ import { apiFetch, authHeaders } from "@/lib/clientAuth";
 import { APPLICATION_STATUSES, STATUS_LABELS } from "@/lib/validation";
 import {
   Alert,
+  Avatar,
+  buttonGhost,
+  buttonPrimary,
+  buttonSecondary,
   Card,
   Chip,
   EmptyState,
   Eyebrow,
+  formatCount,
+  formatDate,
   Icon,
+  inputClass,
   Label,
   MatchScore,
   Meter,
@@ -24,12 +31,6 @@ import {
   Spinner,
   StatCard,
   StatusBadge,
-  buttonGhost,
-  buttonPrimary,
-  buttonSecondary,
-  formatCount,
-  formatDate,
-  inputClass,
 } from "@/app/components/ui";
 
 /* -------------------------------------------------------------------------- */
@@ -907,13 +908,7 @@ function ApplicationRow({
       {/* Stacks on phones — the old fixed `ml-6` action column overflowed. */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
         <div className="flex min-w-0 flex-1 gap-3">
-          {/* Neutral initial tile: the accent stays reserved for signal. */}
-          <span
-            className="mono flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-sm font-semibold text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
-            aria-hidden="true"
-          >
-            {application.user.name.charAt(0).toUpperCase()}
-          </span>
+          <Avatar name={application.user.name} />
 
           <div className="min-w-0 flex-1">
             <h3 className="text-base font-semibold text-gray-900 dark:text-white">
@@ -935,7 +930,7 @@ function ApplicationRow({
             <Eyebrow className="mt-1">Applied {formatDate(application.createdAt)}</Eyebrow>
 
             {application.message && (
-              <p className="line-clamp-3 mt-2.5 whitespace-pre-wrap border-l-2 border-gray-200 bg-gray-50 py-1.5 pl-3 text-xs leading-relaxed text-gray-600 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-300">
+              <p className="quote line-clamp-3 mt-2.5 whitespace-pre-wrap text-xs leading-relaxed">
                 {application.message}
               </p>
             )}

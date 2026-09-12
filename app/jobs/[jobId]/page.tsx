@@ -19,6 +19,7 @@ import {
   MeterRow,
   Readout,
   Skeleton,
+  SkeletonText,
   Spinner,
   StatusBadge,
   buttonGhost,
@@ -387,7 +388,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3 sm:gap-4">
             <span
-              className="mono flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-md bg-gray-900 text-lg font-semibold text-white dark:bg-gray-100 dark:text-gray-900 sm:h-14 sm:w-14 sm:text-xl"
+              className="mono tile tile-ink h-12 w-12 flex-shrink-0 text-lg font-semibold sm:h-14 sm:w-14 sm:text-xl"
               aria-hidden="true"
             >
               {job.company?.name?.charAt(0).toUpperCase() ?? "C"}
@@ -1178,10 +1179,10 @@ function SimilarRoles({ jobId }: { jobId: string }) {
  */
 function SimilarJobCard({ job }: { job: SimilarJob }) {
   return (
-    <Card className="group relative flex flex-col p-4 transition-[border-color,transform] duration-150 hover:-translate-y-0.5 hover:border-gray-300 dark:hover:border-gray-600">
+    <Card interactive className="group relative flex flex-col p-4">
       <div className="flex min-w-0 items-start gap-3">
         <span
-          className="mono flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md bg-gray-900 text-sm font-semibold text-white dark:bg-gray-100 dark:text-gray-900"
+          className="mono tile tile-ink h-10 w-10 flex-shrink-0 text-sm font-semibold"
           aria-hidden="true"
         >
           {job.company?.name?.charAt(0).toUpperCase() ?? "C"}
@@ -1249,33 +1250,26 @@ function DetailSkeleton() {
   return (
     <PageShell>
       <div aria-hidden="true">
-        <div className="motion-safe:animate-pulse">
-          <div className="mb-6 flex items-start gap-4">
-            <div className="h-12 w-12 flex-shrink-0 rounded-md bg-gray-200 dark:bg-gray-700 sm:h-14 sm:w-14" />
-            <div className="flex-1 space-y-3">
-              <div className="h-3 w-24 rounded bg-gray-200 dark:bg-gray-700" />
-              <div className="h-7 w-3/4 rounded bg-gray-200 dark:bg-gray-700" />
-            </div>
+        <div className="mb-6 flex items-start gap-4">
+          <Skeleton className="h-12 w-12 flex-shrink-0 sm:h-14 sm:w-14" rounded="rounded-md" />
+          <div className="flex-1 space-y-3">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-7 w-3/4" />
           </div>
         </div>
 
         <div className="grid gap-5 lg:grid-cols-3 lg:gap-6">
           <div className="lg:col-span-2">
             <Card grid className="p-4 sm:p-6">
-              <div className="motion-safe:animate-pulse space-y-3">
-                <div className="h-3 w-28 rounded bg-gray-200 dark:bg-gray-700" />
-                <div className="h-4 rounded bg-gray-200 dark:bg-gray-700" />
-                <div className="h-4 w-5/6 rounded bg-gray-200 dark:bg-gray-700" />
-                <div className="h-4 w-4/6 rounded bg-gray-200 dark:bg-gray-700" />
-                <div className="h-4 w-3/4 rounded bg-gray-200 dark:bg-gray-700" />
-              </div>
+              <Skeleton className="mb-3 h-3 w-28" />
+              <SkeletonText lines={4} />
             </Card>
           </div>
           <Card grid className="p-4 sm:p-5">
-            <div className="motion-safe:animate-pulse space-y-4">
-              <div className="h-3 w-24 rounded bg-gray-200 dark:bg-gray-700" />
-              <div className="h-24 rounded-lg bg-gray-200 dark:bg-gray-700" />
-              <div className="h-10 rounded-lg bg-gray-200 dark:bg-gray-700" />
+            <div className="space-y-4">
+              <Skeleton className="h-3 w-24" />
+              <Skeleton className="h-24 w-full" rounded="rounded-lg" />
+              <Skeleton className="h-10 w-full" rounded="rounded-lg" />
             </div>
           </Card>
         </div>
