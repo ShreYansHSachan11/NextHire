@@ -26,9 +26,9 @@ import {
   MatchScore,
   Meter,
   PageHeading,
-  Skeleton,
   Spinner,
 } from "@/app/components/ui";
+import { JobCardSkeleton } from "@/app/components/skeletons";
 import { apiFetch } from "@/lib/clientAuth";
 
 /**
@@ -1653,39 +1653,15 @@ function JobCard({ job, scored }: { job: JobListItem; scored: boolean }) {
 /**
  * Card-shaped placeholders, so the layout doesn't jump when the data lands.
  *
- * Built out of the kit's `Skeleton` rather than raw `bg-gray-200` divs: the
- * primitive already carries the `motion-safe:` guard and the `aria-hidden`, and
- * three surfaces had each reimplemented both slightly differently. The shape
- * tracks `JobCard` row for row — including the reserved score slot — because a
- * skeleton that is not the height of what replaces it is a layout shift with
- * extra steps.
+ * The card shape itself lives in `app/components/skeletons.tsx`, because this
+ * route's `loading.tsx` needs the identical thing and the two copies that used
+ * to exist had already drifted to different chip and footer widths.
  */
 function JobSkeletonGrid() {
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-5" aria-hidden="true">
       {Array.from({ length: 4 }).map((_, index) => (
-        <Card key={index} grid className="@container p-4 @lg:p-5">
-          <div className="flex items-start gap-3">
-            <Skeleton className="h-11 w-11 flex-shrink-0" />
-            <div className="min-w-0 flex-1 space-y-2">
-              <Skeleton className="h-4 w-3/4" />
-              <Skeleton className="h-3 w-1/3" />
-            </div>
-            <Skeleton className="h-9 w-20 flex-shrink-0" />
-          </div>
-          <div className="mt-3 space-y-2">
-            <Skeleton className="h-3 w-full" />
-            <Skeleton className="h-3 w-5/6" />
-          </div>
-          <div className="mt-3 flex gap-1.5">
-            <Skeleton className="h-6 w-24" />
-            <Skeleton className="h-6 w-20" />
-            <Skeleton className="h-6 w-16" />
-          </div>
-          <div className="mt-4 border-t border-gray-200 pt-3 dark:border-gray-700">
-            <Skeleton className="h-3 w-40" />
-          </div>
-        </Card>
+        <JobCardSkeleton key={index} />
       ))}
       <span className="sr-only">Loading jobs</span>
     </div>

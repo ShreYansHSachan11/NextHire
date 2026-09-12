@@ -1,5 +1,6 @@
 import Navbar from "@/app/components/Navbar";
 import { Card, Skeleton } from "@/app/components/ui";
+import { ApplicationRowSkeleton, MatchCardSkeleton } from "@/app/components/skeletons";
 
 /**
  * Route-level placeholder for the seeker dashboard.
@@ -66,21 +67,7 @@ export default function DashboardLoading() {
           <ul className="grid list-none gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
             {Array.from({ length: 3 }, (_, index) => (
               <li key={index}>
-                <Card className="flex h-full flex-col p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="w-full space-y-2">
-                      <Skeleton className="h-3.5 w-3/4" />
-                      <Skeleton className="h-3 w-1/2" />
-                    </div>
-                    <Skeleton className="h-8 w-16 flex-shrink-0" />
-                  </div>
-                  <Skeleton className="mt-3 h-1 w-full rounded-full" />
-                  <div className="mt-3 flex gap-1.5">
-                    <Skeleton className="h-6 w-16 rounded-lg" />
-                    <Skeleton className="h-6 w-20 rounded-lg" />
-                  </div>
-                  <Skeleton className="mt-6 h-6 w-full" />
-                </Card>
+                <MatchCardSkeleton />
               </li>
             ))}
           </ul>
@@ -94,24 +81,8 @@ export default function DashboardLoading() {
           </div>
           <ul className="divide-y divide-gray-200 dark:divide-gray-700">
             {Array.from({ length: 3 }, (_, index) => (
-              <li
-                key={index}
-                className="flex flex-col gap-4 p-4 sm:p-5 lg:flex-row lg:justify-between"
-              >
-                <div className="min-w-0 flex-1 space-y-2.5">
-                  <Skeleton className="h-5 w-2/3" />
-                  <Skeleton className="h-3.5 w-1/3" />
-                  <div className="flex gap-2 pt-1">
-                    <Skeleton className="h-6 w-24 rounded-lg" />
-                    <Skeleton className="h-6 w-20 rounded-lg" />
-                  </div>
-                  <Skeleton className="h-3 w-1/2" />
-                </div>
-                <div className="space-y-3 lg:w-56 lg:flex-shrink-0">
-                  <Skeleton className="h-6 w-28 rounded-md" />
-                  <Skeleton className="h-1 w-full rounded-full" />
-                  <Skeleton className="h-11 w-full rounded-lg" />
-                </div>
+              <li key={index}>
+                <ApplicationRowSkeleton />
               </li>
             ))}
           </ul>

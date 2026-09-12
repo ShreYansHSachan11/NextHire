@@ -458,6 +458,43 @@ export function Skeleton({
   return <span className={`skeleton ${rounded} ${className}`} aria-hidden="true" />;
 }
 
+/**
+ * One line of placeholder text that reserves the height of the *real* line box
+ * while drawing a thinner bar inside it.
+ *
+ * This exists because the obvious markup is wrong in a way that is invisible
+ * until the content lands. A bar standing in for a line of `text-sm` is drawn
+ * at `h-3.5` so it reads as text rather than as a filled block — but the line
+ * it replaces occupies a 20px line box, not 14px. Stack four such rows and the
+ * placeholder is 25px shorter than its own content, so the thing built to stop
+ * the page jumping is itself the jump. Every list skeleton in this app had
+ * drifted that way; the worst was a match card that reserved 142px for 205px
+ * of card.
+ *
+ * `height` is the line box to hold open — `h-5` for `text-sm`, `h-6` for
+ * `text-base`, `h-7` for `text-lg`, `h-3.5` for an `.eyebrow` — and `bar` is
+ * how thick to paint it. The default pair is one line of `text-sm`.
+ */
+export function SkeletonLine({
+  height = "h-5",
+  bar = "h-3.5",
+  width = "w-full",
+  className = "",
+}: {
+  /** Height of the line box being reserved, matching the real type scale. */
+  height?: string;
+  /** Thickness of the painted bar. Always at or under `height`. */
+  bar?: string;
+  width?: string;
+  className?: string;
+}) {
+  return (
+    <span className={`flex items-center ${height} ${className}`} aria-hidden="true">
+      <Skeleton className={`${bar} ${width}`} />
+    </span>
+  );
+}
+
 /*
  * The shapes below exist because `<Skeleton>` had exactly one call site against
  * 53 `<Spinner>`s, while two pages hand-rolled their own list placeholders out
@@ -475,18 +512,35 @@ export function Skeleton({
  *       https://dl.acm.org/doi/10.1145/3232078.3232086
  */
 
-/** n lines of text with a short last line, so it reads as a paragraph. */
+/**
+ * n lines of text with a short last line, so it reads as a paragraph.
+ *
+ * Each line reserves a full 20px `text-sm` line box rather than the 12px of the
+ * bar drawn inside it. At the old sizing a five-line block stood 52px tall and
+ * was replaced by about 100px of prose, which put a visible shove in the middle
+ * of every panel that used it. `lineHeight` takes the real type scale where a
+ * caller is standing in for something other than `text-sm` — `h-[1.4375rem]`
+ * for `leading-relaxed`, say.
+ */
 export function SkeletonText({
   lines = 3,
+  lineHeight = "h-5",
   className = "",
 }: {
   lines?: number;
+  /** Height of one line box of the text being replaced. */
+  lineHeight?: string;
   className?: string;
 }) {
   return (
-    <span className={`block space-y-2 ${className}`} aria-hidden="true">
+    <span className={`block ${className}`} aria-hidden="true">
       {Array.from({ length: lines }, (_, i) => (
-        <Skeleton key={i} className={`h-3 ${i === lines - 1 ? "w-5/6" : "w-full"}`} />
+        <SkeletonLine
+          key={i}
+          height={lineHeight}
+          bar="h-3"
+          width={i === lines - 1 ? "w-5/6" : "w-full"}
+        />
       ))}
     </span>
   );
@@ -514,9 +568,11 @@ export function SkeletonRows({
       {Array.from({ length: count }, (_, i) => (
         <li key={i} className="flex items-center gap-3 px-4 py-4 sm:px-6">
           {media && <Skeleton className="h-10 w-10 flex-shrink-0" rounded="rounded-lg" />}
-          <span className="min-w-0 flex-1 space-y-2">
-            <Skeleton className="h-4 w-1/2" />
-            <Skeleton className="h-3 w-1/3" />
+          {/* Two `text-sm` line boxes. This is the height of the row wherever
+              `media` is off, so it has to be the real 40px and not 36. */}
+          <span className="min-w-0 flex-1">
+            <SkeletonLine bar="h-4" width="w-1/2" />
+            <SkeletonLine bar="h-3" width="w-1/3" />
           </span>
           <Skeleton className="hidden h-5 w-16 flex-shrink-0 sm:block" rounded="rounded-md" />
         </li>
@@ -547,9 +603,9 @@ export function SkeletonCards({
         <div key={i} className="panel p-4">
           <div className="flex items-start gap-3">
             <Skeleton className="h-10 w-10 flex-shrink-0" rounded="rounded-lg" />
-            <span className="min-w-0 flex-1 space-y-2">
-              <Skeleton className="h-4 w-2/3" />
-              <Skeleton className="h-3 w-1/3" />
+            <span className="min-w-0 flex-1">
+              <SkeletonLine bar="h-4" width="w-2/3" />
+              <SkeletonLine bar="h-3" width="w-1/3" />
             </span>
           </div>
           <SkeletonText lines={2} className="mt-4" />

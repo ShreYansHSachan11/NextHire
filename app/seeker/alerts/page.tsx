@@ -19,7 +19,6 @@ import {
   Label,
   PageHeading,
   Readout,
-  Skeleton,
   buttonGhost,
   buttonPrimary,
   buttonSecondary,
@@ -27,6 +26,7 @@ import {
   formatRelative,
   inputClass,
 } from "@/app/components/ui";
+import { SavedSearchRowSkeleton } from "@/app/components/skeletons";
 
 import AlertsLoading from "./loading";
 
@@ -479,31 +479,6 @@ export default function SeekerAlertsPage() {
 /* -------------------------------------------------------------------------- */
 /* Row                                                                         */
 /* -------------------------------------------------------------------------- */
-
-/**
- * Placeholder in the footprint of `SavedSearchRow`.
- *
- * Replaces a centred spinner in a `p-10` box that was nowhere near the height
- * of the list it stood in for, so every load ended in a jump (DESIGN-NOTES
- * §1.4, §5.4).
- */
-function SavedSearchRowSkeleton() {
-  return (
-    <Card className="p-4 sm:p-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 flex-1 space-y-2.5">
-          <Skeleton className="h-5 w-2/5" />
-          <Skeleton className="h-4 w-3/4" />
-        </div>
-        <Skeleton className="h-11 w-full rounded-lg sm:w-40" />
-      </div>
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-3 dark:border-gray-700">
-        <Skeleton className="h-3 w-40" />
-        <Skeleton className="h-8 w-32 rounded-md" />
-      </div>
-    </Card>
-  );
-}
 
 /**
  * One saved search.

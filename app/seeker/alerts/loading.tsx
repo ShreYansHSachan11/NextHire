@@ -1,5 +1,6 @@
 import Navbar from "@/app/components/Navbar";
 import { Card, Skeleton } from "@/app/components/ui";
+import { SavedSearchRowSkeleton } from "@/app/components/skeletons";
 
 /**
  * Route placeholder for saved searches.
@@ -37,19 +38,7 @@ export default function AlertsLoading() {
             <ul className="flex flex-col gap-3 sm:gap-4">
               {Array.from({ length: 3 }, (_, index) => (
                 <li key={index}>
-                  <Card className="p-4 sm:p-5">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0 flex-1 space-y-2.5">
-                        <Skeleton className="h-5 w-2/5" />
-                        <Skeleton className="h-4 w-3/4" />
-                      </div>
-                      <Skeleton className="h-11 w-full rounded-lg sm:w-40" />
-                    </div>
-                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-3 dark:border-gray-700">
-                      <Skeleton className="h-3 w-40" />
-                      <Skeleton className="h-8 w-32 rounded-md" />
-                    </div>
-                  </Card>
+                  <SavedSearchRowSkeleton />
                 </li>
               ))}
             </ul>

@@ -1,5 +1,6 @@
 import Navbar from "@/app/components/Navbar";
 import { Card, PageHeading, Skeleton } from "@/app/components/ui";
+import { JobCardSkeleton } from "@/app/components/skeletons";
 
 /**
  * The feed's own loading state.
@@ -53,34 +54,5 @@ export default function Loading() {
         </span>
       </main>
     </div>
-  );
-}
-
-/** Shaped to match `JobCard` in `app/jobs/page.tsx`, row for row. */
-function JobCardSkeleton() {
-  return (
-    <Card grid className="@container p-4 @lg:p-5">
-      <div className="flex items-start gap-3">
-        <Skeleton className="h-11 w-11 flex-shrink-0" />
-        <div className="min-w-0 flex-1 space-y-2">
-          <Skeleton className="h-4 w-3/4" />
-          <Skeleton className="h-3 w-1/3" />
-        </div>
-        {/* The score slot, reserved whether or not this reader gets a score. */}
-        <Skeleton className="h-9 w-20 flex-shrink-0" />
-      </div>
-      <div className="mt-3 space-y-2">
-        <Skeleton className="h-3 w-full" />
-        <Skeleton className="h-3 w-5/6" />
-      </div>
-      <div className="mt-3 flex gap-1.5">
-        <Skeleton className="h-6 w-20" />
-        <Skeleton className="h-6 w-24" />
-        <Skeleton className="h-6 w-16" />
-      </div>
-      <div className="mt-4 border-t border-gray-200 pt-3 dark:border-gray-700">
-        <Skeleton className="h-3 w-32" />
-      </div>
-    </Card>
   );
 }
