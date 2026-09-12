@@ -59,7 +59,7 @@ export default function Loading() {
 /** Shaped to match `JobCard` in `app/jobs/page.tsx`, row for row. */
 function JobCardSkeleton() {
   return (
-    <Card grid className="p-4 sm:p-5">
+    <Card grid className="@container p-4 @lg:p-5">
       <div className="flex items-start gap-3">
         <Skeleton className="h-11 w-11 flex-shrink-0" />
         <div className="min-w-0 flex-1 space-y-2">

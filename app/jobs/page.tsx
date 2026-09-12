@@ -1499,7 +1499,13 @@ function JobCard({ job, scored }: { job: JobListItem; scored: boolean }) {
     // is stretched over the card with `after:absolute`. That keeps one link per
     // card with the role title as its accessible name, while the whole tile
     // stays clickable.
-    <Card interactive className="group relative flex flex-col p-4 sm:p-5">
+    // `@container` plus `@lg:` rather than `sm:`. The card is *narrower* at the
+    // `lg` viewport than at `md` — the feed goes to two columns at `lg`, so each
+    // card drops from about 720px to about 490px — while every `sm:`-prefixed
+    // style stays on from 640px upward. The card was therefore getting its
+    // roomiest padding and its largest title exactly where it had least room.
+    // A container query asks the width the card actually has (DESIGN-NOTES 5.5).
+    <Card interactive className="@container group relative flex flex-col p-4 @lg:p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <Avatar name={job.company?.name ?? "C"} className="h-11 w-11 text-base" />
@@ -1507,7 +1513,7 @@ function JobCard({ job, scored }: { job: JobListItem; scored: boolean }) {
             {/* `text-balance` on the one piece of display type on the card:
                 a two-line title that breaks 9/2 is measurably harder to scan
                 than one that breaks 6/5. Free in Tailwind v4. */}
-            <h2 className="text-pretty text-base font-semibold leading-snug text-gray-900 dark:text-white sm:text-lg">
+            <h2 className="text-pretty text-base font-semibold leading-snug text-gray-900 dark:text-white @lg:text-lg">
               <Link href={`/jobs/${job.id}`} className="after:absolute after:inset-0 after:rounded-xl">
                 <span className="line-clamp-2 text-balance">{job.title}</span>
               </Link>
@@ -1595,7 +1601,7 @@ function JobCard({ job, scored }: { job: JobListItem; scored: boolean }) {
           row line their footers up however much content each one has. */}
       <div className="mt-4 flex-1" aria-hidden="true" />
 
-      <div className="flex items-center justify-between gap-3 border-t border-gray-200 pt-3 dark:border-gray-700 sm:gap-4">
+      <div className="flex items-center justify-between gap-3 border-t border-gray-200 pt-3 @lg:gap-4 dark:border-gray-700">
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5">
           <Eyebrow as="span">Posted {formatDate(job.createdAt)}</Eyebrow>
           <Eyebrow as="span">{formatCount(applicants)} applied</Eyebrow>
@@ -1626,7 +1632,7 @@ function JobSkeletonGrid() {
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-5" aria-hidden="true">
       {Array.from({ length: 4 }).map((_, index) => (
-        <Card key={index} grid className="p-4 sm:p-5">
+        <Card key={index} grid className="@container p-4 @lg:p-5">
           <div className="flex items-start gap-3">
             <Skeleton className="h-11 w-11 flex-shrink-0" />
             <div className="min-w-0 flex-1 space-y-2">
