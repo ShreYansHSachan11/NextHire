@@ -1,7 +1,13 @@
 import { prisma } from '@/lib/prisma';
 import { MATCH_WEIGHTS, isAiEnabled } from './config';
 import { embedText } from './gemini';
-import { scoreSkills, scoreSkillsSync, type SkillMatch } from './skills';
+import {
+  scoreSkills,
+  scoreSkillsSync,
+  scoreSkillsWarm,
+  warmSkillVectors,
+  type SkillMatch,
+} from './skills';
 import { cosineSimilarity, similarityToScore } from './vector';
 
 /**
@@ -196,6 +202,14 @@ function blend(
  * free and cover `Postgres`/`PostgreSQL` and friends, which was the actual
  * complaint. Use `computeMatchAsync` where a single pair is being scored and
  * the embedding fallback is worth the wait.
+ *
+ * **This is now the lower of two scales, and that is the known problem.** It
+ * disagrees with `computeMatchAsync` by a mean of 4.1 composite points and by up
+ * to 13.5 — the arithmetic maximum, which a five-against-five pair with no exact
+ * overlap hits exactly. That is why a seeker could read 62 on a feed card and 76
+ * on the detail page for the same posting. `rankJobsAsync` is the fix for list
+ * paths; this function is kept for the callers that genuinely cannot await and
+ * for the fail-soft floor everything else lands on.
  */
 export function computeMatch(
   profile: ProfileVectorContext,
@@ -203,6 +217,25 @@ export function computeMatch(
 ): MatchBreakdown | null {
   if (!profile.vector?.length || !job.vector?.length) return null;
   return blend(profile, job, scoreSkillsSync(profile.skills, job.skills));
+}
+
+/**
+ * `computeMatchAsync`'s answer, computed synchronously out of a warmed cache.
+ *
+ * Only correct after `warmSkillVectors` has been awaited for this comparison.
+ * Given that, it returns exactly what `computeMatchAsync` returns — same
+ * candidate selection, same threshold, same pairing, same arithmetic — and
+ * without it, exactly what `computeMatch` returns. There is no third scale.
+ *
+ * Exported for callers assembling their own batch; `rankJobsAsync` is the
+ * ordinary way in and does the warming for you.
+ */
+export function computeMatchWarm(
+  profile: ProfileVectorContext,
+  job: JobVectorContext
+): MatchBreakdown | null {
+  if (!profile.vector?.length || !job.vector?.length) return null;
+  return blend(profile, job, scoreSkillsWarm(profile.skills, job.skills));
 }
 
 /**
@@ -258,35 +291,90 @@ export interface RankedJob<T> {
   match: MatchBreakdown | null;
 }
 
+/** The row shape both rankers accept. */
+export interface RankableJob {
+  id: string;
+  skills?: string[];
+  location?: string | null;
+  experience?: string | null;
+  embedding?: { vector: number[] } | null;
+}
+
+function toJobContext(job: RankableJob): JobVectorContext {
+  return {
+    vector: job.embedding?.vector ?? null,
+    skills: job.skills ?? [],
+    location: job.location ?? null,
+    experience: job.experience ?? null,
+  };
+}
+
 /**
  * Scores a list of already-fetched jobs against a profile.
  *
  * Takes the jobs rather than querying for them so the caller keeps control of
  * its own `where` clause and `include` shape — the feed, the recommendations
  * panel and the job detail page all need different columns.
+ *
+ * Scores on the `computeMatch` scale. Where the caller can await, prefer
+ * `rankJobsAsync`, which returns the same shape on the `computeMatchAsync`
+ * scale — the one the job detail page and `Application.matchScore` use.
  */
-export function rankJobs<
-  T extends {
-    id: string;
-    skills?: string[];
-    location?: string | null;
-    experience?: string | null;
-    embedding?: { vector: number[] } | null;
-  },
->(profile: ProfileVectorContext | null, jobs: T[]): RankedJob<T>[] {
+export function rankJobs<T extends RankableJob>(
+  profile: ProfileVectorContext | null,
+  jobs: T[]
+): RankedJob<T>[] {
   if (!profile?.vector?.length) {
     return jobs.map((job) => ({ job, match: null }));
   }
 
-  return jobs.map((job) => ({
-    job,
-    match: computeMatch(profile, {
-      vector: job.embedding?.vector ?? null,
-      skills: job.skills ?? [],
-      location: job.location ?? null,
-      experience: job.experience ?? null,
-    }),
-  }));
+  return jobs.map((job) => ({ job, match: computeMatch(profile, toJobContext(job)) }));
+}
+
+/**
+ * `rankJobs` on the `computeMatchAsync` scale, at roughly one round trip per
+ * page rather than one per job.
+ *
+ * The objection in `computeMatch`'s doc comment — that a list path cannot
+ * afford a model call per row — is right, and this does not argue with it. It
+ * removes the per-row call instead. The expensive part of layer 3 is embedding
+ * individual skill strings, and a page of postings draws from a small shared
+ * vocabulary: 32 postings in `scripts/eval` name 155 tags that resolve to 99
+ * distinct keys, so the union is collected once, embedded in one batch, and
+ * every row is then scored out of memory. Measured on that corpus, the pair-by-
+ * pair path made 253 vector loads where this makes one.
+ *
+ * What that buys: the feed card and the detail page finally show the same
+ * number. They differed by a mean of 4.1 composite points and by up to 13.5.
+ *
+ * Cost, honestly: one `SkillVector` read per call, and on a vocabulary this
+ * process has not seen before, one batched embedding call per 50 unseen tags.
+ * Both go to zero as the in-process cache and the `SkillVector` table fill —
+ * a skill is embedded once for the lifetime of the database, not once per page.
+ * No generative calls, ever.
+ *
+ * Degradation is total and silent: no API key, a failed embedding, a database
+ * that is not there, a vocabulary past the warm cap — each falls back to the
+ * row's `computeMatch` answer, which is what this call site returns today.
+ * Nothing here throws.
+ */
+export async function rankJobsAsync<T extends RankableJob>(
+  profile: ProfileVectorContext | null,
+  jobs: T[]
+): Promise<RankedJob<T>[]> {
+  if (!profile?.vector?.length) {
+    return jobs.map((job) => ({ job, match: null }));
+  }
+
+  // Only rows that can actually be scored are worth warming for; a posting with
+  // no vector returns `null` before its skills are ever looked at.
+  await warmSkillVectors(
+    jobs
+      .filter((job) => job.embedding?.vector?.length)
+      .map((job) => ({ profile: profile.skills, job: job.skills ?? [] }))
+  );
+
+  return jobs.map((job) => ({ job, match: computeMatchWarm(profile, toJobContext(job)) }));
 }
 
 /* -------------------------------------------------------------------------- */
@@ -354,10 +442,19 @@ export async function semanticJobSearch(
  * Scores a job's applicants by fit, for the company side. The job vector is
  * loaded once and every applicant profile compared against it.
  *
- * Uses the synchronous skill path even though this function can await: an
- * applicant pool has no upper bound, and embedding every unseen tag across it
- * would make the first load of a busy posting arbitrarily slow for a ranking
- * the alias layer already gets substantially right.
+ * Warms the skill vocabulary of the whole pool in one batch and then scores
+ * every applicant out of that cache, so the ranking is on the same scale as
+ * `Application.matchScore` — which is frozen from `computeMatchAsync` at apply
+ * time. That mattered: the employer's list falls back to the stored score for
+ * any applicant this could not score live, so the two were being compared
+ * inside one sort expression while being computed two different ways.
+ *
+ * The original objection to awaiting here — that an applicant pool has no upper
+ * bound and embedding every unseen tag across it would make a busy posting's
+ * first load arbitrarily slow — is answered by batching rather than waived.
+ * The pool contributes one round trip, not one per applicant, and the warm cap
+ * bounds even that; applicants whose tags fall past it score exactly as they do
+ * today.
  */
 export async function rankApplicantsForJob(
   jobId: string
@@ -397,8 +494,14 @@ export async function rankApplicantsForJob(
     experience: job.experience,
   };
 
+  await warmSkillVectors(
+    job.applications
+      .filter((application) => application.user.embedding?.vector?.length)
+      .map((application) => ({ profile: application.user.skills ?? [], job: jobContext.skills }))
+  );
+
   for (const application of job.applications) {
-    const match = computeMatch(
+    const match = computeMatchWarm(
       {
         vector: application.user.embedding?.vector ?? null,
         skills: application.user.skills ?? [],

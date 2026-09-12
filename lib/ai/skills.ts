@@ -602,6 +602,31 @@ async function loadSkillVectors(
 }
 
 /**
+ * The tags a pair would send to layer 3: present on one side, absent from the
+ * other, capped per side.
+ *
+ * Factored out so that the three callers below — `scoreSkills`, `warmSkillVectors`
+ * and `scoreSkillsWarm` — cannot drift apart. If the warm pass asked for a
+ * different set than the scoring pass consumes, the warm would miss and the
+ * scoring pass would silently fall back, which is the exact failure this whole
+ * mechanism exists to avoid. One function, so agreement is structural.
+ */
+function fuzzyCandidates(
+  profile: SkillIndex,
+  job: SkillIndex
+): { unmatchedProfile: string[]; unmatchedJob: string[] } {
+  const profileKeys = new Set(profile.keys);
+  const jobKeys = new Set(job.keys);
+
+  return {
+    unmatchedJob: job.keys.filter((key) => !profileKeys.has(key)).slice(0, MAX_FUZZY_CANDIDATES),
+    unmatchedProfile: profile.keys
+      .filter((key) => !jobKeys.has(key))
+      .slice(0, MAX_FUZZY_CANDIDATES),
+  };
+}
+
+/**
  * Greedy one-to-one pairing of unmatched tags above `SKILL_MATCH_THRESHOLD`.
  *
  * One-to-one is the point: without it a profile listing five ORMs would match a
@@ -661,14 +686,7 @@ export async function scoreSkills(
 
   if (!isAiEnabled() || profile.keys.length === 0 || job.keys.length === 0) return exactOnly;
 
-  const profileKeys = new Set(profile.keys);
-  const jobKeys = new Set(job.keys);
-  const unmatchedJob = job.keys
-    .filter((key) => !profileKeys.has(key))
-    .slice(0, MAX_FUZZY_CANDIDATES);
-  const unmatchedProfile = profile.keys
-    .filter((key) => !jobKeys.has(key))
-    .slice(0, MAX_FUZZY_CANDIDATES);
+  const { unmatchedProfile, unmatchedJob } = fuzzyCandidates(profile, job);
 
   // Nothing left to disagree about — the alias table already settled it.
   if (unmatchedJob.length === 0 || unmatchedProfile.length === 0) return exactOnly;
@@ -684,4 +702,112 @@ export async function scoreSkills(
     console.error('Fuzzy skill matching failed:', error);
     return exactOnly;
   }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Layer 3, batched — one round trip for a whole page                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Ceiling on distinct tags one warm pass will embed.
+ *
+ * The feed takes 200 jobs and the recommendations panel 300, so an uncapped
+ * union could in principle be a thousand tags. In practice it is not — a job
+ * board's skill vocabulary is a few hundred words total and every posting draws
+ * from it, so the union across a page is small and shrinks to nothing once
+ * `SkillVector` has seen it. The cap exists for the pathological corpus, not
+ * the normal one: past it the surplus tags simply stay unwarmed and those
+ * comparisons fall back to layers 1–2, which is the same answer they give
+ * today. It must never become a reason to make a second round trip.
+ */
+const MAX_WARM_SKILLS = 300;
+
+export interface SkillPair {
+  profile: string[];
+  job: string[];
+}
+
+/**
+ * Loads, in one batch, every skill vector a set of comparisons is about to need.
+ *
+ * This is what lets a list be scored at `scoreSkills` quality without paying
+ * `scoreSkills` latency per row. The expensive part of layer 3 was never the
+ * arithmetic — it is embedding individual skill strings, and a page of postings
+ * names the same few dozen skills over and over. Measured on the `scripts/eval`
+ * corpus: 155 skill tags across 32 postings resolve to 99 distinct canonical
+ * keys, and scoring 8 profiles against all 32 pair-by-pair made 253 separate
+ * vector loads. Collecting the union first makes it one.
+ *
+ * After this resolves, `scoreSkillsWarm` answers those same pairs out of memory
+ * with no database and no model call. Pairs whose tags did not make it into the
+ * cache — the cap, a failed embedding, AI switched off — are not retried per
+ * row; they degrade to layers 1–2. One round trip per page is the invariant.
+ *
+ * Never throws. A warm that fails entirely costs nothing but the quality it
+ * would have added.
+ */
+export async function warmSkillVectors(pairs: SkillPair[]): Promise<void> {
+  if (!isAiEnabled() || pairs.length === 0) return;
+
+  const wanted = new Set<string>();
+  const labels = new Map<string, string>();
+
+  for (const pair of pairs) {
+    const profile = indexSkills(pair.profile);
+    const job = indexSkills(pair.job);
+    if (profile.keys.length === 0 || job.keys.length === 0) continue;
+
+    const { unmatchedProfile, unmatchedJob } = fuzzyCandidates(profile, job);
+    // A side with nothing unmatched cannot produce a fuzzy pair, so neither
+    // side's tags are worth embedding for this comparison.
+    if (unmatchedProfile.length === 0 || unmatchedJob.length === 0) continue;
+
+    for (const [key, label] of profile.labels) if (!labels.has(key)) labels.set(key, label);
+    for (const [key, label] of job.labels) if (!labels.has(key)) labels.set(key, label);
+    for (const key of [...unmatchedProfile, ...unmatchedJob]) wanted.add(key);
+  }
+
+  // Already in hand from an earlier page — asking again would only re-read rows
+  // we have, and if everything is cached there is nothing to do at all.
+  const missing = [...wanted].filter((key) => !memo.has(key)).slice(0, MAX_WARM_SKILLS);
+  if (missing.length === 0) return;
+
+  try {
+    await loadSkillVectors(missing, labels);
+  } catch (error) {
+    console.error('Skill vector warm failed:', error);
+  }
+}
+
+/**
+ * `scoreSkills` restricted to vectors already in the in-process cache.
+ *
+ * Synchronous on purpose: after `warmSkillVectors` every vector this needs is a
+ * `Map` lookup, so there is nothing left to await, and a synchronous scorer can
+ * sit inside `rankJobs`-shaped code without pushing an await into every list
+ * path — the objection in `computeMatch`'s doc comment, which stands.
+ *
+ * On a cold cache it returns exactly `scoreSkillsSync`. That is the fail-soft
+ * floor: no key, no network, no database, an embedding that failed, a tag past
+ * the warm cap — every one of them lands on the answer the portal gives today.
+ */
+export function scoreSkillsWarm(profileSkills: string[], jobSkills: string[]): SkillMatch {
+  const profile = indexSkills(profileSkills);
+  const job = indexSkills(jobSkills);
+  const exactOnly = settle(profile, job, []);
+
+  if (!isAiEnabled() || profile.keys.length === 0 || job.keys.length === 0) return exactOnly;
+
+  const { unmatchedProfile, unmatchedJob } = fuzzyCandidates(profile, job);
+  if (unmatchedProfile.length === 0 || unmatchedJob.length === 0) return exactOnly;
+
+  const vectors = new Map<string, number[]>();
+  for (const key of [...unmatchedProfile, ...unmatchedJob]) {
+    const vector = memo.get(key);
+    if (vector) vectors.set(key, vector);
+  }
+  if (vectors.size === 0) return exactOnly;
+
+  const pairs = pairByVector(unmatchedProfile, unmatchedJob, vectors);
+  return pairs.length === 0 ? exactOnly : settle(profile, job, pairs);
 }

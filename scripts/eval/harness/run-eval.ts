@@ -648,6 +648,21 @@ async function reportSkillLayers(profileSkills: Map<string, string[]>): Promise<
   let pairs = 0;
   let liftedByAlias = 0;
   let liftedByEmbedding = 0;
+  /*
+   * Pairs where layer 3 could even run. It needs something unmatched on *both*
+   * sides — `scoreSkills` returns early otherwise — so a pair with no unmatched
+   * profile skill never reaches the embedding layer at all.
+   *
+   * Counted because without it this section is silently unfalsifiable. The
+   * synthetic profiles come from `toProfile`, which keeps a token only when
+   * `canonicalSkill` finds it in the vocabulary of the corpus itself, so every
+   * profile skill is an exact key match by construction and this counter is 0.
+   * The lines below then report "0 pairs improved, mean delta 0.000", which
+   * reads exactly like "the embedding layer is worthless" and actually means
+   * "the embedding layer was never called". A measurement that cannot fail is
+   * worse than no measurement, so the report now says which of the two it is.
+   */
+  let reachedLayer3 = 0;
   const deltas: number[] = [];
 
   const bySkill = new Map(POSTINGS.map((posting) => [posting.id, posting.skills]));
@@ -665,6 +680,10 @@ async function reportSkillLayers(profileSkills: Map<string, string[]>): Promise<
       const sync = scoreSkillsSync(skills, jobSkills);
       const full = await scoreSkills(skills, jobSkills);
 
+      // Both sides need a leftover for the fuzzy pass to have anything to pair.
+      const unmatchedProfile = skills.length - sync.shared.length;
+      if (unmatchedProfile > 0 && sync.missing.length > 0) reachedLayer3++;
+
       if (sync.shared.length > 0) liftedByAlias++;
       if (full.fuzzy.length > sync.fuzzy.length) liftedByEmbedding++;
       deltas.push(full.score - sync.score);
@@ -677,8 +696,21 @@ async function reportSkillLayers(profileSkills: Map<string, string[]>): Promise<
   rule();
   say(`  grade-3 (profile, posting) pairs compared      ${pairs}`);
   say(`  pairs with an exact/alias overlap (layers 1-2) ${liftedByAlias}`);
+  say(`  pairs where layer 3 could run at all           ${reachedLayer3}`);
   say(`  pairs the embedding layer (3) added a pair to  ${liftedByEmbedding}`);
   say(`  mean score delta, scoreSkills - scoreSkillsSync ${fixed(mean(deltas))}`);
+
+  if (pairs > 0 && reachedLayer3 === 0) {
+    say();
+    say('  NOT EVIDENCE ABOUT LAYER 3. Every pair above matched exactly on');
+    say('  layers 1-2, so `scoreSkills` returned before the embedding layer ran');
+    say('  and the two figures above are structural zeros, not a result. The');
+    say('  cause is the corpus: `toProfile` keeps a token only when it already');
+    say('  appears in the skill vocabulary of the postings, so a synthetic');
+    say('  profile cannot contain the misspelling or the adjacent name that');
+    say('  layer 3 exists to catch. Measuring it needs profiles drawn from');
+    say('  outside that vocabulary — see EVAL.md.');
+  }
 }
 
 /**

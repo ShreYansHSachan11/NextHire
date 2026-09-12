@@ -2,6 +2,28 @@
 
 export const MIN_PASSWORD_LENGTH = 8;
 
+/**
+ * bcrypt hashes only the first 72 **bytes** of a password and silently ignores
+ * the rest — a property of the algorithm, not of the library, and `bcryptjs`
+ * ships a `truncates()` helper precisely so callers can notice.
+ *
+ * This used to advertise a 200-character limit, so the stated policy and the
+ * enforced one disagreed: a 90-character passphrase could be signed in to with
+ * only its first 72 bytes. The gap is far wider than it looks once the password
+ * is not ASCII — a 4-byte emoji reaches the limit in 18 characters, so someone
+ * whose password "is 80 characters long" may really have 18 characters of
+ * entropy protecting the account, and nothing would ever tell them.
+ *
+ * Rejecting past the limit rather than truncating is the conservative fix: the
+ * alternative — pre-hashing with SHA-256 to preserve the whole passphrase —
+ * changes the stored hash format and would invalidate every existing row.
+ *
+ * Safe to tighten, because `validatePassword` runs on **registration only**.
+ * Existing accounts with longer passwords keep signing in exactly as before;
+ * `bcrypt.compare` goes on reading the same 72 bytes it always did.
+ */
+export const MAX_PASSWORD_BYTES = 72;
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 export function isValidEmail(value: unknown): value is string {
@@ -14,7 +36,11 @@ export function validatePassword(value: unknown): string | null {
   if (value.length < MIN_PASSWORD_LENGTH) {
     return `Password must be at least ${MIN_PASSWORD_LENGTH} characters`;
   }
-  if (value.length > 200) return 'Password is too long';
+  // Bytes, not characters: see `MAX_PASSWORD_BYTES`. Anything beyond this is
+  // not stored, so accepting it would be a promise we do not keep.
+  if (new TextEncoder().encode(value).length > MAX_PASSWORD_BYTES) {
+    return `Password must be ${MAX_PASSWORD_BYTES} bytes or fewer (accents and emoji use several bytes each)`;
+  }
   if (!/[a-zA-Z]/.test(value) || !/[0-9]/.test(value)) {
     return 'Password must contain at least one letter and one number';
   }

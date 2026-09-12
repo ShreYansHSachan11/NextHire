@@ -23,22 +23,61 @@ export function normalize(vector: number[]): number[] {
 }
 
 /**
+ * Whether the "vectors of different widths" warning has already been logged.
+ *
+ * Once, not once per comparison: the mismatch is a property of a stored row, so
+ * a single search can hit it two thousand times in one loop and every line would
+ * say the same thing. One line names the problem; the rest are a denial of
+ * service on the log.
+ */
+let warnedAboutWidth = false;
+
+/**
  * Cosine similarity in [-1, 1]. Both inputs are expected to be normalised, in
  * which case this is a plain dot product; it stays correct either way because
  * we divide by the magnitudes.
+ *
+ * **Vectors of different widths are not comparable, and return 0.** They happen
+ * for one reason: `GEMINI_EMBEDDING_DIMENSIONS` changed and some rows were
+ * written at the old width. The previous code claimed to guard against exactly
+ * this and did not — it compared `Math.min(a.length, b.length)` dimensions and
+ * returned a confident number for the overlapping prefix. A 768-wide row
+ * against its own 3072-wide re-embedding shares that prefix almost exactly and
+ * scored a near-perfect match, so the one case the guard existed for was the
+ * case it got most wrong.
+ *
+ * Returning 0 rather than throwing, deliberately. Every caller is on a
+ * fail-soft read path — the jobs feed, search, similar postings, skill pairing
+ * — and a `Float[]` column written at the wrong width is a data problem, not a
+ * request problem; a throw would turn it into a 500 on the feed for everyone,
+ * which is a strictly worse outcome than a missing match score. 0 is also
+ * already this function's established "no signal" answer for an empty vector,
+ * and `blend` in `matching.ts` passes `[]` on purpose to get it, so callers
+ * already handle it: `similarityToScore(0)` clamps to the floor and reports 0,
+ * every threshold in the AI layer filters it out, and a mismatch can therefore
+ * only ever suppress a match, never invent one. The failure is logged once per
+ * process so the stale rows can be found and re-indexed.
  */
 export function cosineSimilarity(a: number[], b: number[]): number {
   if (a.length === 0 || b.length === 0) return 0;
 
-  // Guard against a dimension change between when two rows were embedded —
-  // comparing across widths would silently produce nonsense.
-  const length = Math.min(a.length, b.length);
+  if (a.length !== b.length) {
+    if (!warnedAboutWidth) {
+      warnedAboutWidth = true;
+      console.warn(
+        `cosineSimilarity: vectors of different widths (${a.length} vs ${b.length}) are not ` +
+          'comparable and scored 0. Some embeddings were written at a different ' +
+          'GEMINI_EMBEDDING_DIMENSIONS; re-index to restore them. Logged once per process.'
+      );
+    }
+    return 0;
+  }
 
   let dot = 0;
   let magA = 0;
   let magB = 0;
 
-  for (let i = 0; i < length; i++) {
+  for (let i = 0; i < a.length; i++) {
     dot += a[i] * b[i];
     magA += a[i] * a[i];
     magB += b[i] * b[i];
