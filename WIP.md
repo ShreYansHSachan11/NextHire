@@ -97,14 +97,6 @@ document section by section. What is left:
   textbook cases named in DESIGN-NOTES: application status change, withdrawing
   an application, saving a search. Keep the toast on both paths — an optimistic
   update that silently reverts is worse than a spinner.
-
-**A failure mode to watch for.** Four research items were found *built into the
-kit and never called* — `MeterRow` took a `weight` prop no call site passed,
-`MatchScore` took `rank`/`rankOf` nothing passed, and three surfaces hand-set
-their own `%` readout rather than using the component that had been fixed to
-stop printing one. Upgrading a component is only half of landing a change; grep
-for the call sites. The same shape as the earlier "features built but switched
-off" problem.
 - **`border-gray-200 dark:border-gray-700` appears ~100 times.** It is
   *correct* (it resolves to `--line` in both themes) but it is a pair you have
   to get right by hand, and `border-gray-300` has already crept in nearby. A
@@ -113,6 +105,14 @@ off" problem.
   feed and the detail page still compute the underlying number on two different
   scales — see the correctness item below. Consistent *presentation* of two
   inconsistent *quantities* is the state this is currently in.
+
+**A failure mode to watch for.** Four research items were found *built into the
+kit and never called* — `MeterRow` took a `weight` prop no call site passed,
+`MatchScore` took `rank`/`rankOf` nothing passed, and three surfaces hand-set
+their own `%` readout rather than using the component that had been fixed to
+stop printing one. Upgrading a component is only half of landing a change; grep
+for the call sites. The same shape as the earlier "features built but switched
+off" problem.
 
 ### Blocked on you — I cannot fix these in code
 1. **Gemini key is free-tier: 20 generate calls/day.** Verification probing
