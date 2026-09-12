@@ -197,9 +197,30 @@ export function queueProfileEmbedding(userId: string): void {
 /* Bulk re-index                                                               */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Outcome of a backfill, per collection.
+ *
+ * `embedded + unchanged + skipped + failed === total`, and that identity is the
+ * point of `skipped`. Rows too thin to be worth a vector are dropped by
+ * `isDocumentUseful` before any tokens are spent, and without a bucket of their
+ * own they vanished from the arithmetic: a report reading `total: 19,
+ * embedded: 0, unchanged: 13, failed: 0` left six rows unaccounted for and gave
+ * an operator no way to tell "six profiles are empty" — which is normal and
+ * needs no action — from "six profiles silently failed to index", which is an
+ * incident. `skipped` is the same word `SyncResult` already uses for this case.
+ */
+export interface ReindexCounts {
+  total: number;
+  embedded: number;
+  unchanged: number;
+  /** Dropped by `isDocumentUseful`: too little content to embed usefully. */
+  skipped: number;
+  failed: number;
+}
+
 export interface ReindexReport {
-  jobs: { total: number; embedded: number; unchanged: number; failed: number };
-  profiles: { total: number; embedded: number; unchanged: number; failed: number };
+  jobs: ReindexCounts;
+  profiles: ReindexCounts;
 }
 
 /**
@@ -211,8 +232,8 @@ export interface ReindexReport {
 export async function reindexAll(options: { limit?: number } = {}): Promise<ReindexReport> {
   const limit = options.limit ?? 500;
   const report: ReindexReport = {
-    jobs: { total: 0, embedded: 0, unchanged: 0, failed: 0 },
-    profiles: { total: 0, embedded: 0, unchanged: 0, failed: 0 },
+    jobs: { total: 0, embedded: 0, unchanged: 0, skipped: 0, failed: 0 },
+    profiles: { total: 0, embedded: 0, unchanged: 0, skipped: 0, failed: 0 },
   };
 
   if (!isAiEnabled()) return report;
@@ -243,7 +264,10 @@ export async function reindexAll(options: { limit?: number } = {}): Promise<Rein
       return { id: job.id, document, hash, current: job.embedding?.contentHash };
     })
     .filter((entry) => {
-      if (!isDocumentUseful(entry.document)) return false;
+      if (!isDocumentUseful(entry.document)) {
+        report.jobs.skipped++;
+        return false;
+      }
       if (entry.current === entry.hash) {
         report.jobs.unchanged++;
         return false;
@@ -334,7 +358,10 @@ export async function reindexAll(options: { limit?: number } = {}): Promise<Rein
       return { id: user.id, document, hash, current: user.embedding?.contentHash };
     })
     .filter((entry) => {
-      if (!isDocumentUseful(entry.document)) return false;
+      if (!isDocumentUseful(entry.document)) {
+        report.profiles.skipped++;
+        return false;
+      }
       if (entry.current === entry.hash) {
         report.profiles.unchanged++;
         return false;
