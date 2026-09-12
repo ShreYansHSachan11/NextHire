@@ -326,7 +326,7 @@ function LoginForm() {
               Don&apos;t have an account?{" "}
               <Link
                 href="/auth/register"
-                className="rounded font-semibold text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
+                className="link font-semibold"
               >
                 Create one
               </Link>

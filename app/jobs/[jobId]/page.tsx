@@ -30,6 +30,10 @@ import {
 } from "@/app/components/ui";
 import { useToast } from "@/app/components/Toast";
 import { apiFetch } from "@/lib/clientAuth";
+// A bare constant object; `lib/ai/config` has no imports of its own and reads
+// only non-secret model names from the environment, so the weights shown in the
+// disclosure are the weights the scorer uses rather than a retyped copy.
+import { MATCH_WEIGHTS } from "@/lib/ai/config";
 
 /**
  * Both caps mirror `POST /api/applications`, which is the authority: it length-
@@ -936,10 +940,7 @@ function MatchPanel({ jobId, match }: { jobId: string; match: MatchBreakdown }) 
     <Card grid className="p-4 sm:p-5">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
-          <span
-            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border border-green-200 bg-green-50 text-green-600 dark:border-green-800 dark:bg-green-900/25 dark:text-green-400"
-            aria-hidden="true"
-          >
+          <span className="tile tile-accent h-8 w-8 flex-shrink-0" aria-hidden="true">
             <Icon.graph className="h-4 w-4" />
           </span>
           <h2 className="truncate text-sm font-semibold text-gray-900 dark:text-white">
@@ -1025,7 +1026,86 @@ function MatchPanel({ jobId, match }: { jobId: string; match: MatchBreakdown }) 
         Scored by comparing your profile with this posting. It is guidance to help you decide where
         to spend your time, not a decision — the company reads every application it receives.
       </p>
+
+      <MatchDisclosure />
     </Card>
+  );
+}
+
+/**
+ * Layer two of the explanation: what the score read, how it is made, what it
+ * decides, and what to do if it looks wrong.
+ *
+ * Collapsed by default and deliberately so. The ICO/Turing guidance on
+ * explaining AI decisions is built around *layered* delivery — the result and a
+ * one-line rationale first, the mechanism underneath for anyone who wants it —
+ * because a wall of methodology at the top of a panel is read by nobody and
+ * serves as cover rather than as an explanation.
+ *
+ * The four headings are the ICO's explanation types that the score and the
+ * rationale above do not already cover: data, rationale, responsibility and
+ * fairness. They also happen to be what NYC Local Law 144 requires a notice to
+ * state — the attributes assessed, and how to ask for an alternative — and what
+ * EU AI Act Art. 86 calls the "main elements of the decision". Employment is an
+ * Annex III high-risk use, so this is not decoration.
+ *
+ * Every claim here is one the code can stand behind. The percentages are read
+ * from `MATCH_WEIGHTS` rather than retyped, so they cannot drift from the
+ * scoring; "a person reads every application" is true because nothing in the
+ * portal filters on this number; and there is no "contact support" link because
+ * there is no support route to link to.
+ */
+function MatchDisclosure() {
+  const pct = (weight: number) => Math.round(weight * 100);
+
+  return (
+    <details className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-700">
+      {/* `list-none` plus the marker rule in globals.css: the default triangle
+          sits on the text baseline and cannot be aligned with the eyebrow. */}
+      <summary className="disclosure-summary eyebrow hit-24">How this was worked out</summary>
+
+      <dl className="mt-3 space-y-3 text-xs leading-relaxed text-gray-600 dark:text-gray-400">
+        <div>
+          <Eyebrow as="dt">What it read</Eyebrow>
+          <dd className="mt-1">
+            Your headline, skills, experience and location, and the text of this posting. Nothing
+            else — not your name, your photo, your age, or anything you have not put on your
+            profile.
+          </dd>
+        </div>
+
+        <div>
+          <Eyebrow as="dt">How the number is made</Eyebrow>
+          <dd className="mt-1">
+            A weighted blend of the four figures above: semantic fit {pct(MATCH_WEIGHTS.semantic)}%,
+            skills overlap {pct(MATCH_WEIGHTS.skills)}%, location {pct(MATCH_WEIGHTS.location)}%,
+            seniority {pct(MATCH_WEIGHTS.seniority)}%. Use it to compare roles against each other,
+            not as a measure of how likely you are to be hired.
+          </dd>
+        </div>
+
+        <div>
+          <Eyebrow as="dt">What it decides</Eyebrow>
+          <dd className="mt-1">
+            Nothing. It orders your feed. It does not filter you out of anything, it is not sent to
+            the company as a recommendation, and no application is accepted or rejected because of
+            it.
+          </dd>
+        </div>
+
+        <div>
+          <Eyebrow as="dt">If it looks wrong</Eyebrow>
+          <dd className="mt-1">
+            The score follows your profile, so{" "}
+            <Link href="/seeker/profile/edit" className="link">
+              updating it
+            </Link>{" "}
+            rescores every role. You can also apply regardless of the number — nothing here stops
+            you.
+          </dd>
+        </div>
+      </dl>
+    </details>
   );
 }
 

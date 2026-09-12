@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import Navbar from "@/app/components/Navbar";
 import { useToast } from "@/app/components/Toast";
 import { useAuthGuard } from "@/app/hooks/useAuthGuard";
+import MessagesLoading from "./loading";
 import { useSocket } from "@/lib/socketContext";
 import { apiFetch } from "@/lib/clientAuth";
 import {
@@ -22,6 +23,7 @@ import {
   Icon,
   inputClass,
   PageHeading,
+  SkeletonRows,
   Spinner,
 } from "@/app/components/ui";
 
@@ -120,11 +122,7 @@ export default function ConversationsPage() {
   // `useSearchParams` needs a Suspense boundary in Next 15.
   return (
     <Suspense
-      fallback={
-        <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
-          <Spinner className="h-10 w-10" label="Loading messages" />
-        </div>
-      }
+      fallback={<MessagesLoading />}
     >
       <ConversationsView />
     </Suspense>
@@ -309,13 +307,11 @@ function ConversationsView() {
 
   const groups = useMemo(() => groupByDay(messages), [messages]);
 
-  if (!ready) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <Spinner className="h-10 w-10" label="Loading messages" />
-      </div>
-    );
-  }
+  // The same skeleton the route’s `loading.tsx` shows, so the rehydration
+  // wait and the navigation wait are one state rather than two, and neither is
+  // a centred spinner that a full page of content then shoves aside
+  // (DESIGN-NOTES 1.4, 5.4).
+  if (!ready) return <MessagesLoading />;
 
   if (!allowed) return null; // the guard is already redirecting
 
@@ -354,9 +350,9 @@ function ConversationsView() {
 
               <div className="flex-1 overflow-y-auto">
                 {loading ? (
-                  <div className="px-6 py-12 text-center">
-                    <Spinner className="h-8 w-8" label="Loading conversations" />
-                  </div>
+                  // The rail is a list; a centred spinner in it shifts everything
+                  // below when the rows arrive (DESIGN-NOTES 5.4).
+                  <SkeletonRows count={5} />
                 ) : loadError ? (
                   <div className="p-4">
                     <Alert variant="error">

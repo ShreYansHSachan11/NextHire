@@ -259,6 +259,15 @@ const pairs = () => [
   // boundary and takes the 3:1 non-text minimum rather than a hairline's.
   ["quote text on quote ground", "--ink-muted", "--surface-sunken", 4.5],
   ["quote rail vs quote ground", "--ink-faint", "--surface-sunken", 3],
+
+  // ---- Inline links ------------------------------------------------------
+  // `.link` sits inside prose on any tier a card can reach, and inside the
+  // sunken wells the quote and the preview boxes use.
+  ["link on canvas", "--link", "--canvas", 4.5],
+  ["link on surface", "--link", "--surface", 4.5],
+  ["link on surface-raised", "--link", "--surface-raised", 4.5],
+  ["link on surface-overlay", "--link", "--surface-overlay", 4.5],
+  ["link on surface-sunken", "--link", "--surface-sunken", 4.5],
 ];
 
 function resolve(spec, scope) {

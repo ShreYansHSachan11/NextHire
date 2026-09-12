@@ -410,7 +410,7 @@ export default function RegisterPage() {
                             onChange={() =>
                               setFormData((current) => ({ ...current, role: option.value }))
                             }
-                            className="mt-1 h-4 w-4 flex-shrink-0 accent-green-600 dark:accent-green-400"
+                            className="control mt-1 h-4 w-4 flex-shrink-0"
                           />
                           <span className="min-w-0">
                             <Eyebrow as="span" accent={selected} className="flex items-center gap-1.5">
@@ -484,7 +484,7 @@ export default function RegisterPage() {
               Already have an account?{" "}
               <Link
                 href="/auth/login"
-                className="rounded font-semibold text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
+                className="link font-semibold"
               >
                 Sign in
               </Link>

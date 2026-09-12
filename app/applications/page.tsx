@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Navbar from "@/app/components/Navbar";
 import { useToast } from "@/app/components/Toast";
 import { useAuthGuard } from "@/app/hooks/useAuthGuard";
+import ApplicationsLoading from "./loading";
 import { apiFetch, authHeaders } from "@/lib/clientAuth";
 import { APPLICATION_STATUSES, STATUS_LABELS } from "@/lib/validation";
 import {
@@ -28,6 +29,7 @@ import {
   MeterRow,
   PageHeading,
   Readout,
+  SkeletonRows,
   Spinner,
   StatCard,
   StatusBadge,
@@ -402,13 +404,11 @@ export default function ApplicationsPage() {
 
   /* -------------------------------- render -------------------------------- */
 
-  if (!ready) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <Spinner className="h-10 w-10" label="Loading applications" />
-      </div>
-    );
-  }
+  // The same skeleton the route’s `loading.tsx` shows, so the rehydration
+  // wait and the navigation wait are one state rather than two, and neither is
+  // a centred spinner that a full page of content then shoves aside
+  // (DESIGN-NOTES 1.4, 5.4).
+  if (!ready) return <ApplicationsLoading />;
 
   if (!allowed) return null; // the guard is already redirecting
 
@@ -628,9 +628,16 @@ export default function ApplicationsPage() {
 
           <div aria-live="polite">
             {loading ? (
-              <div className="px-6 py-12 text-center">
-                <Spinner className="h-10 w-10" label="Loading applications" />
-              </div>
+              /*
+               * Rows rather than a centred spinner. A `px-6 py-12` spinner box
+               * replaced by a list several hundred pixels tall is the largest
+               * layout shift on this route (DESIGN-NOTES 5.4), and the spinner
+               * was telling the reader nothing the skeleton does not.
+               * `SkeletonRows` carries the same divider, padding and leading
+               * avatar as `ApplicationRow`, so the only thing that changes when
+               * the data lands is the text.
+               */
+              <SkeletonRows count={4} />
             ) : loadError ? (
               <div className="p-4 sm:p-6">
                 <Alert variant="error">
@@ -922,7 +929,7 @@ function ApplicationRow({
               Applied for{" "}
               <Link
                 href={`/jobs/${application.job.id}`}
-                className="rounded font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
+                className="link font-medium"
               >
                 {application.job.title}
               </Link>

@@ -6,29 +6,30 @@ import { useRouter } from "next/navigation";
 import Navbar from "@/app/components/Navbar";
 import { useToast } from "@/app/components/Toast";
 import { useAuthGuard } from "@/app/hooks/useAuthGuard";
+import DashboardLoading from "./loading";
 import { apiFetch } from "@/lib/clientAuth";
 import { APPLICATION_STATUSES, STATUS_LABELS } from "@/lib/validation";
 import {
   Alert,
+  buttonGhost,
+  buttonPrimary,
+  buttonSecondary,
   Card,
   CardHeader,
   Chip,
   EmptyState,
   Eyebrow,
+  formatCount,
+  formatDate,
   Icon,
+  inputClass,
   JobStateBadge,
   PageHeading,
   Readout,
   SignalPanel,
-  Spinner,
+  SkeletonRows,
   StatCard,
   StatusBadge,
-  buttonGhost,
-  buttonPrimary,
-  buttonSecondary,
-  formatCount,
-  formatDate,
-  inputClass,
 } from "@/app/components/ui";
 
 /* -------------------------------------------------------------------------- */
@@ -253,13 +254,11 @@ export default function CompanyDashboard() {
 
   /* -------------------------------- render -------------------------------- */
 
-  if (!ready) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <Spinner className="h-10 w-10" label="Loading dashboard" />
-      </div>
-    );
-  }
+  // The same skeleton the route’s `loading.tsx` shows, so the rehydration
+  // wait and the navigation wait are one state rather than two, and neither is
+  // a centred spinner that a full page of content then shoves aside
+  // (DESIGN-NOTES 1.4, 5.4).
+  if (!ready) return <DashboardLoading />;
 
   if (!allowed) return null; // the guard is already redirecting
 
@@ -357,9 +356,9 @@ export default function CompanyDashboard() {
           />
 
           {loading ? (
-            <div className="px-6 py-12 text-center">
-              <Spinner className="h-10 w-10" label="Loading your job postings" />
-            </div>
+            // Same shape as the list it stands in for, rather than a spinner in a
+            // short box followed by a tall list (DESIGN-NOTES 5.4).
+            <SkeletonRows count={3} />
           ) : loadError ? (
             <div className="p-4 sm:p-6">
               <Alert variant="error">
@@ -478,7 +477,7 @@ export default function CompanyDashboard() {
                           onClick={() => toggleExpanded(job.id)}
                           aria-expanded={expanded}
                           aria-controls={`applications-${job.id}`}
-                          className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-medium text-blue-600 transition-colors hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/30"
+                          className="link interactive inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-medium"
                         >
                           <Icon.arrowRight
                             className={`h-4 w-4 transition-transform ${expanded ? "rotate-90" : ""}`}
@@ -524,7 +523,7 @@ export default function CompanyDashboard() {
                                           href={resume.url}
                                           target="_blank"
                                           rel="noopener noreferrer"
-                                          className="inline-flex items-center gap-1.5 rounded text-xs font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
+                                          className="link inline-flex items-center gap-1.5 text-xs font-medium"
                                         >
                                           <Icon.document className="h-4 w-4" />
                                           View r&eacute;sum&eacute;
@@ -634,7 +633,7 @@ export default function CompanyDashboard() {
                       href={user.website}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="mono break-all text-sm font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
+                      className="mono link break-all text-sm font-medium"
                     >
                       {user.website}
                     </a>

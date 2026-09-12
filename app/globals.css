@@ -230,6 +230,12 @@
      GOV.UK's two-colour indicator: the gap guarantees a light/dark boundary on
      either side of the ring whatever it lands on.
      Ref: https://www.w3.org/WAI/WCAG22/Understanding/focus-appearance.html */
+  /* Inline links inside prose. Five call sites wrote
+     `text-blue-600 underline-offset-2 hover:underline dark:text-blue-400`;
+     a token lets the contrast audit check the colour on every surface it can
+     land on, which a raw utility pair cannot be. */
+  --link: #4f46e5;
+
   --focus-ring: #4f46e5;
   --focus-ring-width: 2px;
   --focus-ring-offset: 2px;
@@ -387,6 +393,8 @@
      blue-300 rather than blue-400: #818cf8 measures 3.7:1 on the navy canvas
      but only 2.9:1 on `--surface-overlay`, so a focused control inside a
      popover fell under SC 1.4.11. #a5b4fc clears 3:1 on every surface tier. */
+  --link: #818cf8;
+
   --focus-ring: #a5b4fc;
 
   /* --- Misc --------------------------------------------------------------- */
@@ -1457,6 +1465,59 @@ nav {
 
   .field-composite:has(:focus-visible) {
     box-shadow: none;
+  }
+
+  /* An inline link inside running text. Underline on hover rather than always,
+     because these sit inside short prose where a permanent rule is noisy; the
+     colour plus the focus outline carry it otherwise. */
+  .link {
+    color: var(--link);
+    text-underline-offset: 2px;
+    border-radius: var(--radius-xs);
+  }
+
+  .link:hover {
+    text-decoration: underline;
+  }
+
+  /* ==========================================================================
+     Disclosure
+
+     `<summary>` carries a UA triangle that sits on the text baseline and cannot
+     be aligned with anything. Replaced with a chevron we control, drawn from
+     `currentColor` so it follows the summary's own colour in both themes.
+     ========================================================================== */
+
+  .disclosure-summary {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .disclosure-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .disclosure-summary::before {
+    content: "";
+    width: 0.4375rem;
+    height: 0.4375rem;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: translateY(-1px) rotate(-45deg);
+    transition: transform 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  details[open] > .disclosure-summary::before {
+    transform: translateY(-2px) rotate(45deg);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .disclosure-summary::before {
+      transition: none;
+    }
   }
 
   /*
