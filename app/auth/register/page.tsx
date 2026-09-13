@@ -495,7 +495,15 @@ export default function RegisterPage() {
 
       {/* Context panel. Hidden outright below `lg` rather than stacked, so a phone
           gets the form and nothing competing with it. */}
-      <aside className="band-dark relative hidden overflow-hidden lg:flex lg:flex-col lg:justify-center lg:px-12 xl:px-16">
+      {/*
+        Centred with `my-auto` on the content below rather than `justify-center`
+        here, and deliberately not clipped — see the same panel on the sign-in
+        page. A flex column centring content taller than itself overflows at
+        both ends, so `overflow-hidden` cut the wordmark off the top and the
+        closing line off the bottom with no way to scroll to either. This panel
+        is the taller of the two, so it lost content first.
+      */}
+      <aside className="band-dark relative hidden lg:flex lg:flex-col lg:px-12 lg:py-16 xl:px-16">
         {/* `.grid-field`'s rule colour is tuned for light surfaces and disappears
             on the dark band, so the band draws its own graph paper. */}
         <div
@@ -508,7 +516,7 @@ export default function RegisterPage() {
           }}
         />
 
-        <div className="relative max-w-md">
+        <div className="relative my-auto max-w-md">
           <div className="flex items-center gap-2.5">
             <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-gray-900">
               <Icon.graph className="h-5 w-5" />

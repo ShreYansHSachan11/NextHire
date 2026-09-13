@@ -337,7 +337,21 @@ function LoginForm() {
 
       {/* Context panel. Hidden outright below `lg` rather than stacked, so a phone
           gets the form and nothing competing with it. */}
-      <aside className="band-dark relative hidden overflow-hidden lg:flex lg:flex-col lg:justify-center lg:px-12 xl:px-16">
+      {/*
+        No `overflow-hidden`, and the panel is centred with `my-auto` on the
+        content rather than `justify-center` here. Those two together used to
+        cut the panel off at the top *and* the bottom at once: a flex column
+        that centres content taller than itself overflows equally at both ends,
+        and clipping it meant the wordmark and the "Create a profile" line were
+        simply gone, with no scroll to reach them. Auto margins centre the block
+        while there is room to spare and collapse to nothing when there is not,
+        so a short window or a page zoomed to 200% grows the panel instead of
+        eating its first and last rows (WCAG 2.2 SC 1.4.4).
+
+        The clip was never load-bearing: the graph-paper layer below is
+        `absolute inset-0`, which cannot escape the box it is measured from.
+      */}
+      <aside className="band-dark relative hidden lg:flex lg:flex-col lg:px-12 lg:py-16 xl:px-16">
         {/* `.grid-field`'s rule colour is tuned for light surfaces and disappears
             on the dark band, so the band draws its own graph paper. */}
         <div
@@ -350,7 +364,7 @@ function LoginForm() {
           }}
         />
 
-        <div className="relative max-w-md">
+        <div className="relative my-auto max-w-md">
           <div className="flex items-center gap-2.5">
             <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-gray-900">
               <Icon.graph className="h-5 w-5" />
