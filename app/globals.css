@@ -764,16 +764,66 @@ nav {
   }
 
   /* Graph-paper field, used behind AI/telemetry panels. */
+  /*
+   * Graph paper, kept away from the words.
+   *
+   * The rules used to be painted straight onto the element, which meant they
+   * ran underneath whatever the surface was carrying. Every readability
+   * reference says the same thing about this — a background behind body text
+   * should be a flat colour, because a repeating pattern competes with the
+   * letterforms it sits under and costs contrast exactly where the text is
+   * thinnest. On a decorative panel it read as texture; on a card of running
+   * prose it read as interference.
+   *
+   * So the grid now fades out through the middle and survives only at the
+   * edges, where nothing is set. The content area is flat colour and the panel
+   * keeps its character — the same treatment a lot of product marketing pages
+   * use for exactly this reason.
+   *
+   * Two mechanics are load-bearing:
+   *
+   * - The rules move to a pseudo-element. `mask-image` applies to an element's
+   *   whole rendering, children included, so masking `.grid-field` itself would
+   *   fade the text along with the grid — the precise opposite of the point.
+   * - `isolation` plus `z-index: -1` puts that pseudo-element behind the
+   *   content but still in front of the panel's own background. Without the
+   *   isolation the negative layer escapes to an ancestor stacking context and
+   *   disappears behind the opaque surface colour.
+   */
   .grid-field {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .grid-field::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    /* Follows a rounded card instead of squaring off its corners. */
+    border-radius: inherit;
     background-image: linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
       linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
     background-size: 34px 34px;
+    /* Clear through the middle, where the text is; grid at the margins. */
+    -webkit-mask-image: radial-gradient(ellipse at center, transparent 0%, #000 78%);
+    mask-image: radial-gradient(ellipse at center, transparent 0%, #000 78%);
   }
 
   /* Full-bleed dark band for the "how it works" style sections. */
   .band-dark {
     background: #0b111c;
     color: #f2f5f9;
+    /*
+     * This band is dark in *both* themes, so it needs the light rule colour in
+     * both — the global `--grid-line` is ink-on-paper and vanishes into it.
+     * Scoping the token here is what lets a band carry `.grid-field` and get
+     * the masked treatment, instead of hand-rolling the same two gradients as
+     * an inline style on a decorative div, which is what the two auth panels
+     * used to do.
+     */
+    --grid-line: rgb(255 255 255 / 0.045);
   }
 
   .dark .band-dark {
@@ -1636,18 +1686,30 @@ nav {
     display: none;
   }
 
+  /*
+   * The same chevron the `Disclosure` button draws, so the two disclosure
+   * idioms in the app — this one on a `<details>`, and the scripted one on a
+   * `<button>` — point the same way and turn the same way. They used to
+   * disagree: this pointed down-right and swung to up-right, while the button
+   * pointed right and swung to down.
+   *
+   * Two borders rotated 45° rather than an icon, because a `<summary>` cannot
+   * carry a React child before its own text without losing the marker slot.
+   * Pointing *down* at rest and *up* when open matches the direction the panel
+   * actually moves.
+   */
   .disclosure-summary::before {
     content: "";
     width: 0.4375rem;
     height: 0.4375rem;
     border-right: 1.5px solid currentColor;
     border-bottom: 1.5px solid currentColor;
-    transform: translateY(-1px) rotate(-45deg);
+    transform: translateY(-2px) rotate(45deg);
     transition: transform 150ms cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   details[open] > .disclosure-summary::before {
-    transform: translateY(-2px) rotate(45deg);
+    transform: translateY(1px) rotate(-135deg);
   }
 
   @media (prefers-reduced-motion: reduce) {

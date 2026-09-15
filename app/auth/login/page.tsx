@@ -381,19 +381,12 @@ function LoginForm() {
         The clip was never load-bearing: the graph-paper layer below is
         `absolute inset-0`, which cannot escape the box it is measured from.
       */}
-      <aside className="band-dark relative hidden lg:flex lg:flex-col lg:px-12 lg:py-16 xl:px-16">
-        {/* `.grid-field`'s rule colour is tuned for light surfaces and disappears
-            on the dark band, so the band draws its own graph paper. */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0"
-          style={{
-            backgroundImage:
-              "linear-gradient(to right, rgba(255,255,255,0.045) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.045) 1px, transparent 1px)",
-            backgroundSize: "34px 34px",
-          }}
-        />
-
+      {/* `.grid-field` rather than a hand-rolled pair of gradients on a
+          decorative div: `.band-dark` now scopes `--grid-line` to the light
+          rule colour it needs, so the shared class works here and brings its
+          mask with it — the graph paper fades out behind the copy instead of
+          running underneath it. */}
+      <aside className="band-dark grid-field relative hidden lg:flex lg:flex-col lg:px-12 lg:py-16 xl:px-16">
         <div className="relative my-auto max-w-md">
           <div className="flex items-center gap-2.5">
             <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-gray-900">

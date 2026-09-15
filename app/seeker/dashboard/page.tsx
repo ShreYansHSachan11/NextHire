@@ -1484,13 +1484,27 @@ function Disclosure({
         aria-controls={regionId}
         className={`${buttonGhost} -ml-2.5 w-full justify-between`}
       >
-        <span className="flex min-w-0 items-center gap-2">
-          <Icon.arrowRight
-            className={`h-4 w-4 flex-shrink-0 transition-transform ${open ? "rotate-90" : ""}`}
+        {/*
+         * Label left, chevron right — the accordion convention, rather than the
+         * tree convention this used to follow. The row is already full width
+         * and `justify-between`, so a glyph pinned to the left edge left the
+         * control reading as a bullet with a stray arrow beside it rather than
+         * as something to press. `chevronDown` rotating to point up is also the
+         * honest direction: the panel opens downward, under the header.
+         *
+         * `arrowRight` was the wrong glyph on top of the wrong placement — it
+         * is the kit's *navigation* arrow, used on links that take you
+         * somewhere else, and this goes nowhere.
+         */}
+        <span className="truncate text-sm font-medium text-gray-900 dark:text-white">{label}</span>
+        <span className="flex flex-shrink-0 items-center gap-2">
+          {meta && <Eyebrow as="span">{meta}</Eyebrow>}
+          <Icon.chevronDown
+            className={`h-4 w-4 flex-shrink-0 transition-transform duration-150 ${
+              open ? "rotate-180" : ""
+            }`}
           />
-          <span className="truncate text-sm font-medium text-gray-900 dark:text-white">{label}</span>
         </span>
-        {meta && <Eyebrow as="span">{meta}</Eyebrow>}
       </button>
       {open && (
         <div id={regionId} className="mt-3">

@@ -518,19 +518,10 @@ export default function RegisterPage() {
         closing line off the bottom with no way to scroll to either. This panel
         is the taller of the two, so it lost content first.
       */}
-      <aside className="band-dark relative hidden lg:flex lg:flex-col lg:px-12 lg:py-16 xl:px-16">
-        {/* `.grid-field`'s rule colour is tuned for light surfaces and disappears
-            on the dark band, so the band draws its own graph paper. */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0"
-          style={{
-            backgroundImage:
-              "linear-gradient(to right, rgba(255,255,255,0.045) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.045) 1px, transparent 1px)",
-            backgroundSize: "34px 34px",
-          }}
-        />
-
+      {/* Same treatment as the sign-in panel: the shared `.grid-field`, whose
+          rule colour `.band-dark` scopes for it, and whose mask keeps the graph
+          paper off the copy. */}
+      <aside className="band-dark grid-field relative hidden lg:flex lg:flex-col lg:px-12 lg:py-16 xl:px-16">
         <div className="relative my-auto max-w-md">
           <div className="flex items-center gap-2.5">
             <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-gray-900">
