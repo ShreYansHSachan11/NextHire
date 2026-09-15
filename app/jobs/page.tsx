@@ -11,6 +11,7 @@ import { useToast } from "@/app/components/Toast";
 import {
   Alert,
   Avatar,
+  Button,
   buttonGhost,
   buttonPrimary,
   buttonSecondary,
@@ -26,7 +27,6 @@ import {
   MatchScore,
   Meter,
   PageHeading,
-  Spinner,
 } from "@/app/components/ui";
 import { JobCardSkeleton } from "@/app/components/skeletons";
 import { apiFetch } from "@/lib/clientAuth";
@@ -1472,16 +1472,9 @@ function SaveSearchPanel({
         )}
 
         <div className="mt-3 flex flex-wrap gap-2">
-          <button type="submit" className={buttonPrimary} disabled={saving}>
-            {saving ? (
-              <>
-                <Spinner className="h-4 w-4" />
-                Saving…
-              </>
-            ) : (
-              "Save search"
-            )}
-          </button>
+          <Button type="submit" loading={saving} loadingLabel="Saving your search">
+            {saving ? "Saving…" : "Save search"}
+          </Button>
           <button
             type="button"
             onClick={() => setOpen(false)}

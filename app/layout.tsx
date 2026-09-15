@@ -1,6 +1,8 @@
 import "./globals.css";
+import { Suspense } from "react";
 import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
+import RouteProgress from "@/app/components/RouteProgress";
 import ReduxProvider from "@/store/Provider";
 import AuthRehydrator from "@/store/AuthRehydrator";
 import { SocketProvider } from "@/lib/socketContext";
@@ -71,6 +73,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         >
           Skip to main content
         </a>
+        {/*
+          `RouteProgress` reads `useSearchParams`, which opts its whole subtree
+          into dynamic rendering unless it sits behind a Suspense boundary —
+          without this, every statically generated page in the app would
+          deoptimise to server-rendered. `fallback={null}` because the bar has
+          nothing to show before it hydrates anyway.
+        */}
+        <Suspense fallback={null}>
+          <RouteProgress />
+        </Suspense>
         <SessionProviderWrapper>
           <ReduxProvider>
             <AuthRehydrator />

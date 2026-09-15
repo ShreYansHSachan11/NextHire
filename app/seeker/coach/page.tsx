@@ -10,6 +10,8 @@ import CoachLoading from "./loading";
 import { apiFetch } from "@/lib/clientAuth";
 import {
   Alert,
+  BackLink,
+  Button,
   Card,
   CardHeader,
   Chip,
@@ -348,10 +350,9 @@ export default function SeekerCoachPage() {
       <Navbar />
 
       <main id="main-content" className="container-responsive py-6 sm:py-8">
-        <Link href="/seeker/dashboard" className={`${buttonGhost} -ml-2.5 mb-5`}>
-          <Icon.arrowLeft className="h-4 w-4" />
+        <BackLink href="/seeker/dashboard" className="mb-5">
           Back to dashboard
-        </Link>
+        </BackLink>
 
         <PageHeading
           eyebrow="Seeker tools"
@@ -512,24 +513,20 @@ export default function SeekerCoachPage() {
                           {TOOLS[mode].blurb}
                         </p>
                       </div>
-                      <button
-                        type="button"
+                      {/* Was a bare `<button>` whose spinner branch carried no
+                          `aria-busy`, so the wait was visible and nothing
+                          else. `Button` disables, spins and announces from the
+                          one prop. */}
+                      <Button
+                        variant="secondary"
+                        className="flex-shrink-0"
+                        loading={running === key}
+                        loadingLabel={`Running ${TOOLS[mode].title.toLowerCase()}`}
+                        icon={<Icon.spark className="h-4 w-4" />}
                         onClick={() => void run(selected.id, mode)}
-                        disabled={running === key}
-                        className={`${buttonSecondary} flex-shrink-0`}
                       >
-                        {running === key ? (
-                          <>
-                            <Spinner className="h-4 w-4" />
-                            Working&hellip;
-                          </>
-                        ) : (
-                          <>
-                            <Icon.spark className="h-4 w-4" />
-                            {result ? "Run again" : TOOLS[mode].cta}
-                          </>
-                        )}
-                      </button>
+                        {running === key ? "Working…" : result ? "Run again" : TOOLS[mode].cta}
+                      </Button>
                     </div>
 
                     {runError && (

@@ -600,6 +600,39 @@ nav {
     background: var(--rail);
   }
 
+  /*
+   * The same rail, in motion, across the top of the window while a route
+   * change is in flight. It reuses `--rail` on purpose: the strip that sits
+   * above the navigation and the strip that reports progress are the same
+   * object, one at rest and one working, rather than two unrelated bars.
+   *
+   * Above the sticky header (z-50) and above the skip link's own stacking, so
+   * it is never the thing hidden behind the chrome it is reporting on.
+   */
+  .route-progress {
+    position: fixed;
+    inset: 0 0 auto 0;
+    z-index: 200;
+    height: 3px;
+    pointer-events: none;
+    background: transparent;
+  }
+
+  .route-progress-bar {
+    height: 100%;
+    background: var(--rail);
+    border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
+    transition: width 180ms cubic-bezier(0.4, 0, 0.2, 1);
+    /* A sliver of glow, so the bar reads as lit rather than as a border. */
+    box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 55%, transparent);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .route-progress-bar {
+      transition: none;
+    }
+  }
+
   /* ==========================================================================
      Monospace labels
      Machine-generated values (match scores, model versions, counts, statuses)
@@ -1420,6 +1453,62 @@ nav {
   .field::placeholder {
     color: var(--ink-faint);
     opacity: 1;
+  }
+
+  /* ==========================================================================
+     Select
+
+     A `<select>` carrying `.field` got the box and nothing else. Without
+     `appearance: none` the browser keeps drawing its own arrow, which means a
+     different glyph at a different size and a different inset on every
+     platform — and the control's padding was written as though nothing were
+     there, so the text ran under it. The arrow is ours now, one glyph at one
+     fixed inset, with the room for it reserved in `padding-right`.
+
+     `background-image` only: `.field`'s `background` shorthand still supplies
+     the colour, and `select.field` outranks it for the image alone.
+
+     The chevron is spelled out twice rather than tinted, because a background
+     image cannot read `currentColor`. Both values are `--ink-muted` — the same
+     token the rest of the control's secondary ink comes from, so the arrow
+     tracks the theme rather than sitting one step off it.
+     ========================================================================== */
+
+  select.field {
+    appearance: none;
+    cursor: pointer;
+    /* The glyph's 1rem box, its 0.75rem inset, and a gap before the text. */
+    padding-right: 2.5rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%234e5a6b' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6.5 4 4 4-4'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 1rem 1rem;
+  }
+
+  .dark select.field {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23a4b0c0' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6.5 4 4 4-4'/%3E%3C/svg%3E");
+  }
+
+  /*
+   * The dropped list is drawn by the operating system, not by us, and cannot
+   * be restyled in any cross-browser way — `::picker(select)` is Chrome 135+
+   * only and changes the control's internals to get there. What *is* portable
+   * is telling the platform which palette to draw it from: `color-scheme` on
+   * `html` already flips with the theme, and these two declarations are what
+   * Firefox and Windows read for the row colours themselves. Without them a
+   * dark-theme list opens white.
+   */
+  select.field option {
+    background-color: var(--surface);
+    color: var(--ink);
+  }
+
+  /* A right-to-left reader gets the arrow on the other side, and the padding
+     with it — otherwise the glyph lands on top of the first character. */
+  select.field:dir(rtl) {
+    padding-right: 0.875rem;
+    padding-left: 2.5rem;
+    background-position: left 0.75rem center;
   }
 
   /*

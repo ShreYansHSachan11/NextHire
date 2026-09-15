@@ -15,7 +15,9 @@ import {
 } from "@/lib/validation";
 import {
   Alert,
+  BackLink,
   BADGE_TONES,
+  Button,
   buttonGhost,
   buttonPrimary,
   buttonSecondary,
@@ -961,10 +963,9 @@ export default function PostJobPage() {
       <Navbar />
 
       <main id="main-content" className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
-        <Link href="/company/dashboard" className={`${buttonGhost} -ml-2.5 mb-4`}>
-          <Icon.arrowLeft className="h-4 w-4" />
+        <BackLink href="/company/dashboard" className="mb-4">
           Back to dashboard
-        </Link>
+        </BackLink>
 
         <PageHeading
           eyebrow="Company · New posting"
@@ -986,24 +987,15 @@ export default function PostJobPage() {
 
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
               {questionsUnsaved && (
-                <button
-                  type="button"
+                <Button
+                  variant="secondary"
                   onClick={() => void retrySaveQuestions()}
-                  disabled={retryingQuestions}
-                  className={`${buttonSecondary} disabled:cursor-not-allowed disabled:opacity-50`}
+                  loading={retryingQuestions}
+                  loadingLabel="Saving the screening questions"
+                  icon={<Icon.check className="h-4 w-4" />}
                 >
-                  {retryingQuestions ? (
-                    <>
-                      <Spinner className="h-4 w-4" />
-                      Saving…
-                    </>
-                  ) : (
-                    <>
-                      <Icon.check className="h-4 w-4" />
-                      Save the questions
-                    </>
-                  )}
-                </button>
+                  {retryingQuestions ? "Saving…" : "Save the questions"}
+                </Button>
               )}
               <Link href={`/jobs/${created.id}`} className="btn-ink btn-touch">
                 View the posting

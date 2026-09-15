@@ -20,6 +20,7 @@ import {
 import { updateProfile } from "@/store/authSlice";
 import {
   Alert,
+  BackLink,
   Button,
   Card,
   CardHeader,
@@ -29,7 +30,6 @@ import {
   Label,
   PageHeading,
   Readout,
-  buttonGhost,
   buttonSecondary,
   inputClass,
 } from "@/app/components/ui";
@@ -377,6 +377,10 @@ export default function EditSeekerProfilePage() {
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setFormError("");
+    // The submit button is already disabled while saving, but implicit
+    // submission from a text field does not go through it — and a second PUT
+    // would re-issue the token the first one is still installing.
+    if (saving) return;
     if (!user) return;
     if (!validate()) return;
 
@@ -466,14 +470,9 @@ export default function EditSeekerProfilePage() {
           precisely so a width utility can win — because a single-column form
           has no business being 1280px wide. */}
       <main id="main-content" className="container-responsive max-w-3xl py-6 sm:py-8">
-        <Link
-          href="/seeker/dashboard"
-          onClick={confirmDiscard}
-          className={`${buttonGhost} -ml-2.5 mb-5`}
-        >
-          <Icon.arrowLeft className="h-4 w-4" />
+        <BackLink href="/seeker/dashboard" onClick={confirmDiscard} className="mb-5">
           Back to dashboard
-        </Link>
+        </BackLink>
 
         <PageHeading
           eyebrow="Seeker record"

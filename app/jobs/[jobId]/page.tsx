@@ -8,7 +8,8 @@ import type { RootState } from "@/store/store";
 import Navbar from "@/app/components/Navbar";
 import {
   Alert,
-  buttonGhost,
+  BackLink,
+  Button,
   buttonPrimary,
   buttonSecondary,
   Card,
@@ -25,7 +26,6 @@ import {
   Readout,
   Skeleton,
   SkeletonText,
-  Spinner,
   StatusBadge,
 } from "@/app/components/ui";
 import { useToast } from "@/app/components/Toast";
@@ -280,6 +280,10 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
   };
 
   const handleApply = async () => {
+    // Belt and braces alongside the disabled button: submitting twice creates a
+    // duplicate application the seeker cannot withdraw from this page.
+    if (applying) return;
+
     if (!isAuthenticated) {
       router.push(`/auth/login?next=${encodeURIComponent(`/jobs/${jobId}`)}`);
       return;
@@ -383,10 +387,9 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
 
   return (
     <PageShell>
-      <Link href="/jobs" className={`${buttonGhost} -ml-2.5 mb-5`}>
-        <Icon.arrowLeft className="h-4 w-4" />
+      <BackLink href="/jobs" className="mb-5">
         All roles
-      </Link>
+      </BackLink>
 
       {/* Header: company tile, tight role title, state code, metadata chips. */}
       <header className="mb-6">
@@ -607,24 +610,15 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
                 </p>
               </div>
 
-              <button
-                type="button"
+              <Button
+                block
                 onClick={() => void handleApply()}
-                disabled={applying}
-                className={`${buttonPrimary} w-full`}
+                loading={applying}
+                loadingLabel="Sending your application"
+                iconEnd={<Icon.arrowUpRight className="h-4 w-4" />}
               >
-                {applying ? (
-                  <>
-                    <Spinner className="h-4 w-4" />
-                    Submitting…
-                  </>
-                ) : (
-                  <>
-                    Apply
-                    <Icon.arrowUpRight className="h-4 w-4" />
-                  </>
-                )}
-              </button>
+                {applying ? "Submitting…" : "Apply"}
+              </Button>
             </Card>
           )}
 

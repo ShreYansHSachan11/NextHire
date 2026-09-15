@@ -12,13 +12,13 @@ import { MIN_PASSWORD_LENGTH, isValidEmail, validatePassword } from "@/lib/valid
 import { ThemeToggle } from "@/app/components/ThemeProvider";
 import {
   Alert,
+  BackLink,
+  Button,
   Card,
   Eyebrow,
   Icon,
   Label,
   NumberedItem,
-  Spinner,
-  buttonPrimary,
   inputClass,
 } from "@/app/components/ui";
 
@@ -222,6 +222,14 @@ export default function RegisterPage() {
 
         <div className="flex flex-1 items-center justify-center px-4 pb-12 pt-2 sm:px-6 lg:px-10">
           <div className="w-full max-w-md">
+            {/* Matching the sign-in screen: no navbar here either, so without a
+                named way out the only exit from a half-filled sign-up form is
+                the browser's back button. Home is the parent — this page has no
+                other one, whatever the visitor came from. */}
+            <BackLink href="/" className="mb-5">
+              Back to NextHire
+            </BackLink>
+
             <div className="mb-7">
               <Eyebrow className="mb-2">Account · New</Eyebrow>
               <h1 className="text-3xl font-bold text-gray-900 dark:text-white sm:text-4xl">
@@ -431,24 +439,26 @@ export default function RegisterPage() {
                 </div>
               </fieldset>
 
-              <button
+              {/* `Button` rather than a hand-rolled pending state, for the same
+                  reason as the sign-in submit: the bare `<Spinner>` this used to
+                  render carried its own `role="status"` and announced "Loading"
+                  over the button's real label, where the one `Button` swaps in
+                  for `iconEnd` is decorative and `loadingLabel` says what is
+                  actually happening. */}
+              <Button
                 type="submit"
+                variant="primary"
+                block
+                className="py-3"
+                loading={loading}
+                loadingLabel="Creating your account"
                 disabled={busy}
-                aria-busy={loading}
-                className={`${buttonPrimary} w-full py-3`}
+                iconEnd={<Icon.arrowRight className="h-4 w-4" />}
               >
-                {loading ? (
-                  <>
-                    <Spinner className="h-4 w-4" />
-                    Creating account…
-                  </>
-                ) : (
-                  <>
-                    Create account
-                    <Icon.arrowRight className="h-4 w-4" />
-                  </>
-                )}
-              </button>
+                {/* Visible, not just a spinner — see the sign-in button for why
+                    a `block` control can afford to change its own label. */}
+                {loading ? "Creating your account…" : "Create account"}
+              </Button>
             </form>
 
             {/* Hairline rule with the label sitting on it. The label paints the
@@ -465,17 +475,22 @@ export default function RegisterPage() {
             </div>
 
             {/* This button had no handler at all and silently did nothing.
-                `type="button"` also stops it submitting the form above. */}
-            <button
+                `type="button"` is still stated outright rather than left to
+                `Button`'s default, because it is what stops the control
+                submitting the form above. */}
+            <Button
               type="button"
+              variant="secondary"
+              block
+              className="py-3"
               onClick={handleGoogle}
+              loading={googleLoading}
+              loadingLabel="Redirecting to Google"
               disabled={busy}
-              aria-busy={googleLoading}
-              className="btn-outline btn-touch w-full py-3"
+              icon={<GoogleIcon />}
             >
-              {googleLoading ? <Spinner className="h-4 w-4" /> : <GoogleIcon />}
-              <span>{googleLoading ? "Redirecting to Google…" : "Google"}</span>
-            </button>
+              Google
+            </Button>
             <p className="mt-2 text-center text-xs text-gray-600 dark:text-gray-400">
               Google sign-up creates a job seeker account.
             </p>

@@ -19,6 +19,7 @@ import {
   Label,
   PageHeading,
   Readout,
+  Spinner,
   buttonGhost,
   buttonPrimary,
   buttonSecondary,
@@ -500,7 +501,18 @@ function SavedSearchRow({
 
   const [renaming, setRenaming] = useState(false);
   const [draftName, setDraftName] = useState(search.name);
-  const [busy, setBusy] = useState(false);
+  /**
+   * Which of this row's four writes is in flight, rather than one boolean.
+   *
+   * The whole row still locks while any of them runs — two PATCHes racing on
+   * one record is how a rename loses to a frequency change — but only the
+   * control that was actually pressed shows the spinner. A shared flag put one
+   * on Delete while a rename was saving.
+   */
+  const [pending, setPending] = useState<"rename" | "frequency" | "filters" | "delete" | null>(
+    null
+  );
+  const busy = pending !== null;
   const [error, setError] = useState("");
 
   const labels = filterLabels(search.filters);
@@ -528,7 +540,7 @@ function SavedSearchRow({
       return;
     }
 
-    setBusy(true);
+    setPending("rename");
     setError("");
     try {
       await onUpdate(search.id, { name: cleanName });
@@ -538,12 +550,12 @@ function SavedSearchRow({
       // The duplicate-name 409 lands here with the server's own wording.
       setError(errorMessage(renameError, "Could not rename that search"));
     } finally {
-      setBusy(false);
+      setPending(null);
     }
   };
 
   const changeFrequency = async (value: AlertFrequency) => {
-    setBusy(true);
+    setPending("frequency");
     setError("");
     try {
       await onUpdate(search.id, { frequency: value });
@@ -553,12 +565,12 @@ function SavedSearchRow({
     } catch (frequencyError) {
       setError(errorMessage(frequencyError, "Could not change how often this alerts you"));
     } finally {
-      setBusy(false);
+      setPending(null);
     }
   };
 
   const clearFilters = async () => {
-    setBusy(true);
+    setPending("filters");
     setError("");
     try {
       await onUpdate(search.id, { filters: null });
@@ -566,7 +578,7 @@ function SavedSearchRow({
     } catch (filterError) {
       setError(errorMessage(filterError, "Could not clear those filters"));
     } finally {
-      setBusy(false);
+      setPending(null);
     }
   };
 
@@ -578,14 +590,14 @@ function SavedSearchRow({
     );
     if (!confirmed) return;
 
-    setBusy(true);
+    setPending("delete");
     setError("");
     try {
       await onDelete(search.id);
       toast.success("Saved search deleted");
     } catch (deleteError) {
       setError(errorMessage(deleteError, "Could not delete that search"));
-      setBusy(false);
+      setPending(null);
     }
     // No `finally`: on success the row unmounts, and setting state on it would
     // be a write to a component that no longer exists.
@@ -610,7 +622,12 @@ function SavedSearchRow({
                 autoFocus
               />
               <div className="flex gap-2">
-                <Button type="submit" loading={busy} loadingLabel="Renaming this search">
+                <Button
+                  type="submit"
+                  disabled={busy}
+                  loading={pending === "rename"}
+                  loadingLabel="Renaming this search"
+                >
                   Save
                 </Button>
                 <button
@@ -643,14 +660,18 @@ function SavedSearchRow({
                   {label}
                 </Chip>
               ))}
-              <button
-                type="button"
-                onClick={() => void clearFilters()}
-                className={buttonGhost}
+              {/* Clearing the filters is a PATCH like the other three, so it
+                  gets the same pending treatment rather than a button that
+                  looks idle for the length of the round trip. */}
+              <Button
+                variant="ghost"
                 disabled={busy}
+                loading={pending === "filters"}
+                loadingLabel="Clearing these filters"
+                onClick={() => void clearFilters()}
               >
                 Clear
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -665,6 +686,9 @@ function SavedSearchRow({
             onChange={(event) => void changeFrequency(event.target.value as AlertFrequency)}
             className={inputClass}
             disabled={busy}
+            // A select has nowhere to put a spinner, so the busy state it does
+            // expose is the one assistive tech reads.
+            aria-busy={pending === "frequency" || undefined}
           >
             {FREQUENCY_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -701,14 +725,23 @@ function SavedSearchRow({
               Rename
             </button>
           )}
+          {/* Kept on `rowDanger` rather than moved to `<Button variant="danger">`
+              — the weight is the point, see that constant — so the pending
+              treatment `Button` gives for free is spelled out here instead. */}
           <button
             type="button"
             onClick={() => void remove()}
             className={rowDanger}
             disabled={busy}
+            aria-busy={pending === "delete" || undefined}
           >
-            <Icon.trash className="h-4 w-4" aria-hidden="true" />
+            {pending === "delete" ? (
+              <Spinner className="h-4 w-4" decorative />
+            ) : (
+              <Icon.trash className="h-4 w-4" aria-hidden="true" />
+            )}
             Delete
+            {pending === "delete" && <span className="sr-only">Deleting this search</span>}
           </button>
         </div>
       </div>

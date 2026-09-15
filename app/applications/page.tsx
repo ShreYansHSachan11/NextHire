@@ -30,6 +30,7 @@ import { APPLICATION_STATUSES, STATUS_LABELS } from "@/lib/validation";
 import {
   Alert,
   Avatar,
+  Button,
   buttonGhost,
   buttonPrimary,
   buttonSecondary,
@@ -246,6 +247,14 @@ export default function ApplicationsPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [messagingUserId, setMessagingUserId] = useState<string | null>(null);
+  /**
+   * The one row whose status PATCH is in flight, by application id.
+   *
+   * Per row, never a single flag: the queue is a list of independent decisions,
+   * and one global boolean would freeze every other applicant's select while a
+   * different row saved.
+   */
+  const [savingStatusId, setSavingStatusId] = useState<string | null>(null);
 
   /**
    * The pending status sits *on top of* the loaded list rather than replacing it.
@@ -447,6 +456,12 @@ export default function ApplicationsPage() {
    * on the server's status by themselves. The `catch` only has to say why.
    */
   const updateApplicationStatus = (applicationId: string, status: string) => {
+    // Set outside the transition, because a transition update is deferred and a
+    // select that stays live for even a frame is one a second choice can reach —
+    // two PATCHes for the same row would then land in whichever order the
+    // network decided.
+    setSavingStatusId(applicationId);
+
     startTransition(async () => {
       applyOptimisticStatus({ id: applicationId, status });
 
@@ -472,6 +487,8 @@ export default function ApplicationsPage() {
         // change that worked and then un-worked (DESIGN-NOTES 5.3). Error
         // toasts are `aria-live="assertive"`, so it is heard as well as seen.
         toast.error(error instanceof Error ? error.message : "Could not update the application");
+      } finally {
+        setSavingStatusId(null);
       }
     });
   };
@@ -780,6 +797,7 @@ export default function ApplicationsPage() {
                     key={application.id}
                     application={application}
                     messaging={messagingUserId === application.user.id}
+                    savingStatus={savingStatusId === application.id}
                     onStatusChange={updateApplicationStatus}
                     onMessage={startConversation}
                   />
@@ -837,24 +855,16 @@ function PipelinePanel({
           </p>
         </div>
 
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           onClick={onRun}
-          disabled={loading}
-          className={`${buttonSecondary} flex-shrink-0 disabled:cursor-not-allowed disabled:opacity-50`}
+          loading={loading}
+          loadingLabel="Reading the pool"
+          icon={<Icon.spark className="h-4 w-4" />}
+          className="flex-shrink-0"
         >
-          {loading ? (
-            <>
-              <Spinner className="h-4 w-4" />
-              Reading the pool…
-            </>
-          ) : (
-            <>
-              <Icon.spark className="h-4 w-4" />
-              {result ? "Run again" : "Summarise the pool"}
-            </>
-          )}
-        </button>
+          {loading ? "Reading the pool…" : result ? "Run again" : "Summarise the pool"}
+        </Button>
       </div>
 
       <div className="px-4 py-4 sm:px-6" aria-live="polite">
@@ -977,12 +987,15 @@ function PoolList({
 function ApplicationRow({
   application,
   messaging,
+  savingStatus,
   onStatusChange,
   onMessage,
 }: {
   /** Carries the optimistic status while a change is in flight. */
   application: Application;
   messaging: boolean;
+  /** This row's own status PATCH, not the page's. */
+  savingStatus: boolean;
   onStatusChange: (applicationId: string, status: string) => void;
   onMessage: (applicantId: string) => Promise<void>;
 }) {
@@ -1110,15 +1123,17 @@ function ApplicationRow({
 
           <div>
             <Label htmlFor={`status-${application.id}`}>Update status</Label>
-            {/* Not disabled, and no "Saving…" beneath it: `application.status`
-                is the optimistic status, so this control and the badge above it
-                already read as the new value the moment the choice is made.
-                Locking the select for a round trip in order to show the answer
-                it is already showing is the spinner this replaces. */}
+            {/* No "Saving…" caption: `application.status` is the optimistic
+                status, so this control and the badge above it already read as
+                the new value the moment the choice is made. The lock is not
+                there to report progress — it is there so a second choice cannot
+                start a PATCH that races the first one home. */}
             <select
               id={`status-${application.id}`}
               value={application.status}
               onChange={(event) => onStatusChange(application.id, event.target.value)}
+              disabled={savingStatus}
+              aria-busy={savingStatus}
               className={inputClass}
             >
               {APPLICATION_STATUSES.map((status) => (
@@ -1144,15 +1159,16 @@ function ApplicationRow({
             <Eyebrow>No r&eacute;sum&eacute; uploaded</Eyebrow>
           )}
 
-          <button
-            type="button"
+          <Button
+            variant="ghost"
             onClick={() => void onMessage(application.user.id)}
-            disabled={messaging}
-            className={`${buttonGhost} justify-start disabled:cursor-not-allowed disabled:opacity-50 sm:justify-center`}
+            loading={messaging}
+            loadingLabel="Opening the conversation"
+            icon={<Icon.chat className="h-4 w-4" />}
+            className="justify-start sm:justify-center"
           >
-            <Icon.chat className="h-4 w-4" />
             {messaging ? "Opening…" : "Message"}
-          </button>
+          </Button>
         </div>
       </div>
 

@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import { STATUS_LABELS, type ApplicationStatus } from "@/lib/validation";
 
 /* ==========================================================================
@@ -1470,6 +1471,46 @@ export const buttonDanger = "btn-danger btn-touch";
 
 /** Quiet, borderless action for inline links inside cards. */
 export const buttonGhost = "btn-ghost";
+
+/**
+ * The way back out of a screen, top-left, where a reader looks for it.
+ *
+ * Five pages had one and wrote it two different ways — one as `buttonGhost`
+ * with a `-ml-2.5`, one as a hand-rolled string naming its own greys and its
+ * own hover — and the screens a visitor actually lands on cold, sign-in and
+ * sign-up, had none at all. Those two are the worst place to omit it: they
+ * carry no navbar, so without this the only way back to the site is the
+ * browser's own button.
+ *
+ * `href` rather than `router.back()`. History is not a hierarchy — going back
+ * from sign-in after a failed redirect can land you on the page that bounced
+ * you, or outside the site entirely — and a real href is a real link: it can
+ * be opened in a new tab, and it survives being arrived at by pasted URL,
+ * where there is no history to go back to.
+ *
+ * The negative margin pulls the glyph's optical edge onto the page's left
+ * gutter; without it the button's own padding makes the label look indented
+ * against the heading below.
+ */
+export function BackLink({
+  href,
+  children,
+  onClick,
+  className = "",
+}: {
+  href: string;
+  children: React.ReactNode;
+  /** For a form that needs to confirm before discarding a draft. */
+  onClick?: (event: React.MouseEvent<HTMLAnchorElement>) => void;
+  className?: string;
+}) {
+  return (
+    <Link href={href} onClick={onClick} className={`${buttonGhost} -ml-2.5 ${className}`}>
+      <Icon.arrowLeft className="h-4 w-4 flex-shrink-0" />
+      {children}
+    </Link>
+  );
+}
 
 /** One size up, for hero and closing-CTA button pairs. */
 export const buttonLarge = "btn-lg";

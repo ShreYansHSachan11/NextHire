@@ -11,6 +11,7 @@ import { apiFetch } from "@/lib/clientAuth";
 import { APPLICATION_STATUSES, STATUS_LABELS } from "@/lib/validation";
 import {
   Alert,
+  Button,
   buttonGhost,
   buttonPrimary,
   buttonSecondary,
@@ -28,6 +29,7 @@ import {
   Readout,
   SignalPanel,
   SkeletonRows,
+  Spinner,
   StatCard,
   StatusBadge,
 } from "@/app/components/ui";
@@ -94,7 +96,14 @@ export default function CompanyDashboard() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
-  const [busyJobId, setBusyJobId] = useState<string | null>(null);
+  /**
+   * Which posting is mid-write, and which of its two actions is doing it.
+   *
+   * The id alone is what locks the row — a close and a delete must not race
+   * each other — but it cannot say where the spinner goes, and one id put a
+   * spinner on Delete while Close was the button that was pressed.
+   */
+  const [busyJob, setBusyJob] = useState<{ id: string; action: "state" | "delete" } | null>(null);
   const [messagingUserId, setMessagingUserId] = useState<string | null>(null);
   // Applicant lists start collapsed: a company with a dozen postings would
   // otherwise have to scroll past every applicant to reach the next job.
@@ -184,7 +193,7 @@ export default function CompanyDashboard() {
   };
 
   const toggleJobActive = async (job: Job) => {
-    setBusyJobId(job.id);
+    setBusyJob({ id: job.id, action: "state" });
     try {
       const updated = await apiFetch<Job>(`/api/jobs/${job.id}`, {
         method: "PATCH",
@@ -198,7 +207,7 @@ export default function CompanyDashboard() {
       console.error("Failed to update job state:", error);
       toast.error(error instanceof Error ? error.message : "Could not update the posting");
     } finally {
-      setBusyJobId(null);
+      setBusyJob(null);
     }
   };
 
@@ -212,7 +221,7 @@ export default function CompanyDashboard() {
         : "This cannot be undone.";
     if (!window.confirm(`Delete "${job.title}"?\n\n${consequence}`)) return;
 
-    setBusyJobId(job.id);
+    setBusyJob({ id: job.id, action: "delete" });
     try {
       const result = await apiFetch<{ message: string; deletedApplications: number }>(
         `/api/jobs/${job.id}`,
@@ -230,7 +239,7 @@ export default function CompanyDashboard() {
       console.error("Failed to delete job:", error);
       toast.error(error instanceof Error ? error.message : "Could not delete the posting");
     } finally {
-      setBusyJobId(null);
+      setBusyJob(null);
     }
   };
 
@@ -389,7 +398,10 @@ export default function CompanyDashboard() {
               {jobs.map((job) => {
                 const applications = job.applications ?? [];
                 const expanded = Boolean(expandedJobs[job.id]);
-                const busy = busyJobId === job.id;
+                // Both controls lock together; only the pressed one spins.
+                const busy = busyJob?.id === job.id;
+                const closing = busy && busyJob?.action === "state";
+                const deleting = busy && busyJob?.action === "delete";
 
                 return (
                   <li key={job.id} className="px-4 py-4 sm:px-6 sm:py-5">
@@ -442,30 +454,42 @@ export default function CompanyDashboard() {
                           <Icon.edit className="h-4 w-4" />
                           Edit<span className="sr-only"> {job.title}</span>
                         </Link>
-                        <button
-                          type="button"
+                        <Button
+                          variant="ghost"
                           onClick={() => void toggleJobActive(job)}
                           disabled={busy}
-                          aria-busy={busy}
-                          className={`${buttonGhost} disabled:cursor-not-allowed disabled:opacity-50`}
+                          loading={closing}
+                          loadingLabel={
+                            job.isActive ? "Closing this posting" : "Reopening this posting"
+                          }
+                          icon={
+                            job.isActive ? (
+                              <Icon.x className="h-4 w-4" />
+                            ) : (
+                              <Icon.checkCircle className="h-4 w-4" />
+                            )
+                          }
                         >
-                          {job.isActive ? (
-                            <Icon.x className="h-4 w-4" />
-                          ) : (
-                            <Icon.checkCircle className="h-4 w-4" />
-                          )}
                           {job.isActive ? "Close" : "Reopen"}
                           <span className="sr-only"> {job.title}</span>
-                        </button>
+                        </Button>
+                        {/* Stays a hand-rolled red ghost rather than `variant="danger"`,
+                            which is the filled treatment and would make Delete the
+                            loudest thing in a row of quiet actions. */}
                         <button
                           type="button"
                           onClick={() => void deleteJob(job)}
                           disabled={busy}
-                          aria-busy={busy}
+                          aria-busy={deleting}
                           className={ghostDanger}
                         >
-                          <Icon.trash className="h-4 w-4" />
+                          {deleting ? (
+                            <Spinner className="h-4 w-4" decorative />
+                          ) : (
+                            <Icon.trash className="h-4 w-4" />
+                          )}
                           Delete<span className="sr-only"> {job.title}</span>
+                          {deleting && <span className="sr-only">Deleting this posting</span>}
                         </button>
                       </div>
                     </div>
@@ -523,7 +547,7 @@ export default function CompanyDashboard() {
                                           href={resume.url}
                                           target="_blank"
                                           rel="noopener noreferrer"
-                                          className="link inline-flex items-center gap-1.5 text-xs font-medium"
+                                          className="link hit-24 inline-flex items-center gap-1.5 text-xs font-medium"
                                         >
                                           <Icon.document className="h-4 w-4" />
                                           View r&eacute;sum&eacute;
@@ -546,9 +570,16 @@ export default function CompanyDashboard() {
                                         onClick={() => void messageApplicant(application.userId)}
                                         disabled={busyMessaging}
                                         aria-busy={busyMessaging}
-                                        className="inline-flex items-center gap-1.5 rounded text-xs font-medium text-gray-600 underline-offset-2 transition-colors hover:text-gray-900 hover:underline disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-400 dark:hover:text-white"
+                                        // `.hit-24` because the row keeps this
+                                        // control at `text-xs`, which leaves it
+                                        // under the 24px SC 2.5.8 floor.
+                                        className="hit-24 inline-flex items-center gap-1.5 rounded text-xs font-medium text-gray-600 underline-offset-2 transition-colors hover:text-gray-900 hover:underline disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-400 dark:hover:text-white"
                                       >
-                                        <Icon.chat className="h-4 w-4" />
+                                        {busyMessaging ? (
+                                          <Spinner className="h-4 w-4" decorative />
+                                        ) : (
+                                          <Icon.chat className="h-4 w-4" />
+                                        )}
                                         {busyMessaging ? "Opening…" : "Message"}
                                         <span className="sr-only">
                                           {" "}

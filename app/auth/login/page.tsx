@@ -10,7 +10,17 @@ import type { AppDispatch, RootState } from "@/store/store";
 import { apiFetch, setToken } from "@/lib/clientAuth";
 import { isValidEmail } from "@/lib/validation";
 import { ThemeToggle } from "@/app/components/ThemeProvider";
-import { Alert, Eyebrow, Icon, Label, NumberedItem, Spinner, buttonPrimary, inputClass } from "@/app/components/ui";
+import {
+  Alert,
+  BackLink,
+  Button,
+  Eyebrow,
+  Icon,
+  Label,
+  NumberedItem,
+  Spinner,
+  inputClass,
+} from "@/app/components/ui";
 
 interface AuthUser {
   id: string;
@@ -192,6 +202,14 @@ function LoginForm() {
 
         <div className="flex flex-1 items-center justify-center px-4 pb-12 pt-2 sm:px-6 lg:px-10">
           <div className="w-full max-w-md">
+            {/* The wordmark above links home too, but a logo does not read as a
+                way back. This screen carries no navbar, so someone who arrived
+                cold — a shared link, a bounce from a protected page — otherwise
+                has only the browser's own button to leave with. */}
+            <BackLink href="/" className="mb-5">
+              Back to NextHire
+            </BackLink>
+
             <div className="mb-7">
               <Eyebrow className="mb-2">Session · Sign in</Eyebrow>
               <h1 className="text-3xl font-bold text-gray-900 dark:text-white sm:text-4xl">
@@ -278,24 +296,30 @@ function LoginForm() {
                 )}
               </div>
 
-              <button
+              {/* `Button` rather than a hand-rolled pending state: the spinner it
+                  substitutes for `iconEnd` is decorative, where the bare
+                  `<Spinner>` this used to render carried its own `role="status"`
+                  and announced "Loading" over the top of the button's real
+                  label. `disabled={busy}` keeps the two sign-in routes mutually
+                  exclusive while only this one claims the spinner. */}
+              <Button
                 type="submit"
+                variant="primary"
+                block
+                className="py-3"
+                loading={loading}
+                loadingLabel="Signing in"
                 disabled={busy}
-                aria-busy={loading}
-                className={`${buttonPrimary} w-full py-3`}
+                iconEnd={<Icon.arrowRight className="h-4 w-4" />}
               >
-                {loading ? (
-                  <>
-                    <Spinner className="h-4 w-4" />
-                    Signing in…
-                  </>
-                ) : (
-                  <>
-                    Sign in
-                    <Icon.arrowRight className="h-4 w-4" />
-                  </>
-                )}
-              </button>
+                {/* The label says so as well as the spinner. A 16px disc is easy
+                    to miss on a button someone has just looked away from, and
+                    this is the one wait in the product every user meets. The
+                    usual argument against a changing label — the control
+                    resizing mid-press — does not apply to a `block` button,
+                    which is the full width of the form either way. */}
+                {loading ? "Signing in…" : "Sign in"}
+              </Button>
             </form>
 
             {/* Hairline rule with the label sitting on it. The label paints the
@@ -311,16 +335,22 @@ function LoginForm() {
               </div>
             </div>
 
-            <button
+            {/* Same primitive as the submit above, so both sign-in routes report
+                being in flight identically. `secondary` is the `btn-outline
+                btn-touch` pair this spelled out by hand. */}
+            <Button
               type="button"
+              variant="secondary"
+              block
+              className="py-3"
               onClick={handleGoogle}
+              loading={googleLoading}
+              loadingLabel="Redirecting to Google"
               disabled={busy}
-              aria-busy={googleLoading}
-              className="btn-outline btn-touch w-full py-3"
+              icon={<GoogleIcon />}
             >
-              {googleLoading ? <Spinner className="h-4 w-4" /> : <GoogleIcon />}
-              <span>{googleLoading ? "Redirecting to Google…" : "Google"}</span>
-            </button>
+              Google
+            </Button>
 
             <p className="mt-8 border-t border-gray-200 pt-6 text-sm text-gray-600 dark:border-gray-700 dark:text-gray-400">
               Don&apos;t have an account?{" "}

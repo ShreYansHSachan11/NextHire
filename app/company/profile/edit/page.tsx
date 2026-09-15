@@ -12,6 +12,7 @@ import { apiFetch, setToken } from "@/lib/clientAuth";
 import { isValidEmail } from "@/lib/validation";
 import {
   Alert,
+  BackLink,
   Card,
   CardHeader,
   Icon,
@@ -318,14 +319,12 @@ export default function CompanyProfileEdit() {
       <Navbar />
 
       <main id="main-content" className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
-        <Link
-          href="/company/dashboard"
-          onClick={confirmDiscard}
-          className="mb-5 inline-flex items-center gap-1.5 rounded text-sm font-medium text-gray-600 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
-        >
-          <Icon.arrowLeft className="h-4 w-4" />
+        {/* The kit's back link, not a private copy of it: this one had its own
+            greys and its own hover, which had already drifted from the one the
+            other editors ship. `confirmDiscard` still guards the draft. */}
+        <BackLink href="/company/dashboard" onClick={confirmDiscard} className="mb-5">
           Back to dashboard
-        </Link>
+        </BackLink>
 
         <PageHeading
           eyebrow="Company record"

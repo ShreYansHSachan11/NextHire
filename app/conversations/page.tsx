@@ -16,6 +16,7 @@ import { MESSAGE_MAX_LENGTH } from "@/lib/validation";
 import {
   Alert,
   Avatar,
+  Button,
   buttonPrimary,
   Card,
   Chip,
@@ -551,12 +552,19 @@ function ConversationRow({
       ) : (
         <div className="flex items-start gap-3 p-3 sm:p-4">
           {body}
+          {/* Not `<Button size="sm">`: that variant also carries `.btn-touch`,
+              whose 44px floor beats `.btn-sm` and would make this the tallest
+              thing in the row. Disabled, spinner and `aria-busy` are added by
+              hand instead — `.btn-outline[aria-busy]` already dims the control
+              and sets the cursor, so only the spinner is markup. */}
           <button
             type="button"
             onClick={() => void onStart(application.userId)}
             disabled={starting}
+            aria-busy={starting}
             className="mono btn-outline btn-sm flex-shrink-0 self-center whitespace-nowrap text-[11px] uppercase tracking-wider"
           >
+            {starting && <Spinner className="h-3 w-3" decorative />}
             {starting ? "Opening" : "Start"}
           </button>
         </div>
@@ -668,15 +676,22 @@ function Composer({
           aria-describedby="message-hint"
           className={`${inputClass} max-h-40 flex-1 resize-none text-sm!`}
         />
-        <button
-          type="button"
+        {/* The label is hidden below `sm`, where this is an icon-only control
+            with no accessible name at all — the sr-only twin is what names it
+            there. `<Button>` supplies the `aria-busy` the hand-rolled version
+            never had, and the same composer on the seeker side is built this
+            way. */}
+        <Button
+          className="flex-shrink-0"
           onClick={onSend}
-          disabled={sending || !value.trim()}
-          className={`${buttonPrimary} flex-shrink-0`}
+          disabled={!value.trim()}
+          loading={sending}
+          loadingLabel="Sending your message"
+          icon={<Icon.send className="h-4 w-4" />}
         >
-          {sending ? <Spinner className="h-4 w-4" /> : <Icon.send className="h-4 w-4" />}
           <span className="hidden sm:inline">{sending ? "Sending" : "Send"}</span>
-        </button>
+          <span className="sr-only sm:hidden">Send message</span>
+        </Button>
       </div>
       <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         {/* Out of the placeholder and into a description: a placeholder is gone

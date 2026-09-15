@@ -16,8 +16,9 @@ import {
 } from "@/lib/validation";
 import {
   Alert,
+  BackLink,
   BADGE_TONES,
-  buttonDanger,
+  Button,
   buttonGhost,
   buttonPrimary,
   buttonSecondary,
@@ -1182,14 +1183,9 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
       <Navbar />
 
       <main id="main-content" className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
-        <Link
-          href="/company/dashboard"
-          onClick={confirmDiscard}
-          className={`${buttonGhost} -ml-2.5 mb-4`}
-        >
-          <Icon.arrowLeft className="h-4 w-4" />
+        <BackLink href="/company/dashboard" onClick={confirmDiscard} className="mb-4">
           Back to dashboard
-        </Link>
+        </BackLink>
 
         {loading ? (
           <div className="flex justify-center py-20 text-blue-600 dark:text-blue-400">
@@ -1221,15 +1217,17 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
                 title="Edit job"
                 description={job.title}
                 action={
-                  <button
-                    type="button"
+                  <Button
+                    variant="danger"
                     onClick={handleDelete}
-                    disabled={deleting || saving}
-                    className={`${buttonDanger} w-full sm:w-auto`}
+                    disabled={saving}
+                    loading={deleting}
+                    loadingLabel="Deleting this posting"
+                    icon={<Icon.trash className="h-4 w-4" />}
+                    className="w-full sm:w-auto"
                   >
-                    <Icon.trash className="h-4 w-4" />
                     {deleting ? "Deleting…" : "Delete job"}
-                  </button>
+                  </Button>
                 }
               />
 
