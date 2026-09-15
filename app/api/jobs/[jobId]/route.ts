@@ -68,16 +68,38 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ jobI
 
     const isOwner = !!session && (session.companyId === job.companyId || session.role === 'ADMIN');
 
-    // A closed job stays reachable by direct link for anyone who already applied
-    // or owns it, but is not exposed to the general public.
-    let hasApplied = false;
-    if (session?.role === 'SEEKER') {
-      const existing = await prisma.application.findUnique({
-        where: { userId_jobId: { userId: session.id, jobId } },
-        select: { id: true, status: true, createdAt: true, matchScore: true },
-      });
-      hasApplied = !!existing;
+    // Loaded before the closed-job check below rather than inside the seeker
+    // branch, because "already applied" is one of the three things that keeps a
+    // withdrawn posting readable.
+    const existing =
+      session?.role === 'SEEKER'
+        ? await prisma.application.findUnique({
+            where: { userId_jobId: { userId: session.id, jobId } },
+            select: { id: true, status: true, createdAt: true, matchScore: true },
+          })
+        : null;
+    const hasApplied = !!existing;
 
+    /*
+     * A closed job stays reachable by direct link for anyone who already applied
+     * or owns it, but is not exposed to the general public.
+     *
+     * This is the line the comment above has always claimed and the handler
+     * never enforced: `isActive` appeared in this file only on the write paths,
+     * so a withdrawn posting was absent from the feed and still served in full —
+     * description, salary band and all — to any anonymous caller holding the
+     * link that was shared while it was open.
+     *
+     * `notFound` rather than `forbidden`: a 403 would confirm that the id names
+     * a real posting, which is the one bit a closed job should stop giving away.
+     *
+     * A candidate who applied keeps their access on purpose. They need to read
+     * what they applied to while the application is live, and closing the role
+     * is exactly when they are most likely to go looking.
+     */
+    if (!job.isActive && !isOwner && !hasApplied) return notFound('Job not found');
+
+    if (session?.role === 'SEEKER') {
       // Scoring is best-effort: a seeker with no profile vector, or a job that
       // has not been indexed yet, simply gets `null` rather than an error page.
       let match: MatchBreakdown | null = null;

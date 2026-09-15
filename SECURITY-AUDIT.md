@@ -470,6 +470,13 @@ is not readable cross-origin).
 
 ## L2 — Closed jobs remain publicly readable, contradicting the route's own comment
 
+**FIXED (2026-09-15).** The handler now returns `notFound` for an inactive posting unless the
+caller owns it, is an admin, or has already applied — the fix described below, implemented as
+written. Reproduced first (closed posting, absent from the feed, still HTTP 200 on the direct link
+with its salary band), then verified across all six cases: anonymous, signed-in non-applicant and
+rival company are refused; owner, admin and the candidate who applied still read it. The rule this
+enforces is R6 in `ACCESS-CONTROL.md`.
+
 **Where:** `app/api/jobs/[jobId]/route.ts:70-72`
 
 The comment says "A closed job stays reachable by direct link for anyone who already applied or
