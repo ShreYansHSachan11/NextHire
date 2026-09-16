@@ -115,7 +115,7 @@ export default function Home() {
         {/* ---------------------------------------------------------------- */}
         {/* Hero — graph-paper field, tight display type, left aligned         */}
         {/* ---------------------------------------------------------------- */}
-        <section className="grid-field border-b border-gray-200 dark:border-gray-700">
+        <section className="grid-field grid-field-trailing border-b border-gray-200 dark:border-gray-700">
           <div className="container-responsive py-14 sm:py-20 lg:py-24">
             <Eyebrow className="mb-4">SIGNAL-BASED MATCHING</Eyebrow>
 

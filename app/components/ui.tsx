@@ -262,7 +262,11 @@ export function Card({
   className = "",
   /** Emerald hairline + faint tint, for a selected or high-signal item. */
   signal = false,
-  /** Lays graph-paper rules behind the content, for telemetry panels. */
+  /**
+   * Lays graph-paper rules behind the content. For cards whose content is
+   * sparse and centred only — a pattern behind body text costs contrast where
+   * letterforms are thinnest, so prose cards use `signal` instead.
+   */
   grid = false,
   /** Where this card sits on the elevation ladder. Defaults to the base card. */
   elevation = "flat",
@@ -365,7 +369,7 @@ export function SignalPanel({
   const Heading = `h${headingLevel}` as const;
 
   return (
-    <div className={`panel grid-field flex flex-wrap items-center gap-4 p-3 sm:p-4 ${className}`}>
+    <div className={`panel flex flex-wrap items-center gap-4 p-3 sm:p-4 ${className}`}>
       {/* `.tile-accent` rather than six colour utilities: the empty-state tile
           was the same shape with a different set of them, and they had drifted. */}
       <span className="tile tile-accent relative h-10 w-10 flex-shrink-0">

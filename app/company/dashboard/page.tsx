@@ -513,7 +513,7 @@ export default function CompanyDashboard() {
                         {expanded && (
                           <ul
                             id={`applications-${job.id}`}
-                            className="grid-field mt-3 divide-y divide-gray-200 rounded-lg border border-gray-200 dark:divide-gray-700 dark:border-gray-700"
+                            className="mt-3 divide-y divide-gray-200 rounded-lg border border-gray-200 dark:divide-gray-700 dark:border-gray-700"
                           >
                             {applications.map((application) => {
                               const resume = application.user?.resumes?.[0];

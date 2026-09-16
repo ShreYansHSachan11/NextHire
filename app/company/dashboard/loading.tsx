@@ -37,7 +37,7 @@ export default function Loading() {
         </div>
 
         {/* SignalPanel. */}
-        <div className="panel grid-field mt-6 flex items-center gap-4 p-3 sm:p-4">
+        <div className="panel mt-6 flex items-center gap-4 p-3 sm:p-4">
           <Skeleton className="h-10 w-10 rounded-lg" />
           <div className="min-w-0 flex-1">
             <Skeleton className="h-4 w-40 max-w-full" />

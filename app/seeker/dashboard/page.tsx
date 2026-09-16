@@ -1169,8 +1169,10 @@ export default function SeekerDashboardPage() {
               </dl>
             </Card>
 
-            {/* Resume — a telemetry panel: graph-paper field, mono file record. */}
-            <Card grid>
+            {/* Resume — a telemetry panel. Flat accent tint rather than the
+                graph-paper field: this card carries prose, and a pattern behind
+                body text costs contrast exactly where letterforms are thinnest. */}
+            <Card signal>
               <span id="my-resume" className="block scroll-mt-24" aria-hidden="true" />
 
               <div ref={resumeSectionRef} className="scroll-mt-24">

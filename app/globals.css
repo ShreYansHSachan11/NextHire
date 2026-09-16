@@ -246,6 +246,11 @@
   --radius-xs: 0.25rem;
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
+  /* The control family — buttons, fields, selects — sits one step softer
+     than `--radius-md` so a 40px control reads as rounded rather than as a
+     rectangle with the corners knocked off, and close enough to the `--radius-lg`
+     cards that a control inside one does not look like a different kit. */
+  --radius-control: 0.625rem;
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
   --radius-pill: 999px;
@@ -811,6 +816,22 @@ nav {
     mask-image: radial-gradient(ellipse at center, transparent 0%, #000 78%);
   }
 
+  /*
+   * Left-aligned content needs the clear zone on the *left*, not in the middle.
+   * A centre-clearing radial across a full-width band leaves the rules at full
+   * strength exactly where a hero's headline and paragraph sit, which is the
+   * failure this whole treatment exists to avoid.
+   */
+  .grid-field-trailing::before {
+    -webkit-mask-image: linear-gradient(to right, transparent 34%, #000 82%);
+    mask-image: linear-gradient(to right, transparent 34%, #000 82%);
+  }
+
+  .grid-field-trailing:dir(rtl)::before {
+    -webkit-mask-image: linear-gradient(to left, transparent 34%, #000 82%);
+    mask-image: linear-gradient(to left, transparent 34%, #000 82%);
+  }
+
   /* Full-bleed dark band for the "how it works" style sections. */
   .band-dark {
     background: #0b111c;
@@ -1309,7 +1330,7 @@ nav {
     justify-content: center;
     gap: var(--space-4);
     min-height: var(--control-h-md);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-control);
     background: var(--btn-bg);
     color: var(--btn-fg);
     padding: 0.625rem var(--space-6);
@@ -1345,7 +1366,7 @@ nav {
     gap: var(--space-4);
     min-height: var(--control-h-md);
     border: 1px solid var(--line-control);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-control);
     background: var(--surface);
     color: var(--ink);
     padding: 0.625rem var(--space-6);
@@ -1381,7 +1402,7 @@ nav {
     gap: var(--space-4);
     min-height: var(--control-h-md);
     border: 1px solid #fca5a5;
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-control);
     background: #fef2f2;
     color: #b91c1c;
     padding: 0.625rem var(--space-6);
@@ -1490,7 +1511,7 @@ nav {
     width: 100%;
     min-height: var(--control-h-md);
     border: 1px solid var(--line-control);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-control);
     background: var(--surface);
     color: var(--ink);
     padding: 0.625rem 0.875rem;
@@ -1562,6 +1583,108 @@ nav {
   }
 
   /*
+   * The open list, where the browser lets us have it.
+   *
+   * Everything above styles the *closed* control. The dropped list itself has
+   * always been drawn by the operating system, which is why it never matched
+   * the theme however much the box around it did. `appearance: base-select`
+   * plus `::picker(select)` is the standards-track answer: the browser hands
+   * over the popup's rendering and keeps every bit of the native control's
+   * semantics, keyboard handling and screen-reader behaviour, and on a phone
+   * it still opens the platform picker. That is the whole reason this is done
+   * here rather than by hand-rolling a listbox out of divs — a custom one
+   * would have to re-implement all of that, and would be worse at it.
+   *
+   * Behind `@supports`, so a browser without it keeps exactly the native list
+   * it renders today. Nothing here is load-bearing: delete the block and the
+   * control falls back to the styling above.
+   *
+   * Both the control and the picker have to opt in, or the picker stays
+   * OS-drawn. `base-select` also draws its own `::picker-icon`, so the
+   * background-image chevron and the padding reserved for it come back off —
+   * otherwise there are two arrows.
+   */
+  @supports (appearance: base-select) {
+    select.field,
+    select.field::picker(select) {
+      appearance: base-select;
+    }
+
+    select.field {
+      background-image: none;
+      padding-right: 0.875rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      text-align: start;
+    }
+
+    select.field:dir(rtl) {
+      padding-left: 0.875rem;
+    }
+
+    /* Ours now, so it can do what every other disclosure in the app does and
+       turn over to point at the panel it opened. */
+    select.field::picker-icon {
+      color: var(--ink-muted);
+      transition: transform 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    select.field:open::picker-icon {
+      transform: rotate(180deg);
+    }
+
+    select.field::picker(select) {
+      border: 1px solid var(--line);
+      border-radius: var(--radius-control);
+      background: var(--surface);
+      box-shadow: var(--shadow-overlay);
+      padding: 0.25rem;
+      margin-top: 0.25rem;
+      max-height: 18rem;
+      overflow-y: auto;
+    }
+
+    select.field option {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      border-radius: var(--radius-sm);
+      padding: 0.5rem 0.625rem;
+      font-size: 0.9375rem;
+      /* The OS palette declarations above are for the OS-drawn list; this one
+         is ours, so it takes the surface token directly. */
+      background: transparent;
+      color: var(--ink);
+      cursor: pointer;
+    }
+
+    select.field option:hover,
+    select.field option:focus {
+      background: var(--surface-sunken);
+      outline: none;
+    }
+
+    select.field option:checked {
+      color: var(--ink);
+      font-weight: 500;
+    }
+
+    /* The tick the browser puts in front of the selected row reserves its
+       width on every row, so the labels do not shift as the selection moves. */
+    select.field option::checkmark {
+      color: var(--accent, var(--ink-muted));
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      select.field::picker-icon {
+        transition: none;
+      }
+    }
+  }
+
+  /*
    * A control that is *part* of a larger instrument rather than a field in its
    * own right — the two halves of the homepage search bar, where the panel
    * around them carries the single hairline and the one focus treatment. It is
@@ -1590,7 +1713,7 @@ nav {
    */
   .field-composite {
     border: 1px solid var(--line-control);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-control);
     background: var(--surface);
     transition-property: border-color, box-shadow;
     transition-duration: 150ms;
@@ -1637,7 +1760,7 @@ nav {
     width: 100%;
     cursor: pointer;
     border: 1px solid var(--line-control);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-control);
     background: var(--surface);
     color: var(--ink-muted);
     font-size: 0.875rem;
@@ -1648,7 +1771,7 @@ nav {
     cursor: pointer;
     border: 0;
     border-right: 1px solid var(--line);
-    border-radius: var(--radius-md) 0 0 var(--radius-md);
+    border-radius: var(--radius-control) 0 0 var(--radius-control);
     background: var(--surface-sunken);
     color: var(--ink);
     padding: 0.625rem var(--space-5);

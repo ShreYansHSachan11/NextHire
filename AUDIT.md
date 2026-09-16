@@ -167,8 +167,13 @@ Principles, so future work stays coherent:
 4. **One accent, spent carefully.** Emerald means match quality, live state or
    confirmation — nothing else. Indigo is links and focus. Everything else is
    neutral slate. The only gradient in the product is the navbar's signal rail.
-5. **Graph-paper texture marks telemetry.** `.grid-field` appears behind panels
-   that show derived or live data, and nowhere else.
+5. **Graph-paper texture is decorative, never behind prose.** `.grid-field`
+   belongs on full-bleed surfaces whose content is sparse — the hero, the auth
+   panels, the empty and error states. A pattern behind body text costs contrast
+   exactly where letterforms are thinnest, so panels that carry prose take the
+   flat `panel-signal` tint instead. The rules are masked away from wherever the
+   text actually sits: centred content clears the middle, left-aligned content
+   adds `.grid-field-trailing` to clear the left.
 
 Two implementation notes worth keeping in mind:
 
