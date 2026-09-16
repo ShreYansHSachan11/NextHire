@@ -213,7 +213,7 @@ export default function RegisterPage() {
             <span className="tile tile-ink h-9 w-9">
               <Icon.graph className="h-5 w-5" />
             </span>
-            <span className="mono text-sm font-bold uppercase tracking-[0.14em] text-gray-900 dark:text-white">
+            <span className="wordmark text-gray-900 dark:text-white">
               NextHire
             </span>
           </Link>
@@ -527,7 +527,7 @@ export default function RegisterPage() {
             <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-gray-900">
               <Icon.graph className="h-5 w-5" />
             </span>
-            <span className="mono text-sm font-bold uppercase tracking-[0.14em] text-white">
+            <span className="wordmark text-white">
               NextHire
             </span>
           </div>

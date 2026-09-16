@@ -1,7 +1,7 @@
 import "./globals.css";
 import { Suspense } from "react";
 import type { Metadata, Viewport } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Poppins, JetBrains_Mono } from "next/font/google";
 import RouteProgress from "@/app/components/RouteProgress";
 import ReduxProvider from "@/store/Provider";
 import AuthRehydrator from "@/store/AuthRehydrator";
@@ -10,7 +10,16 @@ import SessionProviderWrapper from "@/app/components/SessionProviderWrapper";
 import { ThemeProvider, themeInitScript } from "@/app/components/ThemeProvider";
 import { ToastProvider } from "@/app/components/Toast";
 
-const inter = Inter({ subsets: ["latin"], display: "swap", variable: "--font-inter" });
+// Poppins is not a variable font on Google Fonts, so the weights the app
+// actually uses have to be named: 400 body, 500 labels and eyebrows, 600 the
+// headings and buttons, 700 the wordmark. Nothing here uses a lighter or
+// heavier cut, so there is nothing else to pay for.
+const poppins = Poppins({
+  subsets: ["latin"],
+  display: "swap",
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-poppins",
+});
 
 // Machine-generated values — match scores, model versions, counts, status codes —
 // are set in mono so they read as instrument output rather than prose.
@@ -54,7 +63,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             the wrong colours on load. */}
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
-      <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
+      <body className={`${poppins.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
         {/*
           First thing in the tab order, ahead of the sticky header. Every page
           in the app renders exactly one `<main id="main-content">` — this

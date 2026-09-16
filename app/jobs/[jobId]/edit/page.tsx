@@ -1957,7 +1957,7 @@ const SECTION_PILL_STYLES: Record<SectionTone, string> = {
 function SectionPill({ tone, label }: { tone: SectionTone; label: string }) {
   return (
     <span
-      className={`mono inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-1 text-[11px] font-medium uppercase tracking-wider ${SECTION_PILL_STYLES[tone]}`}
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-1 text-xs font-medium ${SECTION_PILL_STYLES[tone]}`}
     >
       {tone === "saved" && <Icon.check className="h-3 w-3 flex-shrink-0" />}
       {tone === "dirty" && <Icon.warning className="h-3 w-3 flex-shrink-0" />}
@@ -2011,7 +2011,7 @@ function SectionRail({
                 </span>
               </span>
               <span
-                className={`mono truncate text-[10px] uppercase tracking-wider ${
+                className={`truncate text-[11px] font-medium ${
                   status[section.id].tone === "dirty"
                     ? "text-amber-700 dark:text-amber-400"
                     : status[section.id].tone === "saved"

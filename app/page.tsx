@@ -117,7 +117,7 @@ export default function Home() {
         {/* ---------------------------------------------------------------- */}
         <section className="grid-field grid-field-trailing border-b border-gray-200 dark:border-gray-700">
           <div className="container-responsive py-14 sm:py-20 lg:py-24">
-            <Eyebrow className="mb-4">SIGNAL-BASED MATCHING</Eyebrow>
+            <Eyebrow className="mb-4">Signal-based matching</Eyebrow>
 
             <h1 className="max-w-4xl text-4xl font-bold leading-[1.05] text-gray-900 dark:text-white sm:text-5xl lg:text-6xl">
               Map your real experience to the roles that actually need it.
@@ -222,7 +222,7 @@ export default function Home() {
                   ready.companies
                 )} companies.`}
                 value={formatCount(ready.jobs)}
-                valueLabel="OPEN ROLES"
+                valueLabel="Open roles"
               />
             )}
 
@@ -301,7 +301,7 @@ export default function Home() {
         <section id="features" className="py-16 sm:py-20">
           <div className="container-responsive">
             <div className="max-w-2xl">
-              <Eyebrow className="mb-3">WHAT THE PLATFORM DOES</Eyebrow>
+              <Eyebrow className="mb-3">What the platform does</Eyebrow>
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white sm:text-3xl lg:text-4xl">
                 Three surfaces, one signal path.
               </h2>
@@ -313,19 +313,19 @@ export default function Home() {
 
             <div className="mt-10 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 sm:mt-12">
               <Feature
-                eyebrow="ROLE INDEX"
+                eyebrow="Role index"
                 icon={<Icon.graph className="h-5 w-5" />}
                 title="One searchable index"
                 description="Every live posting in a single feed you can filter by location, type and experience. The filter options are read off the live postings, so nothing is offered that does not exist."
               />
               <Feature
-                eyebrow="APPLY ONCE"
+                eyebrow="Apply once"
                 icon={<Icon.pulse className="h-5 w-5" />}
                 title="Signal, not paperwork"
                 description="Store a resume once and attach an optional cover note. Each application then carries its own state — pending, shortlisted, interview, offer — legible at a glance."
               />
               <Feature
-                eyebrow="DIRECT LINE"
+                eyebrow="Direct line"
                 icon={<Icon.chat className="h-5 w-5" />}
                 title="Straight to the hiring team"
                 description="Messaging and notifications are built in, so a shortlist or an interview invite reaches you here rather than in a forwarded email thread."
@@ -343,7 +343,7 @@ export default function Home() {
             <div className="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:gap-16">
               <div className="max-w-lg">
                 <Eyebrow accent className="mb-4">
-                  HOW IT WORKS
+                  How it works
                 </Eyebrow>
                 <h2 className="text-2xl font-bold leading-tight text-white sm:text-3xl lg:text-4xl">
                   From an empty account to a real conversation, without leaving the platform.
@@ -390,7 +390,7 @@ export default function Home() {
         <section className="py-16 sm:py-20">
           <div className="container-responsive">
             <div className="max-w-2xl">
-              <Eyebrow className="mb-3">TWO SIDES, ONE HIRE</Eyebrow>
+              <Eyebrow className="mb-3">Two sides, one hire</Eyebrow>
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white sm:text-3xl lg:text-4xl">
                 Each side gets its own workspace.
               </h2>
@@ -398,7 +398,7 @@ export default function Home() {
 
             <div className="mt-10 grid grid-cols-1 gap-4 lg:grid-cols-2">
               <AudiencePanel
-                eyebrow="FOR JOB SEEKERS"
+                eyebrow="For job seekers"
                 icon={<Icon.user className="h-5 w-5" />}
                 title="Find the role your work already fits"
                 points={[
@@ -414,7 +414,7 @@ export default function Home() {
                 }
               />
               <AudiencePanel
-                eyebrow="FOR EMPLOYERS"
+                eyebrow="For employers"
                 icon={<Icon.briefcase className="h-5 w-5" />}
                 title="Read the applicants, not the inbox"
                 points={[
@@ -439,7 +439,7 @@ export default function Home() {
         <section className="pb-16 sm:pb-20">
           <div className="container-responsive">
             <Card grid className="px-6 py-10 text-center sm:px-10 sm:py-12">
-              <Eyebrow className="mb-3">{signedIn ? "WELCOME BACK" : "GET STARTED"}</Eyebrow>
+              <Eyebrow className="mb-3">{signedIn ? "Welcome back" : "Get started"}</Eyebrow>
               <h2 className="mx-auto max-w-xl text-xl font-bold text-gray-900 dark:text-white sm:text-2xl">
                 {signedIn
                   ? "Pick up where you left off."
@@ -481,7 +481,7 @@ export default function Home() {
                 >
                   <Icon.graph className="h-4 w-4" />
                 </span>
-                <span className="mono text-sm font-semibold uppercase tracking-[0.18em] text-gray-900 dark:text-white">
+                <span className="wordmark text-gray-900 dark:text-white">
                   NextHire
                 </span>
               </span>

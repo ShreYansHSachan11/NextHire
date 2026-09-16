@@ -191,8 +191,8 @@ export const Icon = {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Small uppercase monospace label. Used for section eyebrows and any
- * machine-generated caption ("GRAPH CONFIDENCE", "4 MATCHES FOR YOUR PROFILE").
+ * Small sentence-case label. Used for section eyebrows and any
+ * machine-generated caption ("Graph confidence", "4 matches for your profile").
  */
 export function Eyebrow({
   children,
@@ -1173,7 +1173,7 @@ const STATUS_STYLES: Record<string, string> = {
  * string, so a change to one silently left the other behind.
  */
 const BADGE_BASE =
-  "mono inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-1 text-[11px] font-medium uppercase tracking-wider";
+  "inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-1 text-xs font-medium";
 
 const STATUS_ICONS: Record<string, React.ReactNode> = {
   PENDING: <Icon.clock className="h-3 w-3" />,
@@ -1369,7 +1369,7 @@ export function Avatar({
   );
 }
 
-/** Page heading block with a mono eyebrow above a tight display title. */
+/** Page heading block with a quiet eyebrow above a tight display title. */
 export function PageHeading({
   eyebrow,
   title,

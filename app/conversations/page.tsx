@@ -562,7 +562,7 @@ function ConversationRow({
             onClick={() => void onStart(application.userId)}
             disabled={starting}
             aria-busy={starting}
-            className="mono btn-outline btn-sm flex-shrink-0 self-center whitespace-nowrap text-[11px] uppercase tracking-wider"
+            className="btn-outline btn-sm flex-shrink-0 self-center whitespace-nowrap text-xs"
           >
             {starting && <Spinner className="h-3 w-3" decorative />}
             {starting ? "Opening" : "Start"}

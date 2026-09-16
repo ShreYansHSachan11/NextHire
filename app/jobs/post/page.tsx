@@ -1852,7 +1852,7 @@ const STEP_PILL_STYLES: Record<StepTone, string> = {
 function StepPill({ tone, label }: { tone: StepTone; label: string }) {
   return (
     <span
-      className={`mono inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-1 text-[11px] font-medium uppercase tracking-wider ${STEP_PILL_STYLES[tone]}`}
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-1 text-xs font-medium ${STEP_PILL_STYLES[tone]}`}
     >
       {tone === "done" && <Icon.check className="h-3 w-3 flex-shrink-0" />}
       {tone === "todo" && <Icon.warning className="h-3 w-3 flex-shrink-0" />}
@@ -1915,7 +1915,7 @@ function StepRail({
               {/* Repeats the panel's own pill so the state is legible from the
                   rail without opening anything. */}
               <span
-                className={`mono truncate text-[10px] uppercase tracking-wider ${
+                className={`truncate text-[11px] font-medium ${
                   status[step.id].tone === "todo"
                     ? "text-amber-700 dark:text-amber-400"
                     : status[step.id].tone === "done"

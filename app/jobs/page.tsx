@@ -1567,7 +1567,7 @@ function JobCard({ job, scored }: { job: JobListItem; scored: boolean }) {
               badge was always green. Recency is the useful signal instead, and
               a fresh posting is exactly the "live" state emerald is for. */}
           {isNew && (
-            <span className="mono rounded-md border border-green-300 bg-green-50 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-green-700 dark:border-green-700 dark:bg-green-950/40 dark:text-green-300">
+            <span className="rounded-md border border-green-300 bg-green-50 px-1.5 py-0.5 text-[11px] font-medium text-green-700 dark:border-green-700 dark:bg-green-950/40 dark:text-green-300">
               New
             </span>
           )}

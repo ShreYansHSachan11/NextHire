@@ -1032,7 +1032,7 @@ export default function SeekerDashboardPage() {
                         type="button"
                         onClick={() => setStatusFilter(filter)}
                         aria-pressed={active}
-                        className="mono segment interactive hit-24"
+                        className="segment interactive hit-24"
                       >
                         {FILTER_LABELS[filter]}
                         <span className="segment-count">{applicationsLoading ? "—" : count}</span>
@@ -1403,7 +1403,7 @@ function LiveStatus({ message }: { message: string }) {
 }
 
 /**
- * The page-level section header: mono eyebrow, `h2`, one line of description,
+ * The page-level section header: a quiet eyebrow, `h2`, one line of description,
  * optional right-hand meta.
  *
  * Declared once so the five sections below share a rhythm — before this, three
@@ -1749,8 +1749,8 @@ function MatchedJobCard({
           </p>
         </div>
         {score !== null && (
-          // Sentence case: `.eyebrow` already uppercases, so the shouted string
-          // this used to pass was the only caption in the app typed that way.
+          // Sentence case throughout now — the eyebrow stopped uppercasing, so
+          // a caption typed in caps would be the only shout left on the page.
           <MatchScore
             value={score}
             caption="Profile fit"

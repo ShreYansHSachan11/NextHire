@@ -22,7 +22,7 @@ export default function Loading() {
             <span className="tile tile-ink h-9 w-9">
               <Icon.graph className="h-5 w-5" />
             </span>
-            <span className="mono text-sm font-bold uppercase tracking-[0.14em] text-gray-900 dark:text-white">
+            <span className="wordmark text-gray-900 dark:text-white">
               NextHire
             </span>
           </span>

@@ -25,7 +25,7 @@
 
 @theme inline {
   /* `inline` because these point at the CSS variables Next's font loader emits. */
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+  --font-sans: var(--font-poppins), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
   --font-mono: var(--font-mono-jb), ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo,
     Consolas, monospace;
@@ -649,13 +649,26 @@ nav {
     font-feature-settings: "tnum" 1, "zero" 1;
   }
 
-  /* Small uppercase eyebrow: "4 MATCHES FOR YOUR PROFILE", "GRAPH CONFIDENCE". */
+  /*
+   * Section eyebrow: "Profile match", "Filter by status".
+   *
+   * This was 11px monospace, uppercased, at 0.12em tracking. Set in caps a
+   * label loses its word shapes — every word becomes the same rectangle — and
+   * a whole page of them reads as shouting rather than as hierarchy, which is
+   * what they are actually for. Sentence case in the UI sans at 12px/500 keeps
+   * the label quiet and subordinate to the heading under it without raising
+   * its voice, and the extra pixel buys back the size the lost caps cost.
+   *
+   * Tracking stays slightly positive: a small, muted label still benefits from
+   * a little air, it just no longer needs the 0.12em that caps demanded.
+   */
   .eyebrow {
-    font-family: var(--font-mono);
-    font-size: 0.6875rem;
-    line-height: 1.2;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
+    font-family: var(--font-sans);
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.35;
+    letter-spacing: 0.01em;
+    text-transform: none;
     color: var(--ink-faint);
   }
 
@@ -669,6 +682,27 @@ nav {
     font-feature-settings: "tnum" 1;
     letter-spacing: -0.02em;
     color: var(--ink);
+  }
+
+  /*
+   * The wordmark.
+   *
+   * It was `mono text-sm font-bold uppercase tracking-[0.14em]`, hand-copied
+   * into eight files — and the footer's copy had already drifted to a
+   * different weight and 0.18em. A name set in monospace capitals reads as a
+   * status code, not as a brand. In the UI sans at 600 with the letterforms
+   * pulled slightly together, "NextHire" reads as the word it is, and the one
+   * class means the eight copies cannot disagree again.
+   *
+   * Colour stays at the call site: the same wordmark sits on the light chrome
+   * and on the dark auth panel.
+   */
+  .wordmark {
+    font-family: var(--font-sans);
+    font-size: 1.0625rem;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    line-height: 1.2;
   }
 
   /* ==========================================================================
@@ -933,10 +967,11 @@ nav {
     align-items: center;
     gap: var(--space-2);
     border-radius: var(--radius-md);
-    padding: 0.375rem 0.625rem;
-    font-size: 0.6875rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    padding: 0.375rem 0.6875rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
     color: var(--ink-muted);
   }
 
@@ -964,6 +999,10 @@ nav {
    * `scripts/contrast-audit.mjs`.
    */
   .segment-count {
+    /* The button no longer carries `.mono`, so the count names the family
+       itself — Poppins has no tabular figures to fall back on, and a count
+       that jitters as it updates is exactly what this token existed to stop. */
+    font-family: var(--font-mono);
     color: var(--ink-faint);
     font-variant-numeric: tabular-nums;
   }
