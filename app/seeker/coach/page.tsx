@@ -338,7 +338,7 @@ export default function SeekerCoachPage() {
   /* ---------------------------------------------------------------------- */
 
   // The same skeleton the route’s `loading.tsx` shows, so the rehydration wait
-  // and the navigation wait are one state rather than two (DESIGN-NOTES 1.4).
+  // and the navigation wait are one state rather than two.
   // The centred spinner this replaced sat on an empty field and then handed
   // over to a full page of panels — the largest layout shift on the route.
   if (!ready) return <CoachLoading />;

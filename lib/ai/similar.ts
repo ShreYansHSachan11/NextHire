@@ -3,7 +3,7 @@ import { DUPLICATE_THRESHOLD, isAiEnabled } from './config';
 import { cosineSimilarity } from './vector';
 
 /**
- * "More like this" and near-duplicate detection — ROADMAP H1 and H10.
+ * "More like this" and near-duplicate detection.
  *
  * Neither feature spends a single model call. Posting or editing a job already
  * writes its vector, so both of these are pure arithmetic over rows we hold:
@@ -53,7 +53,7 @@ const MAX_PER_COMPANY = 2;
  * unrelated roles at one company measure ~0.82 on the current corpus, so this
  * is a guard against a thin index surfacing noise rather than a tuned
  * parameter — it wants replacing with a measured percentile once the
- * calibration and evaluation work in ROADMAP V8/V11 exists.
+ * calibration and evaluation work exists.
  */
 const MIN_NEIGHBOUR_SIMILARITY = 0.6;
 
@@ -170,7 +170,7 @@ export async function findSimilarJobs(
  * Past this size the answer is not a larger cap. It is to block candidates
  * first — bucket by company, by title trigram or by a coarse projection of the
  * vector, and compare only within a bucket — or to push the comparison down
- * into pgvector on the upgrade path AI.md describes. The scan is isolated in
+ * into pgvector. The scan is isolated in
  * this one function so that swap stays local.
  */
 const DUPLICATE_SCAN_LIMIT = 1000;

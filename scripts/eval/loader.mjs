@@ -43,7 +43,7 @@ const CANDIDATES = ['', '.ts', '.tsx', '.js', '.mjs', '/index.ts', '/index.js'];
  *
  * This is the only substitution, and it is not a general mocking facility. Any
  * addition here is a claim that the harness is no longer exercising the real
- * thing, and should be argued for in EVAL.md before it is made.
+ * thing, and should be argued for before it is made.
  */
 const SUBSTITUTIONS = new Map([
   ['@/lib/prisma', resolvePath(ROOT, 'scripts', 'eval', 'harness', 'prisma-double.ts')],

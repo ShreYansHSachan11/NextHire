@@ -265,8 +265,7 @@ export default function CompanyDashboard() {
 
   // The same skeleton the route’s `loading.tsx` shows, so the rehydration
   // wait and the navigation wait are one state rather than two, and neither is
-  // a centred spinner that a full page of content then shoves aside
-  // (DESIGN-NOTES 1.4, 5.4).
+  // a centred spinner that a full page of content then shoves aside.
   if (!ready) return <DashboardLoading />;
 
   if (!allowed) return null; // the guard is already redirecting
@@ -366,7 +365,7 @@ export default function CompanyDashboard() {
 
           {loading ? (
             // Same shape as the list it stands in for, rather than a spinner in a
-            // short box followed by a tall list (DESIGN-NOTES 5.4).
+            // short box followed by a tall list.
             <SkeletonRows count={3} />
           ) : loadError ? (
             <div className="p-4 sm:p-6">

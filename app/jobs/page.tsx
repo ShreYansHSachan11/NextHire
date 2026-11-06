@@ -1529,7 +1529,7 @@ function JobCard({ job, scored }: { job: JobListItem; scored: boolean }) {
     // card drops from about 720px to about 490px — while every `sm:`-prefixed
     // style stays on from 640px upward. The card was therefore getting its
     // roomiest padding and its largest title exactly where it had least room.
-    // A container query asks the width the card actually has (DESIGN-NOTES 5.5).
+    // A container query asks the width the card actually has.
     <Card interactive className="@container group relative flex flex-col p-4 @lg:p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">

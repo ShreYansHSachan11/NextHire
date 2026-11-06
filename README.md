@@ -15,7 +15,7 @@ Companies post jobs, review applicants, move them through a hiring pipeline and 
 - In-app notifications for new applications, status changes and messages
 - Light/dark theme, responsive from 360px up
 
-**Powered by Gemini** — all optional, see [`AI.md`](./AI.md):
+**Powered by Gemini** — all optional:
 
 - Semantic matching between a candidate's profile and every open role, with an
   explainable facet breakdown rather than one opaque percentage
@@ -79,6 +79,31 @@ Companies post jobs, review applicants, move them through a hiring pipeline and 
    ```
 
    Open <http://localhost:3000>.
+
+## Docker
+
+The [`Dockerfile`](./Dockerfile) has a target for each piece: the web app (default),
+the Socket.IO server, and a one-shot migration job. They use your existing `.env` and
+an external Postgres database. Use a `DATABASE_URL` the container can reach, because
+`localhost` inside a container is the container itself.
+
+`docker run --env-file` keeps quotes as part of the value, so remove the quotes that
+`env-template.txt` puts around each value.
+
+```bash
+# NEXT_PUBLIC_SOCKET_URL is compiled into the browser bundle, so set it at build time.
+docker build -t nexthire-web --build-arg NEXT_PUBLIC_SOCKET_URL=http://localhost:3002 .
+docker build -t nexthire-socket --target socket .
+docker build -t nexthire-migrate --target migrate .
+
+docker run --rm --env-file .env nexthire-migrate
+docker run -d --env-file .env -e NODE_ENV=production -p 3000:3000 nexthire-web
+docker run -d --env-file .env -e NODE_ENV=production -p 3002:3002 nexthire-socket
+```
+
+The socket server refuses to start in production without `SOCKET_EMIT_SECRET`,
+`JWT_SECRET` and `SOCKET_ALLOWED_ORIGINS`. `SOCKET_SERVER_URL` must be an address the
+web container can reach.
 
 ## Scripts
 
@@ -167,10 +192,3 @@ caller server-side** — ownership is never taken from the request body.
   document evidences, and every extracted field stays editable by the user.
 - No AI feature is load-bearing. Posting, applying, messaging and uploading all
   succeed whether or not the model is reachable.
-
-See [`AI.md`](./AI.md) for the full design.
-
----
-
-See [`AUDIT.md`](./AUDIT.md) for the record of issues found and fixed in the
-hardening pass, and [`DEPLOYMENT.md`](./DEPLOYMENT.md) for hosting instructions.

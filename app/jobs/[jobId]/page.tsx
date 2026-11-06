@@ -961,8 +961,7 @@ function MatchPanel({ jobId, match }: { jobId: string; match: MatchBreakdown }) 
        * surface still printing `76%`, which is the shape the kit was changed to
        * stop producing — beside the word "fit" a percentage reads as a
        * probability of being hired, and one displayed point is 0.002 of cosine,
-       * so the precision is roughly 10x what the signal carries (DESIGN-NOTES
-       * top-5 #2). `coarse={false}` because this is the detail panel: the exact
+       * so the precision is roughly 10x what the signal carries. `coarse={false}` because this is the detail panel: the exact
        * value belongs here even though the band leads, and the list surfaces
        * round to 5.
        *
@@ -986,8 +985,7 @@ function MatchPanel({ jobId, match }: { jobId: string; match: MatchBreakdown }) 
        * The four facets that produced the number above, each labelled with its
        * share of the blend. Four identically-sized bars imply four equal inputs
        * and the blend is 70/18/7/5 — an explanation that misrepresents how the
-       * number was produced is worse than no explanation (DESIGN-NOTES top-5
-       * #3). The weights come from `MATCH_WEIGHTS`, so the label cannot drift
+       * number was produced is worse than no explanation. The weights come from `MATCH_WEIGHTS`, so the label cannot drift
        * from the scorer.
        */}
       <div className="space-y-3">

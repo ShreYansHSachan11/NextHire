@@ -261,7 +261,7 @@ const PIPELINE_ORDER: readonly ApplicationStatus[] = [
  * A percentage implies the application is halfway to an offer, which is not a
  * claim anybody can make; four discrete segments say exactly what is known —
  * which stage it reached — and nothing more. The shape follows the GOV.UK
- * "progress through a process" idea referenced in DESIGN-NOTES §1.5.
+ * "progress through a process" idea.
  */
 const PIPELINE_STAGES: readonly ApplicationStatus[] = [
   "PENDING",
@@ -336,8 +336,7 @@ export default function SeekerDashboardPage() {
    *
    * The action is already behind a `window.confirm`, and the response carries
    * nothing the page does not have — so the round trip was pure waiting, and
-   * every count, filter and sparkline on the page waited with it
-   * (DESIGN-NOTES 5.3). Layered rather than spliced: `loadApplications` can
+   * every count, filter and sparkline on the page waited with it. Layered rather than spliced: `loadApplications` can
    * land mid-flight, and the removal re-applies to whatever the newer list is
    * instead of being lost in it.
    */
@@ -584,8 +583,7 @@ export default function SeekerDashboardPage() {
           error instanceof Error ? error.message : "Could not withdraw the application";
         console.error("Failed to withdraw application:", error);
         // The row reappears on its own. Without this the reader watches it come
-        // back with no account of why, which is worse than having waited
-        // (DESIGN-NOTES 5.3) — and the error toast is `aria-live="assertive"`,
+        // back with no account of why, which is worse than having waited — and the error toast is `aria-live="assertive"`,
         // so a screen-reader user is told rather than left to re-read the list.
         toast.error(message);
       }
@@ -788,7 +786,7 @@ export default function SeekerDashboardPage() {
 
   // The same skeleton the route's `loading.tsx` shows, so the auth-rehydration
   // wait and the navigation wait look identical rather than one being a
-  // centred spinner on an empty field (DESIGN-NOTES §1.4, §5.2).
+  // centred spinner on an empty field.
   if (!ready) return <DashboardLoading />;
 
   if (!allowed) return null;
@@ -821,7 +819,7 @@ export default function SeekerDashboardPage() {
           }
         />
 
-        {/* One of the page's two announcers (DESIGN-NOTES §2.2). Mounted from
+        {/* One of the page's two announcers. Mounted from
             the first render, text-only, and it never wraps a control. */}
         <LiveStatus message={resumeStatus} />
 
@@ -938,7 +936,7 @@ export default function SeekerDashboardPage() {
             {/* `aria-busy` rather than a live region: this container holds every
                 card, so `aria-live` had a screen reader re-read the whole grid
                 on any change — and the cards contain links, which a live region
-                must never wrap (DESIGN-NOTES §2.2). */}
+                must never wrap. */}
             <div className="mt-3" aria-busy={recommendState === "loading"}>
               {recommendState === "loading" ? (
                 <ul className="grid list-none gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
@@ -1391,8 +1389,7 @@ export default function SeekerDashboardPage() {
  *
  * Rendered empty on mount: a live region that appears at the same moment as its
  * first message often does not announce at all. It is text-only and never wraps
- * a control, which is the rule the two regions removed from this page broke
- * (DESIGN-NOTES §2.2).
+ * a control, which is the rule the two regions removed from this page broke.
  */
 function LiveStatus({ message }: { message: string }) {
   return (
@@ -1612,7 +1609,7 @@ function ApplicationRow({
                   {/* `/100`, not `%`. Beside the word "fit" a percentage reads as a
                       probability of being hired, and one displayed point is
                       0.002 of cosine — roughly 10x the precision the signal
-                      carries (DESIGN-NOTES top-5 #2). Rounded to 5 like every
+                      carries. Rounded to 5 like every
                       other list surface. */}
                   Fit at apply{" "}
                   <Readout className="text-[11px]">{coarseFit(fitAtApply)}</Readout>
@@ -1716,7 +1713,7 @@ function MatchedJobCard({
    * Position in the scored set. The score is monotone in cosine, so *rank
    * order* is meaningful even where the magnitude is not — which makes the
    * ordinal the more defensible framing on a list the score exists to sort,
-   * and the honest description of what the feature does (DESIGN-NOTES 4.4).
+   * and the honest description of what the feature does.
    * The section heading already says "strongest fit first"; this puts the same
    * fact on the row, where the comparison being invited is between roles rather
    * than against 100.

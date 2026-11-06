@@ -16,8 +16,6 @@
  * The seeker and employer wordings differ on purpose — they answer different
  * worries ("am I wasting my time?" versus "can I trust this ordering?") — but
  * both carry the same load-bearing claim: the score sorts, it does not decide.
- *
- * See DESIGN-NOTES.md §4.5.
  */
 
 /**

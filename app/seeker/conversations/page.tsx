@@ -136,8 +136,7 @@ function SeekerConversations() {
    * wholesale whenever the selection changes, so `aria-live` on it would read
    * an entire conversation out on every switch, and it contains the day
    * separators and timestamps too. A small, text-only region carrying "New
-   * message from X" is the announcement that is actually wanted
-   * (DESIGN-NOTES §2.2).
+   * message from X" is the announcement that is actually wanted.
    */
   const [threadNotice, setThreadNotice] = useState("");
 
@@ -345,7 +344,7 @@ function SeekerConversations() {
   /* ---------------------------------------------------------------------- */
 
   // The same skeleton the route's `loading.tsx` shows, so the rehydration wait
-  // and the navigation wait are one state rather than two (DESIGN-NOTES §1.4).
+  // and the navigation wait are one state rather than two.
   if (!ready) return <ConversationsLoading />;
 
   if (!allowed) return null;
@@ -486,7 +485,7 @@ function ConversationList({
       {/* `aria-busy`, not `aria-live`. This container holds every thread, so a
           live region on it had a screen reader re-read the whole inbox on any
           change — and the rows are buttons, which a live region must never
-          wrap. The count is the part worth announcing (DESIGN-NOTES §2.2). */}
+          wrap. The count is the part worth announcing. */}
       <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">
         {loading
           ? ""

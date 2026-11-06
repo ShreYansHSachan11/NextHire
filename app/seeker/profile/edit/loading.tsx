@@ -17,7 +17,7 @@ function FieldSkeleton({ tall = false }: { tall?: boolean }) {
  *
  * Matched to the real form rather than centred: the controls are the layout, so
  * a skeleton that reproduces their stack keeps the page from jumping when the
- * seeded values arrive (DESIGN-NOTES §1.4, §5.4). The page renders this for its
+ * seeded values arrive. The page renders this for its
  * own auth-rehydration wait too.
  */
 export default function ProfileEditLoading() {

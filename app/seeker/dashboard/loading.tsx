@@ -13,7 +13,7 @@ import { ApplicationRowSkeleton, MatchCardSkeleton } from "@/app/components/skel
  * the page around — NN/g's rule is spinners for short blocking actions,
  * skeletons where content is being fetched and layout context matters, and the
  * ECCE 2018 skeleton-screen study found the same split improves both perceived
- * speed and perceived ease of navigation (DESIGN-NOTES §1.4, §5.2, §5.4).
+ * speed and perceived ease of navigation.
  *
  * The page itself renders this component for its auth-rehydration wait too, so
  * the two waits a user can actually hit look identical.

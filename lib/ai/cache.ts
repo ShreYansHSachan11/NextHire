@@ -164,7 +164,7 @@ export interface CachedJobVector {
  * postings are cached and older ones drop out of the vector arm rather than the
  * process quietly consuming a gigabyte.
  *
- * This whole layer is the thing the pgvector upgrade path (AI.md §3) removes.
+ * This whole layer is the thing the pgvector upgrade path removes.
  * Once similarity is an `ORDER BY vector <=> $1 LIMIT n` inside Postgres there
  * is nothing to hold in Node, and `getActiveJobVectors` goes away with it.
  */

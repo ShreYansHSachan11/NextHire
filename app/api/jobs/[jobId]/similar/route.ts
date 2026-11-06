@@ -8,7 +8,7 @@ import {
 } from '@/lib/ai/similar';
 
 /**
- * "More like this" for one posting — ROADMAP H1.
+ * "More like this" for one posting.
  *
  * Costs nothing to serve: the vectors were written when the jobs were posted,
  * so this is a cosine loop over stored rows and no model call at all.
