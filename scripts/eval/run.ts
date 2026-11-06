@@ -9,7 +9,7 @@
  *
  * No test runner and no TypeScript runner: Node's own type-stripping executes
  * the `.ts` files, and `loader.mjs` closes the two gaps that leaves. Nothing
- * was added to `devDependencies` for this. See EVAL.md.
+ * was added to `devDependencies` for this.
  *
  * The import order below is not incidental. `lib/ai/config.ts` reads
  * `GEMINI_EMBEDDING_MODEL` and `GEMINI_EMBEDDING_DIMENSIONS` at module scope,

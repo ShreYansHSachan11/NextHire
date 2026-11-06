@@ -453,7 +453,7 @@ export default function EditSeekerProfilePage() {
   };
 
   // The same skeleton the route's `loading.tsx` shows, so the rehydration wait
-  // and the navigation wait are one state rather than two (DESIGN-NOTES §1.4).
+  // and the navigation wait are one state rather than two.
   if (!ready) return <ProfileEditLoading />;
 
   if (!allowed) return null;
@@ -768,7 +768,7 @@ export default function EditSeekerProfilePage() {
                 both controls. A live region must not contain interactive
                 content: the submit button was re-announced on every render of
                 the row, and its own `aria-busy` state changes fought the
-                region (DESIGN-NOTES §2.2). The button already announces itself
+                region. The button already announces itself
                 through `aria-busy`; the sentence below is the separate,
                 text-only announcement. */}
             <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">

@@ -18,7 +18,7 @@ import { Card, Skeleton, SkeletonRows, SkeletonText } from "@/app/components/ui"
  * No `Icon` here, deliberately: `loading.tsx` is a server component, and while
  * a direct export like `Skeleton` crosses the `"use client"` boundary fine, a
  * property of an object export (`Icon.spark`) resolves to `undefined` and fails
- * the build at prerender. See the note in WIP.md.
+ * the build at prerender.
  */
 export default function CoachLoading() {
   return (

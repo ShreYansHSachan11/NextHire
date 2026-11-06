@@ -5,7 +5,7 @@ import { DUPLICATE_THRESHOLD, isAiEnabled } from '@/lib/ai/config';
 import { findDuplicateJobs, MAX_CLUSTER_LIMIT } from '@/lib/ai/similar';
 
 /**
- * Near-duplicate postings, for moderation — ROADMAP H10.
+ * Near-duplicate postings, for moderation.
  *
  * Costs nothing to run: every job vector already exists, so the whole report is
  * a pairwise cosine over rows we hold rather than a single model call. That is

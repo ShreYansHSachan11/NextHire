@@ -96,7 +96,7 @@ function toJobRow(posting: EvalPosting, index: number): JobRow {
  * minimal profile consistent with it, using the product's own
  * `parseQuery` and `canonicalSkill` to read the seniority and the skills out of
  * the words. That makes the match-score ranking measurable on the same ground
- * truth — with the caveat, stated in EVAL.md, that a real profile is a résumé
+ * truth — with the caveat that a real profile is a résumé
  * and this is one sentence.
  */
 function toProfile(query: EvalQuery, vocabulary: Map<string, string>): {
@@ -709,7 +709,7 @@ async function reportSkillLayers(profileSkills: Map<string, string[]>): Promise<
     say('  appears in the skill vocabulary of the postings, so a synthetic');
     say('  profile cannot contain the misspelling or the adjacent name that');
     say('  layer 3 exists to catch. Measuring it needs profiles drawn from');
-    say('  outside that vocabulary — see EVAL.md.');
+    say('  outside that vocabulary.');
   }
 }
 

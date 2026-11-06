@@ -315,8 +315,7 @@ function ConversationsView() {
 
   // The same skeleton the route’s `loading.tsx` shows, so the rehydration
   // wait and the navigation wait are one state rather than two, and neither is
-  // a centred spinner that a full page of content then shoves aside
-  // (DESIGN-NOTES 1.4, 5.4).
+  // a centred spinner that a full page of content then shoves aside.
   if (!ready) return <MessagesLoading />;
 
   if (!allowed) return null; // the guard is already redirecting
@@ -357,7 +356,7 @@ function ConversationsView() {
               <div className="flex-1 overflow-y-auto">
                 {loading ? (
                   // The rail is a list; a centred spinner in it shifts everything
-                  // below when the rows arrive (DESIGN-NOTES 5.4).
+                  // below when the rows arrive.
                   <SkeletonRows count={5} />
                 ) : loadError ? (
                   <div className="p-4">

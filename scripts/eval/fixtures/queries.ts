@@ -121,7 +121,7 @@ export const QUERIES: EvalQuery[] = [
     text: 'SRE',
     category: 'literal',
     note:
-      'A three-letter acronym with almost no surrounding context to embed. This is the canonical case for ROADMAP weakness 2.',
+      'A three-letter acronym with almost no surrounding context to embed.',
     relevant: {
       'northgate-sre': 3,
       'brightsilo-sre-lead': 3,
@@ -227,7 +227,7 @@ export const QUERIES: EvalQuery[] = [
     text: 'remote senior Go role above 120k',
     category: 'structured',
     note:
-      'Three of the four Go postings satisfy the words and fail a constraint: Hollowpine is junior and on-site, Umbercove is on-site, Northgate is on-site. Embedding the words "remote" and "120k" cannot tell them apart — this is ROADMAP weakness 5 stated as a test.',
+      'Three of the four Go postings satisfy the words and fail a constraint: Hollowpine is junior and on-site, Umbercove is on-site, Northgate is on-site. Embedding the words "remote" and "120k" cannot tell them apart.',
     expectedFilters: { remote: true, minSeniority: 'Senior', minSalaryUsd: 120000 },
     relevant: {
       'orbital-go-backend': 3,
@@ -279,7 +279,7 @@ export const QUERIES: EvalQuery[] = [
     text: 'Apollo federated graph and schema evolution',
     category: 'domain',
     note:
-      'Apollo and GraphQL are the alias-table miss that only an embedding fallback catches (ROADMAP V1 layer 3).',
+      'Apollo and GraphQL are the alias-table miss that only an embedding fallback catches.',
     relevant: {
       'solveig-graphql-api': 3,
       'quillfeather-react-senior': 1,

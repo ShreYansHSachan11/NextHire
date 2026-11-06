@@ -26,7 +26,7 @@
  * small, so it is reproduced exactly rather than approximated.
  *
  * Everything measured through this file is therefore a smoke test of *ranking
- * behaviour*, not a prediction of production `ts_rank` ordering. See EVAL.md.
+ * behaviour*, not a prediction of production `ts_rank` ordering.
  */
 
 /** The default `english` stopword list, trimmed to what this corpus can hit. */

@@ -12,7 +12,7 @@
  * judgement in `queries.ts` and disagree with it.
  *
  * Composition is not random. Postings exist to create the *confusions* that
- * ROADMAP items V1-V3 claim to fix:
+ * the retrieval work claims to fix:
  *
  *   - Spelling variants of the same skill (`Postgres` vs `PostgreSQL`,
  *     `React` vs `ReactJS`, `K8s` vs `Kubernetes`) live in different postings,

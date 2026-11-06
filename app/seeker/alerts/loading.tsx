@@ -7,7 +7,7 @@ import { SavedSearchRowSkeleton } from "@/app/components/skeletons";
  *
  * Reproduces the two-column arrangement the page settles into — list on the
  * left from `lg`, the create form on the right — so the layout does not
- * reorganise itself under the reader when the data lands (DESIGN-NOTES §5.4).
+ * reorganise itself under the reader when the data lands.
  * The page renders this for its auth-rehydration wait too.
  */
 export default function AlertsLoading() {

@@ -267,7 +267,7 @@ export default function SeekerAlertsPage() {
   }, []);
 
   // The same skeleton the route's `loading.tsx` shows, so the rehydration wait
-  // and the navigation wait are one state rather than two (DESIGN-NOTES §1.4).
+  // and the navigation wait are one state rather than two.
   if (!ready) return <AlertsLoading />;
 
   // `useAuthGuard` is already redirecting; rendering nothing avoids a frame of
@@ -331,8 +331,7 @@ export default function SeekerAlertsPage() {
 
             {/* `aria-busy` on the container plus one text-only announcer, rather
                 than `aria-live` around the list — a region wrapping every row
-                has a screen reader re-read the whole set on any change
-                (DESIGN-NOTES §2.2). */}
+                has a screen reader re-read the whole set on any change. */}
             <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">
               {loading || loadError
                 ? ""

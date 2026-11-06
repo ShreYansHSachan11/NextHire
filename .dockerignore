@@ -1,0 +1,15 @@
+.git
+.gitignore
+.next
+.vercel
+.vscode
+node_modules
+coverage
+*.md
+*.log
+.DS_Store
+Dockerfile
+.dockerignore
+
+# Secrets never belong in an image. Pass them at runtime with --env-file.
+.env*

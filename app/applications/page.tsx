@@ -21,7 +21,7 @@ import { MATCH_CAVEAT_EMPLOYER } from "@/lib/copy";
 /**
  * One page-level caveat node that every per-row fit readout points at, so a
  * screen-reader user querying a score hears the qualifier as part of it rather
- * than never (DESIGN-NOTES 2.4). The sentence itself lives in `lib/copy.ts`.
+ * than never. The sentence itself lives in `lib/copy.ts`.
  */
 const fitCaveatId = "fit-caveat";
 import ApplicationsLoading from "./loading";
@@ -264,7 +264,7 @@ export default function ApplicationsPage() {
    * `loadData` can land between the write and the failure, and restoring it
    * would then throw away the fresher list. `useOptimistic` layers instead of
    * overwriting, so leaving the transition is the rollback, and anything that
-   * arrived meanwhile survives it (DESIGN-NOTES 5.3).
+   * arrived meanwhile survives it.
    */
   const [optimisticApplications, applyOptimisticStatus] = useOptimistic(
     applications,
@@ -484,7 +484,7 @@ export default function ApplicationsPage() {
       } catch (error) {
         console.error("Failed to update application status:", error);
         // The row reverts on its own, but a revert nobody explains reads as a
-        // change that worked and then un-worked (DESIGN-NOTES 5.3). Error
+        // change that worked and then un-worked. Error
         // toasts are `aria-live="assertive"`, so it is heard as well as seen.
         toast.error(error instanceof Error ? error.message : "Could not update the application");
       } finally {
@@ -513,8 +513,7 @@ export default function ApplicationsPage() {
 
   // The same skeleton the route’s `loading.tsx` shows, so the rehydration
   // wait and the navigation wait are one state rather than two, and neither is
-  // a centred spinner that a full page of content then shoves aside
-  // (DESIGN-NOTES 1.4, 5.4).
+  // a centred spinner that a full page of content then shoves aside.
   if (!ready) return <ApplicationsLoading />;
 
   if (!allowed) return null; // the guard is already redirecting
@@ -739,7 +738,7 @@ export default function ApplicationsPage() {
               /*
                * Rows rather than a centred spinner. A `px-6 py-12` spinner box
                * replaced by a list several hundred pixels tall is the largest
-               * layout shift on this route (DESIGN-NOTES 5.4), and the spinner
+               * layout shift on this route, and the spinner
                * was telling the reader nothing the skeleton does not.
                * `SkeletonRows` carries the same divider, padding and leading
                * avatar as `ApplicationRow`, so the only thing that changes when
