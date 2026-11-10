@@ -143,8 +143,9 @@ recommendations.
 Imported jobs are listings only: they credit their source and link to the original
 posting, where people apply. Only English postings are kept. Remote OK's API terms
 require that credit and link, and ask that the API is not polled hard, so a few runs a
-day is plenty. To schedule it on Vercel, add a cron for `GET /api/jobs/import`; Vercel
-sends `CRON_SECRET` automatically.
+day is plenty. On Vercel, `vercel.json` schedules `GET /api/jobs/import` daily at
+03:30 UTC. Set `CRON_SECRET` in the project's environment variables and Vercel sends it
+with each run; without it the endpoint answers 404 and nothing is imported.
 
 ## Project structure
 

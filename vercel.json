@@ -2,5 +2,11 @@
   "version": 2,
   "env": {
     "NODE_ENV": "production"
-  }
-} 
+  },
+  "crons": [
+    {
+      "path": "/api/jobs/import",
+      "schedule": "30 3 * * *"
+    }
+  ]
+}
