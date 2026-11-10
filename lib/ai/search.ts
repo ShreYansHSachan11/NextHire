@@ -167,13 +167,27 @@ const SENIORITY_PATTERNS: ReadonlyArray<{ level: SeniorityLevel; pattern: RegExp
  * Test and returns nothing. Under-matching degrades to today's behaviour;
  * over-matching does not degrade to anything.
  */
-interface KnownLocation {
+export interface KnownLocation {
   /**
    * Canonical label. This is the chip's text and the value carried in
    * `SearchFilters.location`, so it is also the key `locationPredicate` looks
    * needles up by — changing one means changing the other.
    */
   label: string;
+  /**
+   * The name the Location filter on /jobs shows for this place. Defaults to the
+   * label up to its first comma ("Bengaluru, India" → "Bengaluru"); set only
+   * where that would read wrong to the people using it ("New Delhi" for every
+   * Delhi and Delhi NCR posting).
+   */
+  short?: string;
+  /**
+   * Spellings that only the posting's location column uses, matched
+   * case-sensitively by `lib/jobs/filters.ts` and never by the query parser or
+   * `locationPredicate` — "US" is a country in "Remote · US" and the word "us"
+   * in "join us".
+   */
+  aliases?: string[];
   /** Spellings a query may use. Matched whole-word and case-insensitively. */
   names: string[];
   /**
@@ -200,7 +214,7 @@ interface KnownLocation {
  * The test for adding an entry is not "is it a city" but "would a job seeker
  * ever type this word meaning anything else".
  */
-const KNOWN_LOCATIONS: readonly KnownLocation[] = [
+export const KNOWN_CITIES: readonly KnownLocation[] = [
   /* Europe */
   { label: 'Berlin, Germany', names: ['Berlin'] },
   { label: 'Munich, Germany', names: ['Munich', 'München', 'Muenchen'] },
@@ -302,14 +316,50 @@ const KNOWN_LOCATIONS: readonly KnownLocation[] = [
   /* Asia and the Pacific */
   { label: 'Bengaluru, India', names: ['Bengaluru', 'Bangalore'] },
   { label: 'Mumbai, India', names: ['Mumbai', 'Bombay'] },
-  { label: 'New Delhi, India', names: ['New Delhi', 'Delhi'] },
+  // "Delhi NCR" is the region round Delhi, but postings use it to mean Delhi —
+  // Gurugram and Noida postings name themselves — so it folds in here.
+  {
+    label: 'New Delhi, India',
+    short: 'Delhi',
+    names: ['New Delhi', 'Delhi NCR', 'Delhi-NCR', 'Delhi'],
+    needles: ['Delhi'],
+  },
   { label: 'Hyderabad, India', names: ['Hyderabad'] },
-  { label: 'Chennai, India', names: ['Chennai'] },
+  { label: 'Chennai, India', names: ['Chennai', 'Madras'] },
   { label: 'Pune, India', names: ['Pune'] },
-  { label: 'Kolkata, India', names: ['Kolkata'] },
+  { label: 'Kolkata, India', names: ['Kolkata', 'Calcutta'] },
   { label: 'Gurugram, India', names: ['Gurugram', 'Gurgaon'] },
+  // Before Noida only for readability: matching is longest-name-first anyway.
+  { label: 'Greater Noida, India', names: ['Greater Noida'] },
   { label: 'Noida, India', names: ['Noida'] },
   { label: 'Ahmedabad, India', names: ['Ahmedabad'] },
+  { label: 'Navi Mumbai, India', names: ['Navi Mumbai'] },
+  { label: 'Thane, India', names: ['Thane'] },
+  { label: 'Faridabad, India', names: ['Faridabad'] },
+  { label: 'Ghaziabad, India', names: ['Ghaziabad'] },
+  { label: 'Jaipur, India', names: ['Jaipur'] },
+  { label: 'Chandigarh, India', names: ['Chandigarh'] },
+  { label: 'Mohali, India', names: ['Mohali'] },
+  { label: 'Ludhiana, India', names: ['Ludhiana'] },
+  { label: 'Lucknow, India', names: ['Lucknow'] },
+  { label: 'Dehradun, India', names: ['Dehradun'] },
+  { label: 'Indore, India', names: ['Indore'] },
+  { label: 'Bhopal, India', names: ['Bhopal'] },
+  { label: 'Nagpur, India', names: ['Nagpur'] },
+  { label: 'Surat, India', names: ['Surat'] },
+  { label: 'Vadodara, India', names: ['Vadodara', 'Baroda'] },
+  { label: 'Kochi, India', names: ['Kochi', 'Cochin'] },
+  { label: 'Thiruvananthapuram, India', names: ['Thiruvananthapuram', 'Trivandrum'] },
+  { label: 'Thrissur, India', names: ['Thrissur'] },
+  { label: 'Coimbatore, India', names: ['Coimbatore'] },
+  { label: 'Madurai, India', names: ['Madurai'] },
+  { label: 'Mysuru, India', names: ['Mysuru', 'Mysore'] },
+  { label: 'Mangaluru, India', names: ['Mangaluru', 'Mangalore'] },
+  { label: 'Visakhapatnam, India', names: ['Visakhapatnam', 'Vizag'] },
+  { label: 'Vijayawada, India', names: ['Vijayawada'] },
+  { label: 'Bhubaneswar, India', names: ['Bhubaneswar', 'Bhubaneshwar'] },
+  { label: 'Patna, India', names: ['Patna'] },
+  { label: 'Guwahati, India', names: ['Guwahati'] },
   { label: 'Singapore', names: ['Singapore'] },
   { label: 'Hong Kong', names: ['Hong Kong'] },
   { label: 'Tokyo, Japan', names: ['Tokyo'] },
@@ -340,7 +390,17 @@ const KNOWN_LOCATIONS: readonly KnownLocation[] = [
   { label: 'Lagos, Nigeria', names: ['Lagos'] },
   { label: 'Cape Town, South Africa', names: ['Cape Town'] },
   { label: 'Johannesburg, South Africa', names: ['Johannesburg'] },
+];
 
+/**
+ * States, countries and hiring regions — places bigger than a city.
+ *
+ * Kept apart from `KNOWN_CITIES` because the /jobs Location filter treats them
+ * differently: a posting's city wins over the region named beside it ("Austin,
+ * Texas" is filed under Austin), and a country collects every posting in its
+ * cities as well as those that name only the country.
+ */
+export const KNOWN_REGIONS: readonly KnownLocation[] = [
   /* US states, because postings write "Austin, Texas" as often as "Austin" */
   { label: 'California', names: ['California'] },
   { label: 'Texas', names: ['Texas'] },
@@ -363,14 +423,14 @@ const KNOWN_LOCATIONS: readonly KnownLocation[] = [
      country — "in Germany" will not find a posting that says only "Berlin".
      That is the honest reading of a free-text column, and it under-matches
      rather than over-matches, which is the direction this parser leans. */
-  { label: 'Germany', names: ['Germany', 'Deutschland'] },
-  { label: 'United Kingdom', names: ['United Kingdom', 'UK', 'Britain'], needles: ['United Kingdom'] },
+  { label: 'Germany', names: ['Germany', 'Deutschland'], aliases: ['DE'] },
+  { label: 'United Kingdom', names: ['United Kingdom', 'UK', 'Britain'], needles: ['United Kingdom'], aliases: ['England', 'Scotland', 'Wales'] },
   { label: 'Ireland', names: ['Ireland'] },
   { label: 'France', names: ['France'] },
   { label: 'Spain', names: ['Spain'] },
   { label: 'Portugal', names: ['Portugal'] },
   { label: 'Italy', names: ['Italy'] },
-  { label: 'Netherlands', names: ['Netherlands', 'Holland'], needles: ['Netherlands'] },
+  { label: 'Netherlands', names: ['Netherlands', 'Holland'], needles: ['Netherlands'], aliases: ['Nederland'] },
   { label: 'Belgium', names: ['Belgium'] },
   { label: 'Switzerland', names: ['Switzerland'] },
   { label: 'Austria', names: ['Austria'] },
@@ -386,7 +446,7 @@ const KNOWN_LOCATIONS: readonly KnownLocation[] = [
   { label: 'Hungary', names: ['Hungary'] },
   { label: 'Greece', names: ['Greece'] },
   { label: 'Türkiye', names: ['Türkiye', 'Turkiye', 'Turkey'] },
-  { label: 'United States', names: ['United States', 'USA'], needles: ['United States'] },
+  { label: 'United States', names: ['United States', 'USA'], needles: ['United States'], aliases: ['US', 'U.S.'] },
   { label: 'Canada', names: ['Canada'] },
   { label: 'Mexico', names: ['Mexico'] },
   { label: 'Brazil', names: ['Brazil'] },
@@ -418,6 +478,8 @@ const KNOWN_LOCATIONS: readonly KnownLocation[] = [
   { label: 'APAC', names: ['APAC'] },
   { label: 'LATAM', names: ['LATAM'] },
 ];
+
+const KNOWN_LOCATIONS: readonly KnownLocation[] = [...KNOWN_CITIES, ...KNOWN_REGIONS];
 
 const LOCATION_BY_NAME = new Map<string, KnownLocation>();
 const LOCATION_BY_LABEL = new Map<string, KnownLocation>();
@@ -827,12 +889,18 @@ interface RankedRow {
  * leading `-` to exclude — and it never raises a syntax error on input it does
  * not understand, which `to_tsquery` would.
  */
+/** `within` as SQL; an empty set has already short-circuited the search. */
+function withinPredicate(within: Set<string> | null): Prisma.Sql[] {
+  return within ? [Prisma.sql`j."id" IN (${Prisma.join([...within])})`] : [];
+}
+
 async function lexicalSearch(
   text: string,
   filters: SearchFilters,
-  depth: number
+  depth: number,
+  within: Set<string> | null = null
 ): Promise<RankedRow[]> {
-  const conditions = [Prisma.sql`j."isActive" = true`, ...filterPredicates(filters)];
+  const conditions = [Prisma.sql`j."isActive" = true`, ...filterPredicates(filters), ...withinPredicate(within)];
 
   // Nothing to match on: the query was pure filters ("remote full time above
   // 120k"). The filtered listing itself is then the lexical arm, newest first.
@@ -874,11 +942,13 @@ async function lexicalSearch(
 async function trigramSearch(
   text: string,
   filters: SearchFilters,
-  depth: number
+  depth: number,
+  within: Set<string> | null = null
 ): Promise<RankedRow[]> {
   const conditions = [
     Prisma.sql`j."isActive" = true`,
     ...filterPredicates(filters),
+    ...withinPredicate(within),
     Prisma.sql`j."title" % ${text}`,
   ];
 
@@ -967,6 +1037,13 @@ export interface HybridSearchOptions {
   depth?: number;
   /** Floor on the fused 0–100 figure. Defaults to 0 — see the note below. */
   minRelevance?: number;
+  /**
+   * Jobs the caller's own filters allow (the feed's Location, Experience and
+   * Type selects). Applied inside every arm, before `depth` and `limit` cut
+   * the list: filtering the top hits afterwards left "engineer" + Noida empty
+   * whenever none of the 60 best engineering jobs happened to be in Noida.
+   */
+  within?: Set<string>;
 }
 
 /**
@@ -1027,12 +1104,18 @@ export async function hybridJobSearch(
 
   // Only masked when there is something to mask by; an unfiltered query must not
   // pay for an extra round trip.
-  const allowed = filtered ? await filteredJobIds(parsed.filters) : null;
+  const within = options.within ?? null;
+  if (within && within.size === 0) {
+    return { hits: [], filters: parsed.filters, chips: parsed.chips, remainder: text, mode: modeOf(text, null) };
+  }
+  const inferred = filtered ? await filteredJobIds(parsed.filters) : null;
+  const allowed =
+    inferred && within ? new Set([...inferred].filter((id) => within.has(id))) : (inferred ?? within);
 
   // The arms are independent, so they run together: the vector arm's cost is a
   // possible embedding call, and there is no reason for the SQL to wait on it.
   const [lexicalSettled, vectorSettled] = await Promise.allSettled([
-    lexicalSearch(text, parsed.filters, depth),
+    lexicalSearch(text, parsed.filters, depth, within),
     // With no prose left, embedding the filter words we just removed would
     // reintroduce exactly the bug this module exists to fix.
     text ? vectorSearch(text, allowed, depth) : Promise.resolve(null),
@@ -1054,7 +1137,7 @@ export async function hybridJobSearch(
   // only when the vector arm produced nothing either, which in practice means
   // AI is off or the embedding call failed.
   if (lexical.length === 0 && text && (!vector || vector.length === 0)) {
-    lexical = await trigramSearch(text, parsed.filters, depth);
+    lexical = await trigramSearch(text, parsed.filters, depth, within);
   }
 
   const arms: RankedRow[][] = [lexical];

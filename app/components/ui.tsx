@@ -260,7 +260,7 @@ const ELEVATION_CLASS: Record<Elevation, string> = {
 export function Card({
   children,
   className = "",
-  /** Emerald hairline + faint tint, for a selected or high-signal item. */
+  /** Accent hairline + faint tint, for a selected or high-signal item. */
   signal = false,
   /**
    * Lays graph-paper rules behind the content. For cards whose content is
@@ -369,7 +369,7 @@ export function SignalPanel({
   const Heading = `h${headingLevel}` as const;
 
   return (
-    <div className={`panel flex flex-wrap items-center gap-4 p-3 sm:p-4 ${className}`}>
+    <div className={`panel panel-lit flex flex-wrap items-center gap-4 p-3 sm:p-4 ${className}`}>
       {/* `.tile-accent` rather than six colour utilities: the empty-state tile
           was the same shape with a different set of them, and they had drifted. */}
       <span className="tile tile-accent relative h-10 w-10 flex-shrink-0">
@@ -448,7 +448,7 @@ export function Spinner({
  * inert to assistive tech, so pair it with an `sr-only` "Loading …" where the
  * wait is worth announcing.
  *
- * The fill and the pulse are the `.skeleton` component class rather than
+ * The fill and the sweep are the `.skeleton` component class rather than
  * `bg-gray-200 dark:bg-gray-700`, because three surfaces were hand-rolling that
  * pair and had drifted to three different greys.
  */
@@ -807,10 +807,10 @@ export function EmptyState({
  * guidance".
  */
 export const FIT_BANDS = [
-  { min: 80, label: "Very strong", hint: "Among the closest reads on your profile" },
-  { min: 60, label: "Strong", hint: "Clear overlap with what you list" },
-  { min: 40, label: "Partial", hint: "Some overlap — worth reading the posting" },
-  { min: 0, label: "Exploratory", hint: "Little overlap we can see" },
+  { min: 80, label: "Very strong", hint: "One of your best matches" },
+  { min: 60, label: "Strong", hint: "Good overlap with your profile" },
+  { min: 40, label: "Partial", hint: "Some overlap, worth a look" },
+  { min: 0, label: "Exploratory", hint: "Little overlap" },
 ] as const;
 
 export type FitBand = (typeof FIT_BANDS)[number];
@@ -1088,6 +1088,10 @@ export function Chip({
   title?: string;
 }) {
   const base = `chip ${size === "sm" ? "chip-sm" : ""} ${accent || selected ? "chip-accent" : ""} ${className}`;
+  // A label can be cut short with an ellipsis (a job listed in eleven cities),
+  // so a long one carries its full text as a tooltip too.
+  const fullText = title ?? (typeof children === "string" && children.length > 32 ? children : undefined);
+  const label = <span className="chip-label">{children}</span>;
 
   if (onClick) {
     return (
@@ -1095,28 +1099,28 @@ export function Chip({
         type="button"
         onClick={onClick}
         aria-pressed={selected}
-        title={title}
+        title={fullText}
         className={`${base} chip-interactive interactive hit-24`}
       >
         {icon}
-        {children}
+        {label}
       </button>
     );
   }
 
   if (!onRemove) {
     return (
-      <span className={base} title={title}>
+      <span className={base} title={fullText}>
         {icon}
-        {children}
+        {label}
       </span>
     );
   }
 
   return (
-    <span className={base} title={title}>
+    <span className={base} title={fullText}>
       {icon}
-      {children}
+      {label}
       <button
         type="button"
         onClick={onRemove}
@@ -1291,6 +1295,7 @@ export function StatCard({
   icon,
   tone = "blue",
   hint,
+  highlight = false,
   className = "",
 }: {
   label: string;
@@ -1298,12 +1303,14 @@ export function StatCard({
   icon: React.ReactNode;
   tone?: "blue" | "green" | "purple" | "amber" | "red";
   hint?: string;
+  /** The solid accent card. One per row: the number that row exists to show. */
+  highlight?: boolean;
   className?: string;
 }) {
   const tones = {
     blue: "text-blue-600 dark:text-blue-400",
     green: "text-green-600 dark:text-green-400",
-    purple: "text-violet-600 dark:text-violet-400",
+    purple: "text-gray-500 dark:text-gray-400",
     amber: "text-amber-600 dark:text-amber-400",
     red: "text-red-600 dark:text-red-400",
   }[tone];
@@ -1313,14 +1320,14 @@ export function StatCard({
     // had its own (`hover:border-gray-300 dark:hover:border-gray-600`), whose
     // dark value came from the wrong end of the ramp and read lighter than the
     // border it was meant to strengthen.
-    <div className={`panel panel-interactive p-4 ${className}`}>
+    <div className={`panel panel-interactive p-5 ${highlight ? "surface-accent" : ""} ${className}`}>
       <div className="flex items-start justify-between gap-2">
         <Eyebrow className="min-w-0 truncate">{label}</Eyebrow>
         <span className={`flex-shrink-0 ${tones}`} aria-hidden="true">
           {icon}
         </span>
       </div>
-      <Readout className="mt-3 block text-2xl font-semibold leading-none">{value}</Readout>
+      <Readout className="mt-4 block font-sans text-4xl font-semibold leading-none">{value}</Readout>
       {hint && <p className="mt-1.5 text-xs text-gray-600 dark:text-gray-400">{hint}</p>}
     </div>
   );
@@ -1387,7 +1394,7 @@ export function PageHeading({
     <div className={`flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between ${className}`}>
       <div className="min-w-0">
         {eyebrow && <Eyebrow className="mb-2">{eyebrow}</Eyebrow>}
-        <h1 className="text-balance text-2xl font-bold text-gray-900 dark:text-white sm:text-3xl">
+        <h1 className="text-balance text-3xl font-semibold text-gray-900 dark:text-white sm:text-4xl">
           {title}
         </h1>
         {description && (

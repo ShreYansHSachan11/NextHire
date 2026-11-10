@@ -22,7 +22,7 @@ import { Card, Skeleton, SkeletonRows, SkeletonText } from "@/app/components/ui"
  */
 export default function CoachLoading() {
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen">
       <Navbar />
       <main id="main-content" className="container-responsive py-6 sm:py-8" aria-busy="true">
         <span className="sr-only">Loading your coach</span>
@@ -35,11 +35,11 @@ export default function CoachLoading() {
         <Skeleton className="mb-3 h-8 w-52" />
         <Skeleton className="mb-6 h-4 w-full max-w-xl" />
 
-        <div className="grid gap-5 lg:grid-cols-3 lg:gap-6">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-3 lg:gap-6">
           {/* Role picker. The card carries no padding of its own — the header,
               the filter row and the list each bring theirs, exactly as on the
               loaded page. */}
-          <div className="lg:col-span-1">
+          <div className="min-w-0 lg:col-span-1">
             <Card>
               <div className="border-b border-gray-200 p-4 dark:border-gray-700 sm:p-5">
                 <Skeleton className="mb-2 h-3 w-16" />
@@ -53,7 +53,7 @@ export default function CoachLoading() {
           </div>
 
           {/* Working panel: three tabs across the top, then the body. */}
-          <div className="lg:col-span-2">
+          <div className="min-w-0 lg:col-span-2">
             <Card>
               <div className="grid grid-cols-3 gap-3 border-b border-gray-200 p-4 dark:border-gray-700">
                 {Array.from({ length: 3 }).map((_, index) => (

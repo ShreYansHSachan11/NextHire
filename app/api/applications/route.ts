@@ -433,6 +433,7 @@ export async function POST(req: NextRequest) {
         title: true,
         isActive: true,
         companyId: true,
+        sourceUrl: true,
         // Scoring inputs. One row's worth of vector, and it never leaves the
         // server: the response is built from `application`, not from `job`.
         skills: true,
@@ -458,6 +459,8 @@ export async function POST(req: NextRequest) {
 
     if (!job) return notFound('Job not found');
     if (!job.isActive) return badRequest('This job is no longer accepting applications');
+    // An imported job has no hiring team on NextHire to read the application.
+    if (job.sourceUrl) return badRequest('Apply for this job on the original posting');
 
     // Validated in full before anything is written, so a rejected answer costs
     // the applicant a 400 rather than an application they then cannot re-submit.

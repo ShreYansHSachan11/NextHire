@@ -109,6 +109,30 @@ function ratio(fg, bg) {
  * `["stack", topToken, baseToken]` for a translucent layer over a surface.
  */
 const pairs = () => [
+  // ---- Text on glass, over the canvas and at the peak of the ambient glow ---
+  ["ink on glass", "--ink", ["stack", "--glass-bg", "--canvas"], 4.5],
+  ["text-gray-400 on glass", "--color-gray-400", ["stack", "--glass-bg", "--canvas"], 4.5],
+  ["ink-muted on glass", "--ink-muted", ["stack", "--glass-bg", "--canvas"], 4.5],
+  ["ink-faint on glass", "--ink-faint", ["stack", "--glass-bg", "--canvas"], 4.5],
+  ["ink on glass over glow", "--ink", ["stack", "--glass-bg", "--canvas-lit"], 4.5],
+  ["ink-muted on glass over glow", "--ink-muted", ["stack", "--glass-bg", "--canvas-lit"], 4.5],
+  ["ink-faint on glass over glow", "--ink-faint", ["stack", "--glass-bg", "--canvas-lit"], 4.5],
+  ["ink-faint on raised glass over glow", "--ink-faint", ["stack", "--glass-raised", "--canvas-lit"], 4.5],
+  ["accent-text on glass over glow", "--accent-text", ["stack", "--glass-bg", "--canvas-lit"], 4.5],
+  ["control border on glass over glow", "--line-control", ["stack", "--glass-bg", "--canvas-lit"], 3],
+
+  // ---- The solid slate surface ----------------------------------------------
+  ["white on slate", "#ffffff", "#3d5a80", 4.5],
+  ["muted ink on slate", "#dce5f2", "#3d5a80", 4.5],
+  ["white on hovered slate", "#ffffff", "#45658f", 4.5],
+  ["muted ink on hovered slate", "#dce5f2", "#45658f", 4.5],
+  ["button label on slate surface", "#263a55", "#ffffff", 4.5],
+
+  // ---- Copy on the aurora, at the brightest point of its glow ---------------
+  ["white on aurora peak", "#f4f6f9", ["stack", "rgb(84 120 170 / 0.5)", "#0a0c10"], 4.5],
+  ["muted ink on aurora peak", "#aeb5c1", ["stack", "rgb(84 120 170 / 0.5)", "#0a0c10"], 4.5],
+  ["accent text on aurora peak", "#a9bddd", ["stack", "rgb(84 120 170 / 0.5)", "#0a0c10"], 4.5],
+
   // ---- Body and secondary text on every surface tier -----------------------
   ["ink on canvas", "--ink", "--canvas", 4.5],
   ["ink on surface", "--ink", "--surface", 4.5],
@@ -242,7 +266,7 @@ const pairs = () => [
   ["segment count (unselected) on canvas", "--ink-faint", "--canvas", 4.5],
   // On the filled segment the fade survives, because white on ink has the
   // headroom to spend.
-  ["segment count (selected) on ink fill", ["fade", "--btn-fg", 0.75, "--btn-bg"], "--btn-bg", 4.5],
+  ["segment count (selected) on ink fill", ["fade", "--btn-fg", 0.85, "--btn-bg"], "--btn-bg", 4.5],
   ["segment label (selected) on ink fill", "--btn-fg", "--btn-bg", 4.5],
 
   // ---- Message bubbles ---------------------------------------------------
@@ -252,7 +276,7 @@ const pairs = () => [
   ["bubble body on peer bubble", "--ink", "--surface", 4.5],
   ["bubble time on peer bubble", "--ink-faint", "--surface", 4.5],
   ["bubble body on own bubble", "--btn-fg", "--btn-bg", 4.5],
-  ["bubble time on own bubble", ["fade", "--btn-fg", 0.75, "--btn-bg"], "--btn-bg", 4.5],
+  ["bubble time on own bubble", ["fade", "--btn-fg", 0.85, "--btn-bg"], "--btn-bg", 4.5],
 
   // ---- Quoted excerpt ----------------------------------------------------
   // The rail is the only thing marking the quote, so it is a meaningful

@@ -7,6 +7,7 @@ import { isAiEnabled } from '@/lib/ai/config';
 import { generateJsonFromDocument } from '@/lib/ai/gemini';
 import { syncProfileEmbedding } from '@/lib/ai/embeddings';
 import { RATE_TIERS, checkRateLimit, rateLimited } from '@/lib/rateLimit';
+import { fetchResumeFile } from '@/lib/resumes';
 
 /**
  * Turns the seeker's uploaded resume into the structured profile the matcher
@@ -165,16 +166,18 @@ export async function POST(req: NextRequest) {
       where: { userId: session.id },
       orderBy: { createdAt: 'desc' },
       take: 1,
-      select: { url: true, fileName: true },
+      select: { url: true, publicId: true, fileName: true },
     });
 
     if (!resume) {
       return notFound('Upload a resume first and we will read it into your profile.');
     }
 
+    // Through the signed download API, not `resume.url`: Cloudinary answers
+    // 401 to public PDF URLs on accounts that block PDF delivery.
     let file: Response;
     try {
-      file = await fetch(resume.url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+      file = await fetchResumeFile(resume, FETCH_TIMEOUT_MS);
     } catch (error) {
       console.error('POST /api/ai/resume download failed:', error);
       return NextResponse.json(
@@ -185,8 +188,15 @@ export async function POST(req: NextRequest) {
 
     if (!file.ok) {
       console.error('POST /api/ai/resume download status:', file.status);
+      // A 404 means the file really is gone; anything else is on our side, and
+      // re-uploading would not help.
+      const missing = file.status === 404;
       return NextResponse.json(
-        { error: 'We could not download your resume file. Please try re-uploading it.' },
+        {
+          error: missing
+            ? 'We could not find your resume file. Please upload it again.'
+            : 'We could not open your resume file right now. Please try again in a moment.',
+        },
         { status: 502 }
       );
     }

@@ -35,7 +35,7 @@ export async function generateMetadata({
       },
     });
 
-    if (!job) return { title: "Role not found" };
+    if (!job) return { title: "Job not found" };
 
     const company = job.company?.name ?? "a company";
     // The description is the search-result snippet and the link preview, so it

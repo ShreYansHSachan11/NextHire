@@ -104,7 +104,7 @@ function groupByDay(messages: Message[]): DayGroup[] {
  * label has to sit *on* the hairline — so both need the identical background.
  * Declaring it once keeps the two in step.
  */
-const THREAD_SURFACE = "bg-gray-50 dark:bg-gray-900";
+const THREAD_SURFACE = "bg-[var(--glass-sunken)]";
 
 /* -------------------------------------------------------------------------- */
 /* Page                                                                        */
@@ -164,7 +164,7 @@ function SeekerConversations() {
       setConversations(Array.isArray(data) ? data : []);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Could not load your conversations";
+        error instanceof Error ? error.message : "Couldn’t load your conversations";
       console.error("Failed to load conversations:", error);
       setListError(message);
     } finally {
@@ -230,7 +230,7 @@ function SeekerConversations() {
       } catch (error) {
         if (cancelled) return;
         const message =
-          error instanceof Error ? error.message : "Could not load this conversation";
+          error instanceof Error ? error.message : "Couldn’t load this conversation";
         console.error("Failed to load messages:", error);
         toast.error(message);
       } finally {
@@ -385,21 +385,21 @@ function SeekerConversations() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen">
       <Navbar />
 
       <main id="main-content" className="container-responsive py-6 sm:py-8">
         <PageHeading
-          eyebrow="Seeker inbox"
+          eyebrow="Inbox"
           title="Messages"
-          description="Chat with the employers you have applied to."
+          description="Chat with employers you’ve applied to."
           action={
             isConnected ? (
               // Emerald and the pulse are reserved for genuinely live state, so
               // this only appears once the socket is actually connected.
               <Eyebrow accent className="inline-flex items-center gap-2">
                 <span className="dot-live" aria-hidden="true" />
-                Socket live
+                Live
               </Eyebrow>
             ) : undefined
           }
@@ -474,7 +474,7 @@ function ConversationList({
     <Card className="flex h-full flex-col overflow-hidden">
       <div className="flex items-end justify-between gap-3 border-b border-gray-200 px-4 py-4 dark:border-gray-700 sm:px-6">
         <div className="min-w-0">
-          <Eyebrow className="mb-1.5">Threads</Eyebrow>
+          <Eyebrow className="mb-1.5">Inbox</Eyebrow>
           <h2 className="text-base font-semibold text-gray-900 dark:text-white sm:text-lg">
             Conversations
           </h2>
@@ -522,7 +522,7 @@ function ConversationList({
           <EmptyState
             icon={<Icon.chat className="h-7 w-7" />}
             title="No conversations yet"
-            description="Once you apply to a job you can message the employer straight from your dashboard."
+            description="Apply to a job, then message the employer from your dashboard."
             action={
               <Link href="/jobs" className={buttonPrimary}>
                 <Icon.search className="h-4 w-4" />
@@ -660,7 +660,7 @@ function ChatPanel({
           </div>
         ) : messages.length === 0 ? (
           <p className="py-10 text-center text-sm text-gray-600 dark:text-gray-400">
-            No messages yet — say hello to {conversation.company.name}.
+            No messages yet. Say hello to {conversation.company.name}.
           </p>
         ) : (
           groups.map((group) => (

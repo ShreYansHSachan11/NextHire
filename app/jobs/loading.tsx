@@ -19,13 +19,13 @@ import { JobCardSkeleton } from "@/app/components/skeletons";
  */
 export default function Loading() {
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen">
       <Navbar />
       <main id="main-content" className="container-responsive py-6 sm:py-8">
         <PageHeading
-          eyebrow="Live job feed"
-          title="Open roles"
-          description="Every role currently accepting applications on NextHire."
+          eyebrow="Job search"
+          title="Open jobs"
+          description="Browse every job accepting applications on NextHire."
           className="mb-6"
         />
 
@@ -50,7 +50,7 @@ export default function Loading() {
 
         {/* The skeleton itself is `aria-hidden`; this is the announcement. */}
         <span className="sr-only" role="status">
-          Loading open roles
+          Loading open jobs
         </span>
       </main>
     </div>

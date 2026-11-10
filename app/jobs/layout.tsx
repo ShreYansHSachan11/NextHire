@@ -17,9 +17,9 @@ import type { Metadata } from "next";
  * its own one-line layout.
  */
 export const metadata: Metadata = {
-  title: "Open roles",
+  title: "Open jobs",
   description:
-    "Every role currently accepting applications on NextHire. Filter by location, experience and type, and see how each one lines up with your profile.",
+    "Browse every open job on NextHire. Filter by location, experience and type, and see how well each one fits your profile.",
 };
 
 export default function JobsLayout({ children }: { children: React.ReactNode }) {

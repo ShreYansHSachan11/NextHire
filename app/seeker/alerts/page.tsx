@@ -146,9 +146,9 @@ function resultsHref(query: string): string {
  * beats an empty timestamp that looks like a broken feature.
  */
 function activityLine(search: SavedSearch): string {
-  if (search.frequency === "OFF") return "Paused — not being checked";
+  if (search.frequency === "OFF") return "Paused";
   if (search.lastNotifiedAt) return `Last alert ${formatRelative(search.lastNotifiedAt)}`;
-  if (search.lastRunAt) return `Checked ${formatRelative(search.lastRunAt)} — nothing new yet`;
+  if (search.lastRunAt) return `Checked ${formatRelative(search.lastRunAt)} · nothing new yet`;
   return "Not checked yet";
 }
 
@@ -181,7 +181,7 @@ export default function SeekerAlertsPage() {
       setSearches(data.searches);
       setLimit(data.limit);
     } catch (error) {
-      setLoadError(errorMessage(error, "Could not load your saved searches"));
+      setLoadError(errorMessage(error, "Couldn’t load your saved searches"));
     } finally {
       setLoading(false);
     }
@@ -237,7 +237,7 @@ export default function SeekerAlertsPage() {
        * substituting a generic string here would throw away the only thing that
        * tells the two apart.
        */
-      setCreateError(errorMessage(error, "Could not save that search"));
+      setCreateError(errorMessage(error, "Couldn’t save that search"));
     } finally {
       setCreating(false);
     }
@@ -275,19 +275,19 @@ export default function SeekerAlertsPage() {
   if (!allowed) return null;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen">
       <Navbar />
 
       <main id="main-content" className="container-responsive py-6 sm:py-8">
         <PageHeading
           eyebrow="Job alerts"
           title="Saved searches"
-          description="Save a search once and NextHire keeps running it for you. New roles that fit turn up in your notifications."
+          description="Save a search and we’ll notify you about new jobs that match."
           className="mb-6"
           action={
             <Link href="/jobs" className={buttonSecondary}>
               <Icon.search className="h-4 w-4" />
-              Browse roles
+              Browse jobs
             </Link>
           }
         />
@@ -314,7 +314,7 @@ export default function SeekerAlertsPage() {
                 the label. */}
             <div className="mb-3 flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
               <div className="min-w-0">
-                <Eyebrow className="mb-1.5">Running for you</Eyebrow>
+                <Eyebrow className="mb-1.5">Active</Eyebrow>
                 <h2
                   id="saved-searches-heading"
                   className="text-lg font-semibold text-gray-900 dark:text-white sm:text-xl"
@@ -358,11 +358,11 @@ export default function SeekerAlertsPage() {
                     <EmptyState
                       icon={<Icon.bell className="h-6 w-6" />}
                       title="No saved searches yet"
-                      description="A saved search is a job search you don’t have to repeat. Name one, and every new posting that fits it turns up in your notifications — daily or weekly, your choice."
+                      description="Save a search and get notified about new matches, daily or weekly."
                       action={
                         <Link href="/jobs" className={buttonPrimary}>
                           <Icon.search className="h-4 w-4" />
-                          Find a search to save
+                          Search jobs
                         </Link>
                       }
                     />
@@ -391,7 +391,7 @@ export default function SeekerAlertsPage() {
               <CardHeader
                 eyebrow="New alert"
                 title="Save a search"
-                description="Describe the role the way you would type it into the search box."
+                description="Enter what you’d type into job search."
               />
 
               <form onSubmit={createSearch} className="p-4 sm:p-5">
@@ -411,14 +411,14 @@ export default function SeekerAlertsPage() {
                     value={name}
                     maxLength={NAME_MAX}
                     onChange={(event) => setName(event.target.value)}
-                    placeholder="Remote React roles"
+                    placeholder="Remote React jobs"
                     className={inputClass}
                     disabled={atCap}
                   />
                 </div>
 
                 <div className="mb-4">
-                  <Label htmlFor="alert-query" required hint="The same words you would search the feed with.">
+                  <Label htmlFor="alert-query" required hint="For example, remote React developer.">
                     Search for
                   </Label>
                   <input
@@ -434,7 +434,7 @@ export default function SeekerAlertsPage() {
                 </div>
 
                 <div className="mb-5">
-                  <Label htmlFor="alert-frequency">Tell me</Label>
+                  <Label htmlFor="alert-frequency">Notify me</Label>
                   <select
                     id="alert-frequency"
                     value={frequency}
@@ -454,7 +454,7 @@ export default function SeekerAlertsPage() {
                     button is pressed rather than only in the 409 that follows. */}
                 {atCap && limit !== null && (
                   <Alert variant="warning" className="mb-4">
-                    You are keeping the maximum of {limit} saved searches. Delete one to add another.
+                    You’ve reached the limit of {limit} saved searches. Delete one to add another.
                   </Alert>
                 )}
 
@@ -547,7 +547,7 @@ function SavedSearchRow({
       toast.success("Renamed");
     } catch (renameError) {
       // The duplicate-name 409 lands here with the server's own wording.
-      setError(errorMessage(renameError, "Could not rename that search"));
+      setError(errorMessage(renameError, "Couldn’t rename that search"));
     } finally {
       setPending(null);
     }
@@ -562,7 +562,7 @@ function SavedSearchRow({
         value === "OFF" ? "Alerts paused" : `Alerts set to ${frequencyLabel(value).toLowerCase()}`
       );
     } catch (frequencyError) {
-      setError(errorMessage(frequencyError, "Could not change how often this alerts you"));
+      setError(errorMessage(frequencyError, "Couldn’t change how often this alerts you"));
     } finally {
       setPending(null);
     }
@@ -575,7 +575,7 @@ function SavedSearchRow({
       await onUpdate(search.id, { filters: null });
       toast.success("Filters cleared");
     } catch (filterError) {
-      setError(errorMessage(filterError, "Could not clear those filters"));
+      setError(errorMessage(filterError, "Couldn’t clear those filters"));
     } finally {
       setPending(null);
     }
@@ -595,7 +595,7 @@ function SavedSearchRow({
       await onDelete(search.id);
       toast.success("Saved search deleted");
     } catch (deleteError) {
-      setError(errorMessage(deleteError, "Could not delete that search"));
+      setError(errorMessage(deleteError, "Couldn’t delete that search"));
       setPending(null);
     }
     // No `finally`: on success the row unmounts, and setting state on it would

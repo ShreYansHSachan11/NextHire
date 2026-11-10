@@ -10,12 +10,12 @@ import { Skeleton } from "@/app/components/ui";
  */
 export default function Loading() {
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen">
       <Navbar />
 
       <main id="main-content" className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
         <p className="sr-only" role="status">
-          Loading this posting
+          Loading this job
         </p>
 
         <Skeleton className="h-5 w-40" />

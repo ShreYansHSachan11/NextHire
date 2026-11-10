@@ -322,6 +322,10 @@ export default function SeekerDashboardPage() {
 
   const [resume, setResume] = useState<Resume | null>(null);
   const [resumeLoading, setResumeLoading] = useState(true);
+  // Separate from `resumeLoading`, which goes true again on every refresh. The
+  // first answer decides whether "Needs you" exists at all, and rendering the
+  // page before it pushed everything below down by the height of that section.
+  const [resumeChecked, setResumeChecked] = useState(false);
   const [resumeError, setResumeError] = useState("");
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [uploadError, setUploadError] = useState("");
@@ -374,7 +378,7 @@ export default function SeekerDashboardPage() {
       setApplications(Array.isArray(data) ? data : []);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Could not load your applications";
+        error instanceof Error ? error.message : "Couldn’t load your applications";
       console.error("Failed to load applications:", error);
       setApplicationsError(message);
     } finally {
@@ -396,10 +400,11 @@ export default function SeekerDashboardPage() {
       setResumeError(
         error instanceof Error
           ? error.message
-          : "Could not check whether you have a resume on file"
+          : "Couldn’t check whether you have a resume on file"
       );
     } finally {
       setResumeLoading(false);
+      setResumeChecked(true);
     }
   }, []);
 
@@ -459,7 +464,7 @@ export default function SeekerDashboardPage() {
         if (!cancelled) setSignal(readStoredSignal(record));
       })
       .catch((error: unknown) => {
-        console.error("Could not load your extracted profile:", error);
+        console.error("Couldn’t load your extracted profile:", error);
       });
 
     return () => {
@@ -542,7 +547,7 @@ export default function SeekerDashboardPage() {
       router.push(`/seeker/conversations?conversationId=${conversation.id}`);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Could not open a conversation";
+        error instanceof Error ? error.message : "Couldn’t open a conversation";
       console.error("Failed to start conversation:", error);
       toast.error(message);
     } finally {
@@ -580,7 +585,7 @@ export default function SeekerDashboardPage() {
         toast.success("Application withdrawn");
       } catch (error) {
         const message =
-          error instanceof Error ? error.message : "Could not withdraw the application";
+          error instanceof Error ? error.message : "Couldn’t withdraw the application";
         console.error("Failed to withdraw application:", error);
         // The row reappears on its own. Without this the reader watches it come
         // back with no account of why, which is worse than having waited — and the error toast is `aria-live="assertive"`,
@@ -728,7 +733,7 @@ export default function SeekerDashboardPage() {
       items.push({
         key: "resume",
         title: "No resume on file",
-        detail: "Your resume is sent with every application. Employers respond far more often when one is attached.",
+        detail: "Add a resume to send it with every application.",
         action: (
           <button type="button" onClick={openUpload} className={buttonPrimary}>
             <Icon.upload className="h-4 w-4" />
@@ -741,13 +746,13 @@ export default function SeekerDashboardPage() {
     if (recommendState === "no-profile") {
       items.push({
         key: "profile",
-        title: "Matching has not started",
+        title: "Get your job matches",
         detail:
-          "Matching reads your headline, skills and experience. Fill those in and we will score open roles against them.",
+          "Add your headline, skills and experience, and we’ll score open jobs for you.",
         action: (
           <Link href="/seeker/profile/edit" className={buttonSecondary}>
             <Icon.edit className="h-4 w-4" />
-            Fill in your profile
+            Complete your profile
           </Link>
         ),
       });
@@ -757,9 +762,9 @@ export default function SeekerDashboardPage() {
     if (resume && !resumeLoading && !resumeError && !signal && aiEnabled !== false) {
       items.push({
         key: "analyse",
-        title: "Your resume has not been read yet",
+        title: "Fill your profile from your resume",
         detail:
-          "We can pull a headline, seniority and skills out of the file you uploaded. Everything it finds stays yours to edit.",
+          "We’ll pull your headline, seniority and skills from your resume. You can edit everything.",
         action: (
           <Button
             variant="secondary"
@@ -768,7 +773,7 @@ export default function SeekerDashboardPage() {
             icon={<Icon.spark className="h-4 w-4" />}
             onClick={() => void analyseResume()}
           >
-            {analysing ? "Reading…" : "Read my resume"}
+            {analysing ? "Reading…" : "Import from resume"}
           </Button>
         ),
       });
@@ -791,6 +796,8 @@ export default function SeekerDashboardPage() {
 
   if (!allowed) return null;
 
+  if (!resumeChecked) return <DashboardLoading />;
+
   const resumeFileName = resume ? resume.fileName ?? resume.url.split("/").pop() ?? "resume" : "";
 
   /** What the résumé panel is saying, in one sentence, for the announcer. */
@@ -803,14 +810,14 @@ export default function SeekerDashboardPage() {
         : "No resume uploaded yet.";
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen">
       <Navbar />
 
       <main id="main-content" className="container-responsive py-6 sm:py-8">
         <PageHeading
-          eyebrow="Seeker overview"
+          eyebrow="Dashboard"
           title={user?.name ? `Welcome back, ${user.name}` : "Your dashboard"}
-          description="What needs you, what is in flight, and what is worth a look next."
+          description="Your applications, matches and next steps."
           action={
             <Link href="/jobs" className={buttonPrimary}>
               Browse jobs
@@ -830,10 +837,10 @@ export default function SeekerDashboardPage() {
           <section aria-labelledby="attention-heading" className="mt-6 sm:mt-8">
             <SectionHeading
               id="attention-heading"
-              eyebrow="Needs you"
+              eyebrow="To do"
               icon={<Icon.warning className="h-3.5 w-3.5" />}
-              title="Before you apply to anything else"
-              description="Short list, and it empties itself as you work through it."
+              title="Finish setting up"
+              description="A few quick steps for better matches."
             />
             <Card className="mt-3 divide-y divide-gray-200 dark:divide-gray-700">
               {attentionItems.map((item) => (
@@ -861,22 +868,22 @@ export default function SeekerDashboardPage() {
         {/* ---------------------------------------------------------------- */}
         <section aria-labelledby="pipeline-heading" className="mt-6 sm:mt-8">
           <h2 id="pipeline-heading" className="sr-only">
-            Your application pipeline at a glance
+            Your applications at a glance
           </h2>
 
           {/* Telemetry strip, derived entirely from the applications already in
               state — the bars are the per-status counts, normalised. */}
           <SignalPanel
             headingLevel={3}
-            title="Application pipeline"
+            title="Applications"
             live={stats.inFlight > 0}
             detail={
               applicationsLoading
-                ? "Reading your application history…"
+                ? "Loading your applications…"
                 : applicationsError
-                  ? "Pipeline unavailable — reload below."
+                  ? "Couldn’t load your applications."
                   : stats.total === 0
-                    ? "Nothing in flight yet. Apply to a role to start the pipeline."
+                    ? "No active applications yet. Apply to a job to get started."
                     : `${stats.inFlight} of ${stats.total} still open with an employer`
             }
             value={applicationsLoading ? "—" : formatCount(stats.total)}
@@ -890,11 +897,12 @@ export default function SeekerDashboardPage() {
               what made the top of this page read as a wall. */}
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
             <StatCard
-              label="In flight"
+              highlight
+              label="Active"
               value={applicationsLoading ? "—" : formatCount(stats.inFlight)}
               icon={<Icon.clock className="h-5 w-5" />}
               tone="blue"
-              hint="Still open with an employer"
+              hint="Waiting on employers"
             />
             <StatCard
               label="At interview"
@@ -908,7 +916,7 @@ export default function SeekerDashboardPage() {
               value={applicationsLoading ? "—" : formatCount(stats.accepted)}
               icon={<Icon.checkCircle className="h-5 w-5" />}
               tone="green"
-              hint="Accepted, on the table"
+              hint="Accepted"
             />
           </div>
         </section>
@@ -922,13 +930,13 @@ export default function SeekerDashboardPage() {
           <section aria-labelledby="matched-heading" className="mt-6 sm:mt-8">
             <SectionHeading
               id="matched-heading"
-              eyebrow="Profile match"
+              eyebrow="Recommended"
               icon={<Icon.spark className="h-3.5 w-3.5" />}
-              title="Matched to you"
-              description="Open roles scored against your profile, strongest fit first. It orders your feed — it decides nothing."
+              title="Jobs for you"
+              description="Ranked by how well they fit your profile."
               meta={
                 recommendState === "ready" ? (
-                  <Eyebrow>{recommendations.length} roles scored</Eyebrow>
+                  <Eyebrow>{recommendations.length} jobs scored</Eyebrow>
                 ) : undefined
               }
             />
@@ -997,15 +1005,15 @@ export default function SeekerDashboardPage() {
           <Card>
             <div className="flex flex-col gap-4 border-b border-gray-200 px-4 py-4 dark:border-gray-700 sm:px-6 lg:flex-row lg:items-end lg:justify-between">
               <div className="min-w-0">
-                <Eyebrow className="mb-1.5">Pipeline</Eyebrow>
+                <Eyebrow className="mb-1.5">Applications</Eyebrow>
                 <h2
                   id="applications-heading"
                   className="text-lg font-semibold text-gray-900 dark:text-white sm:text-xl"
                 >
-                  My applications
+                  Your applications
                 </h2>
                 <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                  Every application you have sent, and exactly where each one stands.
+                  Track where each application stands.
                 </p>
               </div>
 
@@ -1087,7 +1095,7 @@ export default function SeekerDashboardPage() {
                 <EmptyState
                   icon={<Icon.briefcase className="h-7 w-7" />}
                   title="No applications yet"
-                  description="Start your search by applying to roles that match your skills."
+                  description="Find a job that fits and apply."
                   action={
                     <Link href="/jobs" className={buttonPrimary}>
                       <Icon.search className="h-4 w-4" />
@@ -1103,7 +1111,7 @@ export default function SeekerDashboardPage() {
                   // the "ALL" case. Unreachable today only because of the branch
                   // above it — one more filter state and it would be a crash.
                   title={`No ${FILTER_LABELS[statusFilter].toLowerCase()} applications`}
-                  description="Every other status is still there — clear the filter to see the rest."
+                  description="Clear the filter to see all applications."
                   action={
                     <button
                       type="button"
@@ -1141,9 +1149,9 @@ export default function SeekerDashboardPage() {
         <section aria-labelledby="record-heading" className="mt-6 sm:mt-8">
           <SectionHeading
             id="record-heading"
-            eyebrow="Record"
-            title="Profile and documents"
-            description="What employers see alongside every application you send."
+            eyebrow="Profile"
+            title="Profile and resume"
+            description="What employers see when you apply."
             meta={
               <Link href="/seeker/profile/edit" className={buttonSecondary}>
                 <Icon.edit className="h-4 w-4" />
@@ -1156,9 +1164,9 @@ export default function SeekerDashboardPage() {
             <Card>
               <CardHeader
                 headingLevel={3}
-                eyebrow="Identity"
+                eyebrow="Personal"
                 title="Your details"
-                description="Shown to an employer with every application."
+                description="Shared with employers when you apply."
               />
               <dl className="grid gap-3 p-4 sm:grid-cols-2 sm:p-5">
                 <ReadOnlyField label="Full name" value={user?.name} />
@@ -1176,9 +1184,9 @@ export default function SeekerDashboardPage() {
               <div ref={resumeSectionRef} className="scroll-mt-24">
                 <CardHeader
                   headingLevel={3}
-                  eyebrow="Attachment"
+                  eyebrow="Documents"
                   title="Resume"
-                  description="One file on record, sent with every application."
+                  description="Sent with every application."
                 />
 
                 <div className="p-4 sm:p-5">
@@ -1225,7 +1233,7 @@ export default function SeekerDashboardPage() {
                         </div>
                       </dl>
                       <a
-                        href={resume.url}
+                        href={`/api/resumes/${resume.id}/file`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className={`${buttonSecondary} mt-3`}
@@ -1239,7 +1247,7 @@ export default function SeekerDashboardPage() {
                     <Alert variant="warning">
                       <p className="font-medium">No resume uploaded yet</p>
                       <p className="mt-0.5">
-                        Employers are far more likely to respond when a resume is attached.
+                        Add a resume to send it with your applications.
                       </p>
                     </Alert>
                   )}
@@ -1327,12 +1335,10 @@ export default function SeekerDashboardPage() {
                     <div className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-700">
                       <Eyebrow className="mb-1.5 flex items-center gap-1.5" as="div">
                         <Icon.spark className="h-3.5 w-3.5" />
-                        Resume intelligence
+                        Import from resume
                       </Eyebrow>
                       <p className="max-w-prose text-sm text-gray-600 dark:text-gray-400">
-                        We can read this file into a structured profile — headline, seniority,
-                        skills — which is what job matching scores against. It is a draft of your
-                        profile, never a verdict on it, and everything it finds stays yours to edit.
+                        Turn your resume into a profile draft with your headline, seniority and skills. We use it to match you with jobs, and you can edit everything.
                       </p>
                       <Button
                         variant="secondary"
@@ -1345,8 +1351,8 @@ export default function SeekerDashboardPage() {
                         {analysing
                           ? "Reading your resume…"
                           : signal
-                            ? "Analyse again"
-                            : "Analyse resume"}
+                            ? "Run again"
+                            : "Analyze resume"}
                       </Button>
 
                       {analyseNotice && (
@@ -1364,7 +1370,7 @@ export default function SeekerDashboardPage() {
                   {signal && (
                     <Disclosure
                       className="mt-4"
-                      label="What we read from your resume"
+                      label="From your resume"
                       meta={signal.updatedAt ? formatRelative(signal.updatedAt) : undefined}
                     >
                       <ExtractedProfile signal={signal} />
@@ -1786,7 +1792,7 @@ function MatchedJobCard({
       <div className="mt-auto flex items-center justify-between gap-3 pt-4">
         <Eyebrow>{formatCount(applicants)} applied</Eyebrow>
         <Link href={`/jobs/${job.id}`} className={buttonGhost}>
-          View role
+          View job
           <Icon.arrowUpRight className="h-4 w-4" />
         </Link>
       </div>
@@ -1814,8 +1820,7 @@ function ExtractedProfile({ signal }: { signal: ProfileSignal }) {
             {signal.updatedAt && <span>· {formatRelative(signal.updatedAt)}</span>}
           </Eyebrow>
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            Read out of your resume by our matching model. It is a draft of your profile, not a
-            verdict on it — correct anything that is wrong.
+            Drafted by AI from your resume. Correct anything that’s wrong.
           </p>
         </div>
         <Link href="/seeker/profile/edit" className={buttonSecondary}>

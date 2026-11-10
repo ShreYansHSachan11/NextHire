@@ -6,8 +6,13 @@ import { useEffect, useState } from "react";
 import { useSelector } from "react-redux";
 import type { RootState } from "@/store/store";
 import Navbar from "@/app/components/Navbar";
+import { ResumeScanCard } from "@/app/components/Showcase";
+import { compactLocation } from "@/app/components/JobCard";
 import {
+  Avatar,
   Card,
+  FIT_BANDS,
+  coarseFit,
   Eyebrow,
   Icon,
   NumberedItem,
@@ -44,6 +49,18 @@ export default function Home() {
   useEffect(() => setMounted(true), []);
 
   const [stats, setStats] = useState<StatsState>({ status: "loading" });
+
+  // Arriving from another page via a navbar link like "/#how-it-works": the
+  // router lands before the sections have their final height, so the browser's
+  // own jump falls short. Scroll once the page has laid out.
+  useEffect(() => {
+    const id = window.location.hash.slice(1);
+    if (!id) return;
+    const timer = window.setTimeout(() => {
+      document.getElementById(id)?.scrollIntoView({ block: "start" });
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,10 +103,10 @@ export default function Home() {
   // company that was already signed in and one click away from posting.
   const primaryCta = isCompany
     ? { href: "/jobs/post", label: "Post a job" }
-    : { href: "/jobs", label: "Browse roles" };
+    : { href: "/jobs", label: "Find jobs" };
 
   const secondaryCta = signedIn
-    ? { href: dashboardHref, label: "My dashboard" }
+    ? { href: dashboardHref, label: "Dashboard" }
     : { href: "/auth/register", label: "Post a job" };
 
   const ready = stats.status === "ready" ? stats.data : null;
@@ -108,25 +125,28 @@ export default function Home() {
   const postHref = isCompany ? "/jobs/post" : "/auth/register";
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <Navbar variant="marketing" />
+    <div className="min-h-screen">
+      <Navbar />
 
       <main id="main-content">
         {/* ---------------------------------------------------------------- */}
         {/* Hero — graph-paper field, tight display type, left aligned         */}
         {/* ---------------------------------------------------------------- */}
         <section className="grid-field grid-field-trailing border-b border-gray-200 dark:border-gray-700">
-          <div className="container-responsive py-14 sm:py-20 lg:py-24">
-            <Eyebrow className="mb-4">Signal-based matching</Eyebrow>
+          <div className="container-responsive grid gap-12 py-14 sm:py-20 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] lg:items-center lg:py-24">
+            <div className="min-w-0">
+            <span className="badge-pill mb-6 animate-fade-in-up">
+              <span className="live-dot" aria-hidden="true" />
+              AI resume matching
+            </span>
 
-            <h1 className="max-w-4xl text-4xl font-bold leading-[1.05] text-gray-900 dark:text-white sm:text-5xl lg:text-6xl">
-              Map your real experience to the roles that actually need it.
+            <h1 className="max-w-4xl text-4xl font-bold leading-[1.04] text-gray-900 dark:text-white sm:text-5xl lg:text-[4rem]">
+              Your resume, understood.{" "}
+              <span className="text-gradient sm:block">Your next job, found.</span>
             </h1>
 
-            <p className="mt-5 max-w-xl text-base text-gray-600 dark:text-gray-400 sm:text-lg">
-              Every open role on NextHire in one searchable index — filter it down to the work
-              you have actually done, apply with a stored resume, and follow each application
-              through to the conversation.
+            <p className="mt-6 max-w-xl text-base text-gray-600 dark:text-gray-400 sm:text-lg">
+              Upload your resume once. AI reads your experience and ranks every open job by how well it fits.
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -144,7 +164,7 @@ export default function Home() {
             {/* -------------------------------------------------------------- */}
             <form
               role="search"
-              aria-label="Search open roles"
+              aria-label="Search open jobs"
               onSubmit={handleSearch}
               className="panel panel-raised mt-10 flex max-w-3xl flex-col gap-1.5 p-1.5 sm:flex-row sm:items-center"
             >
@@ -153,7 +173,7 @@ export default function Home() {
               <div className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2">
                 <Icon.search className="h-4 w-4 flex-shrink-0 text-gray-500" />
                 <label htmlFor="hero-keyword" className="sr-only">
-                  Role, skill or company
+                  Job title, skill or company
                 </label>
                 <input
                   id="hero-keyword"
@@ -161,7 +181,7 @@ export default function Home() {
                   type="search"
                   value={keyword}
                   onChange={(event) => setKeyword(event.target.value)}
-                  placeholder="Role, skill or company"
+                  placeholder="Job title, skill or company"
                   className="field-bare w-full min-w-0 text-sm"
                 />
               </div>
@@ -182,13 +202,13 @@ export default function Home() {
                   type="search"
                   value={place}
                   onChange={(event) => setPlace(event.target.value)}
-                  placeholder="Location or remote"
+                  placeholder="City or remote"
                   className="field-bare w-full min-w-0 text-sm"
                 />
               </div>
 
               <button type="submit" className={`${buttonPrimary} w-full sm:w-auto`}>
-                Search roles
+                Search jobs
               </button>
             </form>
 
@@ -202,8 +222,8 @@ export default function Home() {
                 // An h3 here would skip a level: the nearest heading above is the
                 // page h1 and the first h2 is further down the page.
                 headingLevel={2}
-                title="Live role graph"
-                detail="Counting the roles open right now."
+                title="Hiring now"
+                detail="Loading open jobs…"
               />
             )}
 
@@ -212,32 +232,34 @@ export default function Home() {
                 className="mt-4 max-w-3xl"
                 live
                 headingLevel={2}
-                title="Live role graph"
+                title="Hiring now"
                 // `formatCount` on both halves: the sentence and the readout
                 // beside it are the same figure, and they used to disagree
                 // above a thousand ("1,200 open roles" next to "1.2k").
                 // `toLocaleString()` with no locale also follows the visitor's
                 // runtime, while the readout is hard-coded English either way.
-                detail={`${formatCount(ready.jobs)} open roles mapped across ${formatCount(
+                detail={`${formatCount(ready.jobs)} open jobs at ${formatCount(
                   ready.companies
                 )} companies.`}
                 value={formatCount(ready.jobs)}
-                valueLabel="Open roles"
+                valueLabel="Open jobs"
               />
             )}
 
             {ready && ready.jobs === 0 && (
               <div className="panel mt-4 flex max-w-3xl flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  No roles are open here yet. New postings show up in the index the moment they
-                  go live.
+                  No open jobs yet. New jobs appear here as soon as they’re posted.
                 </p>
                 <Link href={postHref} className={`${buttonSecondary} flex-shrink-0`}>
-                  {isCompany ? "Post a role" : "Post the first role"}
+                  {isCompany ? "Post a job" : "Post the first job"}
                   <Icon.arrowRight className="h-4 w-4" />
                 </Link>
               </div>
             )}
+            </div>
+
+            <ResumeScanCard className="hidden lg:block" />
           </div>
         </section>
 
@@ -255,8 +277,9 @@ export default function Home() {
               </h2>
               <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
                 <StatCard
-                  label="Open roles"
-                  value={<StatValue value={ready?.jobs} label="Open roles" />}
+                  highlight
+                  label="Open jobs"
+                  value={<StatValue value={ready?.jobs} label="Open jobs" />}
                   icon={
                     <StatIcon accent>
                       <Icon.briefcase className="h-4 w-4" />
@@ -301,44 +324,50 @@ export default function Home() {
         <section id="features" className="py-16 sm:py-20">
           <div className="container-responsive">
             <div className="max-w-2xl">
-              <Eyebrow className="mb-3">What the platform does</Eyebrow>
+              <Eyebrow className="mb-3">Why NextHire</Eyebrow>
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white sm:text-3xl lg:text-4xl">
-                Three surfaces, one signal path.
+                AI that does the busywork.
               </h2>
               <p className="mt-4 text-base text-gray-600 dark:text-gray-400">
-                A role is posted, a profile is read against it, and the two sides end up in the
-                same thread. Nothing leaks into a spreadsheet along the way.
+                From the first upload to the interview, NextHire reads, ranks and explains.
               </p>
             </div>
 
-            <div className="mt-10 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 sm:mt-12">
+            <div className="mt-10 grid grid-cols-1 gap-4 sm:mt-12 md:grid-cols-2 lg:grid-cols-4">
               <Feature
-                eyebrow="Role index"
-                icon={<Icon.graph className="h-5 w-5" />}
-                title="One searchable index"
-                description="Every live posting in a single feed you can filter by location, type and experience. The filter options are read off the live postings, so nothing is offered that does not exist."
+                index={1}
+                icon={<Icon.document className="h-5 w-5" />}
+                title="Reads your resume"
+                description="Upload a PDF and your skills, seniority and experience fill in automatically."
               />
               <Feature
-                eyebrow="Apply once"
+                index={2}
+                icon={<Icon.search className="h-5 w-5" />}
+                title="Search in plain words"
+                description="Try “remote React jobs”. Results match on meaning, not just keywords."
+              />
+              <Feature
+                index={3}
                 icon={<Icon.pulse className="h-5 w-5" />}
-                title="Signal, not paperwork"
-                description="Store a resume once and attach an optional cover note. Each application then carries its own state — pending, shortlisted, interview, offer — legible at a glance."
+                title="Fit you can see"
+                description="Every job shows how well it fits you, which skills match and what’s missing."
               />
               <Feature
-                eyebrow="Direct line"
-                icon={<Icon.chat className="h-5 w-5" />}
-                title="Straight to the hiring team"
-                description="Messaging and notifications are built in, so a shortlist or an interview invite reaches you here rather than in a forwarded email thread."
-                className="md:col-span-2 lg:col-span-1"
+                index={4}
+                icon={<Icon.spark className="h-5 w-5" />}
+                title="A career coach on call"
+                description="Find skill gaps, draft a cover letter and practice for interviews for any job."
               />
             </div>
           </div>
         </section>
 
+        <JobsShowcase signedIn={signedIn} isSeeker={signedIn && !isCompany} />
+
         {/* ---------------------------------------------------------------- */}
         {/* Dark band — how it works                                          */}
         {/* ---------------------------------------------------------------- */}
-        <section id="how-it-works" className="band-dark py-16 sm:py-24">
+        <section id="how-it-works" className="band-dark aurora py-16 sm:py-24">
           <div className="container-responsive">
             <div className="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:gap-16">
               <div className="max-w-lg">
@@ -346,37 +375,32 @@ export default function Home() {
                   How it works
                 </Eyebrow>
                 <h2 className="text-2xl font-bold leading-tight text-white sm:text-3xl lg:text-4xl">
-                  From an empty account to a real conversation, without leaving the platform.
+                  From sign-up to offer in four steps.
                 </h2>
                 <p className="mt-5 text-base leading-relaxed text-gray-400">
-                  Four steps, the same four for both sides of a hire. Everything a candidate
-                  sends and everything a company decides stays attached to the role it belongs to.
+                  The same simple steps for job seekers and employers.
                 </p>
               </div>
 
               <ol className="space-y-8">
                 <li>
                   <NumberedItem index={1} title="Create an account">
-                    Sign up as a job seeker or as an employer — an employer account comes with a
-                    company workspace attached.
+                    Join as a job seeker or an employer.
                   </NumberedItem>
                 </li>
                 <li>
-                  <NumberedItem index={2} title="Complete your profile">
-                    Seekers upload a resume; companies fill in the details candidates ask about
-                    first. This is the signal everything else is matched against.
+                  <NumberedItem index={2} title="Build your profile">
+                    Upload your resume, or add your company details.
                   </NumberedItem>
                 </li>
                 <li>
-                  <NumberedItem index={3} title="Find or post">
-                    Browse the index and filter it down, or publish a role and watch applications
-                    arrive against it.
+                  <NumberedItem index={3} title="Apply or post">
+                    Find jobs that fit, or post a job and start receiving applications.
                   </NumberedItem>
                 </li>
                 <li>
                   <NumberedItem index={4} title="Connect">
-                    Apply, shortlist, message and move candidates through the stages — every
-                    state change is recorded on the application itself.
+                    Message each other and follow every application through to the outcome.
                   </NumberedItem>
                 </li>
               </ol>
@@ -387,12 +411,12 @@ export default function Home() {
         {/* ---------------------------------------------------------------- */}
         {/* Audience split                                                    */}
         {/* ---------------------------------------------------------------- */}
-        <section className="py-16 sm:py-20">
+        <section id="for-employers" className="py-16 sm:py-20">
           <div className="container-responsive">
             <div className="max-w-2xl">
-              <Eyebrow className="mb-3">Two sides, one hire</Eyebrow>
+              <Eyebrow className="mb-3">Who it’s for</Eyebrow>
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white sm:text-3xl lg:text-4xl">
-                Each side gets its own workspace.
+                Built for both sides of hiring.
               </h2>
             </div>
 
@@ -400,28 +424,28 @@ export default function Home() {
               <AudiencePanel
                 eyebrow="For job seekers"
                 icon={<Icon.user className="h-5 w-5" />}
-                title="Find the role your work already fits"
+                title="Find your next job"
                 points={[
-                  "Search and filter every open role, free and without an account",
-                  "Apply with a stored resume and an optional cover note",
-                  "Track each application's state — pending, shortlisted, interview, offer",
-                  "Get notified the moment a company moves you forward",
+                  "Browse every open job, no account needed",
+                  "Apply with your saved resume and a cover letter",
+                  "Track each application from submitted to offer",
+                  "Get notified when a company moves you forward",
                 ]}
                 action={
                   signedIn && !isCompany
-                    ? { href: "/seeker/dashboard", label: "Go to my dashboard" }
-                    : { href: "/jobs", label: "Browse open roles" }
+                    ? { href: "/seeker/dashboard", label: "Go to dashboard" }
+                    : { href: "/jobs", label: "Find jobs" }
                 }
               />
               <AudiencePanel
                 eyebrow="For employers"
                 icon={<Icon.briefcase className="h-5 w-5" />}
-                title="Read the applicants, not the inbox"
+                title="Review applicants in one place"
                 points={[
-                  "Publish a role in a couple of minutes, edit or close it any time",
-                  "See every applicant, their resume and their cover note in one list",
-                  "Move candidates through stages and keep the whole team in sync",
-                  "Message shortlisted candidates directly from the application",
+                  "Post a job in minutes, and edit or close it any time",
+                  "See each applicant’s resume and cover letter in one list",
+                  "Move applicants through each hiring stage",
+                  "Message applicants directly",
                 ]}
                 action={
                   isCompany
@@ -438,28 +462,28 @@ export default function Home() {
         {/* ---------------------------------------------------------------- */}
         <section className="pb-16 sm:pb-20">
           <div className="container-responsive">
-            <Card grid className="px-6 py-10 text-center sm:px-10 sm:py-12">
+            <Card className="surface-accent px-6 py-12 text-center sm:px-10 sm:py-16">
               <Eyebrow className="mb-3">{signedIn ? "Welcome back" : "Get started"}</Eyebrow>
-              <h2 className="mx-auto max-w-xl text-xl font-bold text-gray-900 dark:text-white sm:text-2xl">
+              <h2 className="mx-auto max-w-2xl text-3xl font-semibold leading-tight text-gray-900 dark:text-white sm:text-4xl">
                 {signedIn
                   ? "Pick up where you left off."
-                  : "Put your experience where it can be matched."}
+                  : "Your next job starts here."}
               </h2>
               <p className="mx-auto mt-3 max-w-md text-sm text-gray-600 dark:text-gray-400 sm:text-base">
                 {signedIn
-                  ? "Your dashboard has your latest activity and everything waiting on you."
-                  : "Create an account and start applying — or start hiring — today."}
+                  ? "See your latest activity and what needs your attention."
+                  : "Create a free account to start applying or hiring."}
               </p>
               <div className="mt-7 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
                 <Link
                   href={signedIn ? dashboardHref : "/auth/register"}
                   className={`${buttonPrimary} ${buttonLarge}`}
                 >
-                  {signedIn ? "Open my dashboard" : "Create an account"}
+                  {signedIn ? "Go to dashboard" : "Create an account"}
                   <Icon.arrowUpRight className="h-4 w-4" />
                 </Link>
                 <Link href="/jobs" className={`${buttonSecondary} ${buttonLarge}`}>
-                  Browse roles
+                  Find jobs
                 </Link>
               </div>
             </Card>
@@ -486,8 +510,7 @@ export default function Home() {
                 </span>
               </span>
               <p className="mt-4 max-w-sm text-sm text-gray-600 dark:text-gray-400">
-                Connecting people looking for work with the teams looking for them — post a role,
-                apply to one, and keep the whole conversation in one place.
+                Connecting people with the teams hiring them.
               </p>
             </div>
 
@@ -500,7 +523,7 @@ export default function Home() {
                   <FooterLink href="/jobs">Browse jobs</FooterLink>
                 </li>
                 <li>
-                  <FooterLink href="/auth/register">Create a profile</FooterLink>
+                  <FooterLink href="/auth/register">Create an account</FooterLink>
                 </li>
                 <li>
                   <FooterLink href="/auth/login">Sign in</FooterLink>
@@ -533,7 +556,7 @@ export default function Home() {
                 the same `mounted` gate the rest of the page already uses for
                 client-only values; the server renders the name alone. */}
             <p className="mono text-xs text-gray-600 dark:text-gray-400">
-              &copy; {mounted ? `${new Date().getFullYear()} ` : ""}NEXTHIRE — ALL RIGHTS RESERVED
+              &copy; {mounted ? `${new Date().getFullYear()} ` : ""}NextHire. All rights reserved.
             </p>
           </div>
         </div>
@@ -564,7 +587,11 @@ function StatValue({ value, label }: { value?: number; label: string }) {
   if (value === undefined) {
     return (
       <>
-        <Skeleton className="h-6 w-14" />
+        {/* The row keeps the height of a loaded number, so nothing moves when one
+            arrives; the bar itself stays about the height of a digit. */}
+        <span className="flex h-9 items-center">
+          <Skeleton className="h-5 w-16" rounded="rounded-full" />
+        </span>
         <span className="sr-only">Loading {label}</span>
       </>
     );
@@ -573,30 +600,178 @@ function StatValue({ value, label }: { value?: number; label: string }) {
 }
 
 function Feature({
-  eyebrow,
+  index,
   icon,
   title,
   description,
-  className = "",
 }: {
-  eyebrow: string;
+  index: number;
   icon: React.ReactNode;
   title: string;
   description: string;
-  className?: string;
 }) {
   return (
-    <Card className={`p-6 ${className}`}>
-      <span
-        className="tile mb-5 h-10 w-10"
-        aria-hidden="true"
-      >
-        {icon}
-      </span>
-      <Eyebrow className="mb-2">{eyebrow}</Eyebrow>
+    <Card className="panel-interactive flex h-full flex-col p-6">
+      <div className="mb-6 flex items-center justify-between">
+        <span className="mono text-sm font-medium text-blue-600 dark:text-blue-400">
+          {String(index).padStart(2, "0")}
+        </span>
+        <span className="tile tile-accent h-10 w-10" aria-hidden="true">
+          {icon}
+        </span>
+      </div>
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
       <p className="mt-2 text-sm leading-relaxed text-gray-600 dark:text-gray-400">{description}</p>
     </Card>
+  );
+}
+
+interface ShowcaseJob {
+  id: string;
+  title: string;
+  location?: string | null;
+  salary?: string | null;
+  type?: string | null;
+  skills?: string[];
+  company?: { name: string } | null;
+  match?: { score: number } | null;
+}
+
+type ShowcaseState =
+  | { status: "loading" }
+  | { status: "ready"; jobs: ShowcaseJob[]; recommended: boolean }
+  | { status: "hidden" };
+
+/**
+ * Real jobs on the homepage: a seeker's best matches when they have a profile,
+ * otherwise the newest openings. Never placeholder data — if nothing loads, the
+ * section is left out.
+ */
+function JobsShowcase({ signedIn, isSeeker }: { signedIn: boolean; isSeeker: boolean }) {
+  const [state, setState] = useState<ShowcaseState>({ status: "loading" });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      if (isSeeker) {
+        try {
+          const data = await apiFetch<{ jobs: ShowcaseJob[] }>("/api/jobs/recommended?limit=4");
+          if (data.jobs?.length) return { jobs: data.jobs.slice(0, 4), recommended: true };
+        } catch {
+          // Fall through to the newest jobs.
+        }
+      }
+      const jobs = await apiFetch<ShowcaseJob[]>("/api/jobs");
+      return { jobs: Array.isArray(jobs) ? jobs.slice(0, 4) : [], recommended: false };
+    };
+
+    load()
+      .then(({ jobs, recommended }) => {
+        if (cancelled) return;
+        setState(jobs.length ? { status: "ready", jobs, recommended } : { status: "hidden" });
+      })
+      .catch(() => {
+        if (!cancelled) setState({ status: "hidden" });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isSeeker, signedIn]);
+
+  if (state.status === "hidden") return null;
+
+  const recommended = state.status === "ready" && state.recommended;
+
+  return (
+    <section className="pb-16 sm:pb-20" aria-labelledby="jobs-showcase-heading">
+      <div className="container-responsive">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2
+              id="jobs-showcase-heading"
+              className="text-2xl font-bold text-gray-900 dark:text-white sm:text-3xl lg:text-4xl"
+            >
+              {recommended ? "Recommended for you" : "Latest jobs"}
+            </h2>
+            <p className="mt-2 text-base text-gray-600 dark:text-gray-400">
+              {recommended ? "Ranked by fit with your resume." : "New openings from companies hiring now."}
+            </p>
+          </div>
+          <Link href="/jobs" className={`${buttonSecondary} self-start sm:self-auto`}>
+            View all jobs
+            <Icon.arrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+
+        <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2">
+          {state.status === "loading"
+            ? Array.from({ length: 4 }, (_, index) => (
+                <div key={index} className="panel p-5" aria-hidden="true">
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="h-10 w-10" rounded="rounded-[var(--radius-control)]" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-4 w-1/2" />
+                      <Skeleton className="h-3 w-1/3" />
+                    </div>
+                  </div>
+                  <Skeleton className="mt-6 h-6 w-2/5" rounded="rounded-full" />
+                </div>
+              ))
+            : state.jobs.map((job, index) => (
+                <ShowcaseJobCard key={job.id} job={job} lead={recommended && index === 0} />
+              ))}
+        </div>
+        {state.status === "loading" && <span className="sr-only">Loading jobs</span>}
+      </div>
+    </section>
+  );
+}
+
+function ShowcaseJobCard({ job, lead }: { job: ShowcaseJob; lead: boolean }) {
+  const company = job.company?.name ?? "Company";
+  const score = job.match?.score;
+  const band = score !== undefined ? FIT_BANDS.find((b) => score >= b.min) : undefined;
+  const meta = [company, compactLocation(job.location)?.label].filter(Boolean).join(" · ");
+
+  return (
+    <Link
+      href={`/jobs/${job.id}`}
+      className={`panel panel-interactive flex flex-col p-5 ${lead ? "panel-glow" : ""}`}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <Avatar name={company} />
+          <div className="min-w-0">
+            <h3 className="truncate text-base font-semibold text-gray-900 dark:text-white">{job.title}</h3>
+            <p className="truncate text-sm text-gray-600 dark:text-gray-400">{meta}</p>
+          </div>
+        </div>
+        {score !== undefined && band && (
+          <p className="flex-shrink-0 text-right">
+            <span className="text-gradient block text-2xl font-semibold leading-none tracking-tight">
+              {coarseFit(score)}
+            </span>
+            <span className="eyebrow mt-1 block">{band.label} fit</span>
+          </p>
+        )}
+      </div>
+
+      <div className="mt-5 flex items-center justify-between gap-3 border-t border-[var(--line)] pt-4">
+        <div className="flex min-w-0 flex-wrap gap-1.5">
+          {(job.skills ?? []).slice(0, 3).map((skill) => (
+            <span key={skill} className="chip">
+              {skill}
+            </span>
+          ))}
+          {!job.skills?.length && job.type && <span className="chip">{job.type}</span>}
+        </div>
+        {job.salary && (
+          <span className="flex-shrink-0 text-sm font-semibold text-gray-900 dark:text-white">{job.salary}</span>
+        )}
+      </div>
+    </Link>
   );
 }
 

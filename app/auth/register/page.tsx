@@ -9,6 +9,7 @@ import { login } from "@/store/authSlice";
 import type { AppDispatch, RootState } from "@/store/store";
 import { apiFetch, setToken } from "@/lib/clientAuth";
 import { MIN_PASSWORD_LENGTH, isValidEmail, validatePassword } from "@/lib/validation";
+import { ShowcaseBento } from "@/app/components/Showcase";
 import { ThemeToggle } from "@/app/components/ThemeProvider";
 import {
   Alert,
@@ -18,9 +19,15 @@ import {
   Eyebrow,
   Icon,
   Label,
-  NumberedItem,
-  inputClass,
+    inputClass,
 } from "@/app/components/ui";
+
+// In the order the bento pictures them: a fit band, a stage meter, a thread.
+const SHOWCASE_STEPS = [
+  { title: "See your fit", body: "Every match comes with the reasons behind it." },
+  { title: "Track your progress", body: "Applications, status and messages, all in one place." },
+  { title: "Write it your way", body: "Describe yourself or your job in plain words. No keyword games." },
+] as const;
 
 interface AuthUser {
   id: string;
@@ -54,7 +61,7 @@ const ROLE_OPTIONS: RoleOption[] = [
     value: "SEEKER",
     eyebrow: "Candidate",
     title: "I'm looking for a job",
-    description: "Browse roles, apply in a click and message hiring teams directly.",
+    description: "Find jobs, apply with your saved resume and message hiring teams.",
     icon: <Icon.search className="h-3.5 w-3.5" />,
   },
   {
@@ -62,7 +69,7 @@ const ROLE_OPTIONS: RoleOption[] = [
     eyebrow: "Employer",
     title: "I'm hiring",
     description:
-      "Creates a company workspace named after you, where you post jobs and review applicants. You can rename it later from your company profile.",
+      "We’ll create a company account in your name. Rename it any time from your company profile.",
     icon: <Icon.briefcase className="h-3.5 w-3.5" />,
   },
 ];
@@ -179,7 +186,7 @@ export default function RegisterPage() {
 
       router.push(dashboardFor(data.user.role));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Registration failed");
+      setError(err instanceof Error ? err.message : "Couldn’t create your account");
       // Keep the form disabled only while the request is in flight; on success
       // we navigate away, so re-enabling would allow a duplicate submission.
       setLoading(false);
@@ -199,7 +206,7 @@ export default function RegisterPage() {
   };
 
   return (
-    <main id="main-content" className="min-h-screen lg:grid lg:grid-cols-2">
+    <main id="main-content" className="min-h-screen lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
       {/* Form column. `min-h-screen` here rather than on the grid child keeps the
           single-column phone layout full-height too. */}
       <div className="flex min-h-screen flex-col">
@@ -221,7 +228,7 @@ export default function RegisterPage() {
         </header>
 
         <div className="flex flex-1 items-center justify-center px-4 pb-12 pt-2 sm:px-6 lg:px-10">
-          <div className="w-full max-w-md">
+          <div className="panel w-full max-w-md p-6 sm:p-8">
             {/* Matching the sign-in screen: no navbar here either, so without a
                 named way out the only exit from a half-filled sign-up form is
                 the browser's back button. Home is the parent — this page has no
@@ -231,12 +238,12 @@ export default function RegisterPage() {
             </BackLink>
 
             <div className="mb-7">
-              <Eyebrow className="mb-2">Account · New</Eyebrow>
+              <Eyebrow className="mb-2">Get started</Eyebrow>
               <h1 className="text-3xl font-bold text-gray-900 dark:text-white sm:text-4xl">
                 Create your account
               </h1>
               <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                It takes a minute, and it is free.
+                It’s free and takes about a minute.
               </p>
             </div>
 
@@ -463,15 +470,10 @@ export default function RegisterPage() {
 
             {/* Hairline rule with the label sitting on it. The label paints the
                 page canvas so the rule reads as passing behind it. */}
-            <div className="relative my-7">
-              <div className="absolute inset-0 flex items-center" aria-hidden="true">
-                <span className="w-full border-t border-gray-200 dark:border-gray-700" />
-              </div>
-              <div className="relative flex justify-center">
-                <Eyebrow as="span" className="bg-[var(--canvas)] px-3">
-                  Or continue with
-                </Eyebrow>
-              </div>
+            <div className="my-7 flex items-center gap-3">
+              <span className="flex-1 border-t border-gray-200 dark:border-gray-700" aria-hidden="true" />
+              <Eyebrow as="span">Or continue with</Eyebrow>
+              <span className="flex-1 border-t border-gray-200 dark:border-gray-700" aria-hidden="true" />
             </div>
 
             {/* This button had no handler at all and silently did nothing.
@@ -521,47 +523,25 @@ export default function RegisterPage() {
       {/* Same treatment as the sign-in panel: the shared `.grid-field`, whose
           rule colour `.band-dark` scopes for it, and whose mask keeps the graph
           paper off the copy. */}
-      <aside className="band-dark grid-field relative hidden lg:flex lg:flex-col lg:px-12 lg:py-16 xl:px-16">
-        <div className="relative my-auto max-w-md">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-gray-900">
-              <Icon.graph className="h-5 w-5" />
-            </span>
-            <span className="wordmark text-white">
-              NextHire
-            </span>
-          </div>
-
-          <Eyebrow accent className="mt-10">
+      <aside className="band-dark aurora sticky top-3 m-3 hidden min-h-[calc(100vh-1.5rem)] self-start rounded-[2rem] lg:flex lg:flex-col lg:px-10 lg:py-12 xl:px-14">
+        <div className="my-auto w-full max-w-lg">
+          <Eyebrow accent>
             How it works
           </Eyebrow>
-          <h2 className="mt-3 text-3xl font-bold leading-tight text-white xl:text-4xl">
-            One profile. Every role, scored.
+          <h2 className="mt-3 text-4xl font-semibold leading-[1.1] text-white xl:text-5xl">
+            One profile. Every job, scored.
           </h2>
           <p className="mt-4 text-sm leading-relaxed text-gray-400">
-            Tell us what you do — or what you are hiring for — and NextHire keeps the match running
-            in the background, ranking both sides against each other as new postings arrive.
+            Tell us what you do or who you’re hiring, and NextHire ranks your best matches as new jobs are posted.
           </p>
 
-          <div className="mt-10 space-y-7">
-            <NumberedItem index={1} title="Describe the work">
-              A profile or a posting, in your own words. No taxonomy to learn, no keyword games.
-            </NumberedItem>
-            <NumberedItem index={2} title="Read the signal">
-              Every pairing gets a fit score with the reasoning attached, so a shortlist is
-              defensible rather than a hunch.
-            </NumberedItem>
-            <NumberedItem index={3} title="Move it forward">
-              Applications, statuses and messages live on the same record from first contact to
-              offer.
-            </NumberedItem>
-          </div>
+          <ShowcaseBento className="mt-8" steps={SHOWCASE_STEPS} />
 
-          <p className="mt-12 border-t border-white/10 pt-6 text-sm text-gray-400">
+          <p className="mt-6 text-sm text-gray-300">
             Already have an account?{" "}
             <Link
               href="/auth/login"
-              className="rounded font-semibold text-green-400 underline-offset-2 hover:underline"
+              className="rounded font-semibold text-white underline underline-offset-2"
             >
               Sign in
             </Link>

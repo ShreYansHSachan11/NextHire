@@ -374,6 +374,94 @@ export function skillLabel(tag: string): string {
   return LABEL_BY_KEY.get(key) ?? cleanString(tag, MAX_SKILL_LENGTH) ?? key;
 }
 
+/** True when a tag resolves to a skill in the curated table above. */
+export function isKnownSkill(tag: string): boolean {
+  const key = canonicalSkill(tag);
+  return !!key && LABEL_BY_KEY.has(key);
+}
+
+/**
+ * Aliases that are also everyday words ("go", "react", "spring", "rest",
+ * "excel"). In free text they only count when written as a product name:
+ * capitalised and not opening a sentence, so "React and Redux" counts and
+ * "we react quickly" or "Go through the docs" does not.
+ */
+const PROSE_AMBIGUOUS = new Set([
+  'go', 'react', 'next', 'express', 'nest', 'rest', 'spring', 'swift', 'rust', 'shell',
+  'elastic', 'oracle', 'lambda', 'rails', 'helm', 'spark', 'apollo', 'torch', 'excel',
+  'dart', 'stats', 'statistics', 'orm', 'ror', 'kube', 'tf', 'ts', 'dl', 'node', 'scala',
+  'agile', 'serverless', 'accessibility',
+]);
+
+/** Never matched in prose: one or two letters that are mostly not the language. */
+const PROSE_NEVER = new Set(['c', 'r', 'sh', 'py']);
+
+/**
+ * Buzzwords that a company's own "About us" paragraph mentions on every posting
+ * it writes. One mention is boilerplate; two or more is the job.
+ */
+const PROSE_SOFT = ['Artificial Intelligence', 'LLMs', 'Generative AI', 'Machine Learning'];
+
+const TOKEN = /\.?[A-Za-z0-9][A-Za-z0-9+#.]*[A-Za-z0-9+#]|[A-Za-z]/g;
+
+/**
+ * Skills named in a free-text posting, in the curated table's own labels, most
+ * mentioned first. For job boards that publish no tags of their own. Matches
+ * one-, two- and three-word phrases ("machine learning", "spring boot").
+ */
+export function findSkillsInText(text: string, limit = 8): string[] {
+  const tokens: Array<{ raw: string; norm: string; sentenceStart: boolean }> = [];
+  for (const match of text.matchAll(TOKEN)) {
+    const raw = match[0].replace(/\.+$/, '');
+    if (!raw) continue;
+    const before = text.slice(Math.max(0, (match.index ?? 0) - 3), match.index ?? 0);
+    tokens.push({
+      raw,
+      norm: normalizeTag(raw),
+      sentenceStart: (match.index ?? 0) === 0 || /[.!?:\n•]\s*$/.test(before),
+    });
+  }
+
+  const counts = new Map<string, { count: number; first: number }>();
+  const hit = (key: string, at: number) => {
+    const entry = counts.get(key);
+    if (entry) entry.count++;
+    else counts.set(key, { count: 1, first: at });
+  };
+
+  for (let i = 0; i < tokens.length; i++) {
+    let matched = false;
+    // Longest phrase first, so "spring boot" wins over "spring".
+    for (const size of [3, 2]) {
+      if (i + size > tokens.length) continue;
+      const phrase = tokens.slice(i, i + size).map((t) => t.norm).join(' ');
+      const key = KEY_BY_VARIANT.get(phrase) ?? KEY_BY_VARIANT.get(compactTag(phrase));
+      if (key && LABEL_BY_KEY.has(key)) {
+        hit(key, i);
+        i += size - 1;
+        matched = true;
+        break;
+      }
+    }
+    if (matched) continue;
+
+    const token = tokens[i];
+    if (PROSE_NEVER.has(token.norm)) continue;
+    const key = KEY_BY_VARIANT.get(token.norm);
+    if (!key || !LABEL_BY_KEY.has(key)) continue;
+    if (PROSE_AMBIGUOUS.has(token.norm) && (token.sentenceStart || !/^[A-Z.]/.test(token.raw))) continue;
+    hit(key, i);
+  }
+
+  const soft = new Set(PROSE_SOFT.map((label) => canonicalSkill(label)));
+
+  return [...counts.entries()]
+    .filter(([key, entry]) => !soft.has(key) || entry.count >= 2)
+    .sort((a, b) => b[1].count - a[1].count || a[1].first - b[1].first)
+    .slice(0, limit)
+    .map(([key]) => LABEL_BY_KEY.get(key) ?? key);
+}
+
 /* -------------------------------------------------------------------------- */
 /* Scoring                                                                     */
 /* -------------------------------------------------------------------------- */

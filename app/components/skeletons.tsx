@@ -141,17 +141,13 @@ export function ApplicationRowSkeleton() {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Mirrors `JobCard` in the jobs feed.
+ * Mirrors `JobCard` (`app/components/JobCard.tsx`).
  *
- * Content height 179px against the real card's 180px, measured on the shape
- * every reader gets. The matched-skills block and the score meter are omitted
+ * Sized to the shape every reader gets. The matched-skills block and the score meter are omitted
  * on purpose: both are present only for a signed-in seeker with an indexed
  * profile on a deployment that has a model, and reserving ~74px for them would
  * leave anonymous visitors — who are most of this page's traffic — staring at
  * a placeholder half again as tall as the card that replaces it.
- *
- * The description is the row that was most wrong: two lines of `leading-relaxed`
- * are 23px each, not the 12px the bars were drawn at.
  */
 export function JobCardSkeleton() {
   return (
@@ -159,7 +155,7 @@ export function JobCardSkeleton() {
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           {/* The company avatar. */}
-          <Skeleton className="h-11 w-11 flex-shrink-0" rounded="rounded-lg" />
+          <Skeleton className="h-10 w-10 flex-shrink-0" rounded="rounded-lg" />
           <div className="min-w-0 flex-1">
             {/* `text-base leading-snug` — a 22px line box, not 16px. */}
             <SkeletonLine height="h-[1.375rem]" bar="h-4" width="w-3/4" />
@@ -170,13 +166,7 @@ export function JobCardSkeleton() {
         <Skeleton className="h-9 w-20 flex-shrink-0" rounded="rounded-md" />
       </div>
 
-      {/* Two clamped lines of description at their real 23px line box. */}
-      <div className="mt-3">
-        <SkeletonLine height="h-[1.4375rem]" bar="h-3" width="w-full" />
-        <SkeletonLine height="h-[1.4375rem]" bar="h-3" width="w-5/6" />
-      </div>
-
-      <div className="mt-3 flex flex-wrap gap-1.5">
+      <div className="mt-3.5 flex flex-wrap gap-1.5">
         <Skeleton className="h-6 w-24" rounded="rounded-md" />
         <Skeleton className="h-6 w-20" rounded="rounded-md" />
         <Skeleton className="h-6 w-16" rounded="rounded-md" />

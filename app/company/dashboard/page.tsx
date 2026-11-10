@@ -120,7 +120,7 @@ export default function CompanyDashboard() {
       setJobs(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error("Failed to fetch jobs:", error);
-      setLoadError(error instanceof Error ? error.message : "Could not load your job postings");
+      setLoadError(error instanceof Error ? error.message : "Couldn’t load your jobs");
     } finally {
       setLoading(false);
     }
@@ -186,7 +186,7 @@ export default function CompanyDashboard() {
     } catch (error) {
       console.error("Failed to update application status:", error);
       setJobs(previous);
-      toast.error(error instanceof Error ? error.message : "Could not update the application");
+      toast.error(error instanceof Error ? error.message : "Couldn’t update the application");
     } finally {
       setUpdatingStatus(null);
     }
@@ -202,10 +202,10 @@ export default function CompanyDashboard() {
       setJobs((current) =>
         current.map((item) => (item.id === job.id ? { ...item, isActive: updated.isActive } : item))
       );
-      toast.success(updated.isActive ? "Posting reopened" : "Posting closed to new applicants");
+      toast.success(updated.isActive ? "Job reopened" : "Job closed to new applicants");
     } catch (error) {
       console.error("Failed to update job state:", error);
-      toast.error(error instanceof Error ? error.message : "Could not update the posting");
+      toast.error(error instanceof Error ? error.message : "Couldn’t update the job");
     } finally {
       setBusyJob(null);
     }
@@ -230,14 +230,14 @@ export default function CompanyDashboard() {
       setJobs((current) => current.filter((item) => item.id !== job.id));
       toast.success(
         result.deletedApplications > 0
-          ? `Posting deleted, along with ${result.deletedApplications} application${
+          ? `Job deleted, along with ${result.deletedApplications} application${
               result.deletedApplications === 1 ? "" : "s"
             }`
-          : "Posting deleted"
+          : "Job deleted"
       );
     } catch (error) {
       console.error("Failed to delete job:", error);
-      toast.error(error instanceof Error ? error.message : "Could not delete the posting");
+      toast.error(error instanceof Error ? error.message : "Couldn’t delete the job");
     } finally {
       setBusyJob(null);
     }
@@ -255,7 +255,7 @@ export default function CompanyDashboard() {
       router.push(`/conversations?conversationId=${conversation.id}`);
     } catch (error) {
       console.error("Failed to open conversation:", error);
-      toast.error(error instanceof Error ? error.message : "Could not open the conversation");
+      toast.error(error instanceof Error ? error.message : "Couldn’t open the conversation");
     } finally {
       setMessagingUserId(null);
     }
@@ -271,17 +271,17 @@ export default function CompanyDashboard() {
   if (!allowed) return null; // the guard is already redirecting
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen">
       <Navbar />
 
       <main id="main-content" className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <PageHeading
-          eyebrow={user?.company?.name ?? "Hiring console"}
+          eyebrow={user?.company?.name ?? "Hiring"}
           title="Company dashboard"
-          description={`Welcome back, ${user?.name ?? "there"}. Every posting, applicant and thread in one panel.`}
+          description={`Welcome back, ${user?.name ?? "there"}. Here’s your hiring at a glance.`}
           action={
             <Link href="/jobs/post" className={buttonPrimary}>
-              Post a role
+              Post a job
               <Icon.arrowUpRight className="h-4 w-4" />
             </Link>
           }
@@ -290,12 +290,14 @@ export default function CompanyDashboard() {
         {/* Pipeline telemetry, summarised from the postings already loaded. */}
         <SignalPanel
           className="mt-6"
-          title="Hiring pipeline"
+          title="Hiring overview"
+          // The page's first section: an h3 here skipped straight from the h1.
+          headingLevel={2}
           live={stats.activeJobs > 0}
           detail={
             loading
-              ? "Reading your postings…"
-              : `${stats.activeJobs} open role${stats.activeJobs === 1 ? "" : "s"} of ${stats.totalJobs} · ${stats.pending} pending review`
+              ? "Loading your jobs…"
+              : `${stats.activeJobs} open job${stats.activeJobs === 1 ? "" : "s"} of ${stats.totalJobs} · ${stats.pending} pending review`
           }
           value={formatCount(stats.totalApplications)}
           valueLabel="Applications"
@@ -305,13 +307,13 @@ export default function CompanyDashboard() {
         {/* Stats */}
         <div className="mt-4 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
           <StatCard
-            label="Total roles"
+            label="Total jobs"
             value={formatCount(stats.totalJobs)}
             icon={<Icon.briefcase className="h-5 w-5" />}
-            hint="Open and closed postings"
+            hint="Open and closed"
           />
           <StatCard
-            label="Open roles"
+            label="Open jobs"
             value={formatCount(stats.activeJobs)}
             tone="green"
             icon={<Icon.checkCircle className="h-5 w-5" />}
@@ -322,9 +324,10 @@ export default function CompanyDashboard() {
             value={formatCount(stats.totalApplications)}
             tone="purple"
             icon={<Icon.user className="h-5 w-5" />}
-            hint="Across every posting"
+            hint="Across all jobs"
           />
           <StatCard
+            highlight
             label="Pending review"
             value={formatCount(stats.pending)}
             tone="amber"
@@ -337,20 +340,20 @@ export default function CompanyDashboard() {
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
           <QuickAction
             href="/jobs/post"
-            title="Post a new role"
-            description="Create a listing"
+            title="Post a job"
+            description="Create a new listing"
             icon={<Icon.plus className="h-5 w-5" />}
           />
           <QuickAction
             href="/applications"
-            title="Candidates"
-            description="Review every applicant"
+            title="Applicants"
+            description="Review everyone who applied"
             icon={<Icon.document className="h-5 w-5" />}
           />
           <QuickAction
             href="/conversations"
             title="Messages"
-            description="Chat with candidates"
+            description="Chat with applicants"
             icon={<Icon.chat className="h-5 w-5" />}
           />
         </div>
@@ -358,9 +361,9 @@ export default function CompanyDashboard() {
         {/* Jobs */}
         <Card className="mt-6">
           <CardHeader
-            eyebrow="Postings"
-            title="My job postings"
-            description="Open, close, edit or remove your listings"
+            eyebrow="Jobs"
+            title="Your jobs"
+            description="Manage your job listings"
           />
 
           {loading ? (
@@ -383,11 +386,11 @@ export default function CompanyDashboard() {
           ) : jobs.length === 0 ? (
             <EmptyState
               icon={<Icon.briefcase className="h-6 w-6" />}
-              title="No roles posted yet"
-              description="Start attracting talent by creating your first job listing."
+              title="No jobs posted yet"
+              description="Post your first job to start receiving applications."
               action={
                 <Link href="/jobs/post" className={buttonPrimary}>
-                  Post your first role
+                  Post your first job
                   <Icon.arrowUpRight className="h-4 w-4" />
                 </Link>
               }
@@ -459,7 +462,7 @@ export default function CompanyDashboard() {
                           disabled={busy}
                           loading={closing}
                           loadingLabel={
-                            job.isActive ? "Closing this posting" : "Reopening this posting"
+                            job.isActive ? "Closing this job" : "Reopening this job"
                           }
                           icon={
                             job.isActive ? (
@@ -488,7 +491,7 @@ export default function CompanyDashboard() {
                             <Icon.trash className="h-4 w-4" />
                           )}
                           Delete<span className="sr-only"> {job.title}</span>
-                          {deleting && <span className="sr-only">Deleting this posting</span>}
+                          {deleting && <span className="sr-only">Deleting this job</span>}
                         </button>
                       </div>
                     </div>
@@ -543,13 +546,13 @@ export default function CompanyDashboard() {
                                     <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-2">
                                       {resume ? (
                                         <a
-                                          href={resume.url}
+                                          href={`/api/resumes/${resume.id}/file`}
                                           target="_blank"
                                           rel="noopener noreferrer"
                                           className="link hit-24 inline-flex items-center gap-1.5 text-xs font-medium"
                                         >
                                           <Icon.document className="h-4 w-4" />
-                                          View r&eacute;sum&eacute;
+                                          View resume
                                           {/* Every applicant row repeats these
                                               controls, so out of context the
                                               name is what tells them apart. */}
@@ -561,7 +564,7 @@ export default function CompanyDashboard() {
                                           <Icon.external className="h-3.5 w-3.5" />
                                         </a>
                                       ) : (
-                                        <Eyebrow as="span">No r&eacute;sum&eacute;</Eyebrow>
+                                        <Eyebrow as="span">No resume</Eyebrow>
                                       )}
 
                                       <button
@@ -634,9 +637,9 @@ export default function CompanyDashboard() {
         {/* Company profile */}
         <Card className="mt-6">
           <CardHeader
-            eyebrow="Public record"
+            eyebrow="Profile"
             title="Company profile"
-            description="How candidates see you across the site"
+            description="What applicants see"
             action={
               <Link href="/company/profile/edit" className={buttonSecondary}>
                 <Icon.edit className="h-4 w-4" />

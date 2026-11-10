@@ -1,8 +1,6 @@
 import "./globals.css";
-import { Suspense } from "react";
 import type { Metadata, Viewport } from "next";
 import { Poppins, JetBrains_Mono } from "next/font/google";
-import RouteProgress from "@/app/components/RouteProgress";
 import ReduxProvider from "@/store/Provider";
 import AuthRehydrator from "@/store/AuthRehydrator";
 import { SocketProvider } from "@/lib/socketContext";
@@ -31,15 +29,15 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "NextHire — Signal-driven job matching",
+    default: "NextHire — Find jobs that fit your experience",
     template: "%s · NextHire",
   },
   description:
-    "NextHire maps your experience against live roles, surfaces the strongest matches, and puts you in direct contact with the hiring team.",
+    "Search open jobs, see how well each one fits your profile, and talk directly to hiring teams.",
   applicationName: "NextHire",
   openGraph: {
     title: "NextHire",
-    description: "Signal-driven job matching. Find your next role, or your next hire.",
+    description: "Find your next job, or your next hire.",
     siteName: "NextHire",
     type: "website",
   },
@@ -49,15 +47,12 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f7f8fa" },
-    { media: "(prefers-color-scheme: dark)", color: "#0b111c" },
-  ],
+  themeColor: "#05070a",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className="dark" suppressHydrationWarning>
       <head>
         {/* Applies the stored theme before first paint so the page never flashes
             the wrong colours on load. */}
@@ -73,8 +68,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/*
           Uses the overlay shadow token rather than `shadow-lg`, so the one thing
           that floats above the sticky header is lit like every other floating
-          surface. `top-4` clears the 3px signal rail; the `scroll-padding-top` in
-          globals.css handles the header for everything the link jumps *to*.
+          surface. The `scroll-padding-top` in globals.css handles the header for
+          everything the link jumps *to*.
         */}
         <a
           href="#main-content"
@@ -82,16 +77,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         >
           Skip to main content
         </a>
-        {/*
-          `RouteProgress` reads `useSearchParams`, which opts its whole subtree
-          into dynamic rendering unless it sits behind a Suspense boundary —
-          without this, every statically generated page in the app would
-          deoptimise to server-rendered. `fallback={null}` because the bar has
-          nothing to show before it hydrates anyway.
-        */}
-        <Suspense fallback={null}>
-          <RouteProgress />
-        </Suspense>
         <SessionProviderWrapper>
           <ReduxProvider>
             <AuthRehydrator />

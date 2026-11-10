@@ -22,7 +22,7 @@ function FieldSkeleton({ tall = false }: { tall?: boolean }) {
  */
 export default function ProfileEditLoading() {
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen">
       <Navbar />
 
       <main id="main-content" className="container-responsive max-w-3xl py-6 sm:py-8">

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v2 as cloudinary, type UploadApiResponse } from 'cloudinary';
 import { prisma } from '@/lib/prisma';
-import { env, validateEnv } from '@/lib/env';
+import { validateEnv } from '@/lib/env';
 import {
   requireAuth,
   requireRole,
@@ -11,8 +11,8 @@ import {
   notFound,
   serverError,
   isUuid,
-  type SessionUser,
 } from '@/lib/auth';
+import { configureCloudinary, mayViewResumesOf } from '@/lib/resumes';
 import { validateResumeFile } from '@/lib/validation';
 import { queueProfileEmbedding } from '@/lib/ai/embeddings';
 import { RATE_TIERS, checkRateLimit, rateLimited } from '@/lib/rateLimit';
@@ -20,24 +20,6 @@ import { RATE_TIERS, checkRateLimit, rateLimited } from '@/lib/rateLimit';
 // Cloudinary's SDK needs Node APIs (streams, Buffer), so this route can never
 // run on the edge runtime.
 export const runtime = 'nodejs';
-
-let cloudinaryReady = false;
-
-/**
- * Configured on first use rather than at module scope: `env.CLOUDINARY.*` throws
- * when a variable is missing, and this module is evaluated during `next build`,
- * so configuring eagerly took the whole build down instead of failing the one
- * request that actually needs Cloudinary.
- */
-function configureCloudinary(): void {
-  if (cloudinaryReady) return;
-  cloudinary.config({
-    cloud_name: env.CLOUDINARY.CLOUD_NAME,
-    api_key: env.CLOUDINARY.API_KEY,
-    api_secret: env.CLOUDINARY.API_SECRET,
-  });
-  cloudinaryReady = true;
-}
 
 /**
  * `upload_stream` is callback-based; wrap it so failures reject instead of
@@ -100,21 +82,6 @@ async function destroyAssets(resumes: StoredResume[]) {
       }
     }
   }
-}
-
-/**
- * A company may see a seeker's resume only once that seeker has applied to one
- * of its jobs — that application is the consent to share it.
- */
-async function mayViewResumesOf(session: SessionUser, userId: string): Promise<boolean> {
-  if (canActAs(session, userId)) return true;
-  if (session.role !== 'COMPANY' || !session.companyId) return false;
-
-  const application = await prisma.application.findFirst({
-    where: { userId, job: { companyId: session.companyId } },
-    select: { id: true },
-  });
-  return application !== null;
 }
 
 /**

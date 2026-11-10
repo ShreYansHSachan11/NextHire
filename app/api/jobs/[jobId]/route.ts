@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import {
@@ -13,6 +13,13 @@ import {
 import { cleanString, cleanText, cleanTagList, isJobType } from '@/lib/validation';
 import { computeMatchAsync, loadProfileContext, type MatchBreakdown } from '@/lib/ai/matching';
 import { queueJobEmbedding } from '@/lib/ai/embeddings';
+import { refreshImportedJob, refreshStaleSources } from '@/lib/jobs/import';
+
+// Room for the background refresh `GET` schedules with `after()`.
+export const maxDuration = 300;
+
+/** How long a job page waits for its live re-check before showing the stored copy. */
+const REFRESH_WAIT_MS = 2500;
 
 /** Columns the detail page needs. `skills` rides along as a Job scalar. */
 const DETAIL_INCLUDE = {
@@ -49,6 +56,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ jobI
   try {
     const { jobId } = await params;
     if (!isUuid(jobId)) return notFound('Job not found');
+
+    // A job read from a company careers board is re-checked there first (at
+    // most every 15 minutes), so the page shows the company's current listing,
+    // or that it has closed. The response waits for that check for at most
+    // REFRESH_WAIT_MS; a slower board finishes in the background and the next
+    // visitor sees the result.
+    const refresh = refreshImportedJob(jobId).catch((error) => console.error('Job refresh failed:', error));
+    await Promise.race([refresh, new Promise((resolve) => setTimeout(resolve, REFRESH_WAIT_MS))]);
+    after(async () => {
+      await refresh;
+      await refreshStaleSources().catch((error) => console.error('Job refresh failed:', error));
+    });
 
     const session = getSession(req);
     const isSeeker = session?.role === 'SEEKER';

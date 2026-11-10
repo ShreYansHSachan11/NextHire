@@ -294,7 +294,7 @@ export default function CompanyProfileEdit() {
       router.push("/company/dashboard");
     } catch (submitError) {
       const message =
-        submitError instanceof Error ? submitError.message : "Failed to update profile";
+        submitError instanceof Error ? submitError.message : "Couldn’t update your profile";
       console.error("Error updating profile:", submitError);
       setError(message);
       toast.error(message);
@@ -306,7 +306,7 @@ export default function CompanyProfileEdit() {
 
   if (!ready) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
+      <div className="flex min-h-screen items-center justify-center">
         <Spinner className="h-10 w-10" label="Loading profile" />
       </div>
     );
@@ -315,7 +315,7 @@ export default function CompanyProfileEdit() {
   if (!allowed) return null; // the guard is already redirecting
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen">
       <Navbar />
 
       <main id="main-content" className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
@@ -327,15 +327,15 @@ export default function CompanyProfileEdit() {
         </BackLink>
 
         <PageHeading
-          eyebrow="Company record"
+          eyebrow="Company"
           title="Edit company profile"
-          description="Update how your company appears to candidates across listings and search."
+          description="Update how your company appears to applicants."
           className="mb-6"
         />
 
         <Card>
           <CardHeader
-            eyebrow="Fields"
+            eyebrow="Details"
             title="Company information"
             description="These details show on your job listings and company profile."
           />
@@ -404,7 +404,7 @@ export default function CompanyProfileEdit() {
               </div>
 
               <div>
-                <Label htmlFor="website" hint="You can leave off https:// — we will add it for you.">
+                <Label htmlFor="website" hint="No need to type https://.">
                   Website
                 </Label>
                 <input
@@ -483,7 +483,7 @@ export default function CompanyProfileEdit() {
             </div>
 
             <div>
-              <Label htmlFor="description" hint="One short paragraph — it heads your company page.">
+              <Label htmlFor="description" hint="A short paragraph for the top of your company page.">
                 Company description
               </Label>
               <textarea
@@ -494,7 +494,7 @@ export default function CompanyProfileEdit() {
                 rows={4}
                 maxLength={DESCRIPTION_MAX}
                 className={`${inputClass} resize-y`}
-                placeholder="Tell candidates about your company, mission and values..."
+                placeholder="Tell applicants about your company and what it does…"
               />
               <p className="mt-1.5 text-xs text-gray-600 dark:text-gray-400">
                 <Readout className="text-xs font-medium">
@@ -505,7 +505,7 @@ export default function CompanyProfileEdit() {
             </div>
 
             <div>
-              <Label htmlFor="profile" hint="The long form: history, culture and what to expect.">
+              <Label htmlFor="profile" hint="More about your history, culture and what to expect.">
                 Company profile
               </Label>
               <textarea
@@ -516,7 +516,7 @@ export default function CompanyProfileEdit() {
                 rows={6}
                 maxLength={PROFILE_MAX}
                 className={`${inputClass} resize-y`}
-                placeholder="History, achievements, culture, and what candidates can expect when working with you..."
+                placeholder="History, culture and what working with you is like…"
               />
               <p className="mt-1.5 text-xs text-gray-600 dark:text-gray-400">
                 <Readout className="text-xs font-medium">

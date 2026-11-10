@@ -25,7 +25,7 @@
  * low number needs to know it did not remove them from anything.
  */
 export const MATCH_CAVEAT_SEEKER =
-  "Scored by comparing your profile with this posting. It is guidance to help you decide where to spend your time, not a decision — the company reads every application it receives.";
+  "Based on your profile and this job. It’s a guide to help you choose, not a decision. The company reads every application.";
 
 /**
  * Shown above the employer's candidate queue when it is sorted by fit.
@@ -35,4 +35,9 @@ export const MATCH_CAVEAT_SEEKER =
  * number is not a judgement of the person.
  */
 export const MATCH_CAVEAT_EMPLOYER =
-  "Fit is a sorting aid, not an assessment. It reads the profile against the posting and knows nothing else about the person — read the application before you decide.";
+  "Fit compares the profile with the job and nothing else. It’s a guide, not an assessment, so read the application before you decide.";
+
+/** Experience is free text, so "5+" and "5+ years" must both read as "5+ years". */
+export function experienceLabel(experience: string): string {
+  return /year|yr/i.test(experience) ? experience : `${experience} years`;
+}
