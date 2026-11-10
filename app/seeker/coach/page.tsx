@@ -21,6 +21,7 @@ import {
   Meter,
   PageHeading,
   Readout,
+  SkeletonRows,
   Spinner,
   StatusBadge,
   buttonGhost,
@@ -153,22 +154,22 @@ interface RoleOption {
 const TOOLS: Record<Mode, { tab: string; title: string; blurb: string; cta: string }> = {
   gap: {
     tab: "Gap",
-    title: "Gap analysis",
+    title: "Skill gaps",
     blurb:
-      "What this posting asks for, what your profile already evidences, and what to do about the difference.",
-    cta: "Analyse the gap",
+      "See what the job asks for, what you already have and what to improve.",
+    cta: "Check my gaps",
   },
   letter: {
     tab: "Letter",
-    title: "Cover letter draft",
+    title: "Cover letter",
     blurb:
-      "A first draft grounded strictly in your profile. It is yours to edit — nothing goes anywhere until you send it.",
-    cta: "Draft a letter",
+      "A first draft based only on your profile. Edit it before you send it.",
+    cta: "Draft cover letter",
   },
   interview: {
     tab: "Interview",
-    title: "Interview preparation",
-    blurb: "Questions this role is likely to ask, and what each one is really probing for.",
+    title: "Interview prep",
+    blurb: "Likely questions for this job, and what each one is testing.",
     cta: "Prepare questions",
   },
 };
@@ -256,7 +257,7 @@ export default function SeekerCoachPage() {
 
       if (applied.status === "rejected" && open.status === "rejected") {
         const reason = open.reason;
-        setRolesError(reason instanceof Error ? reason.message : "Could not load your roles");
+        setRolesError(reason instanceof Error ? reason.message : "Couldn’t load your jobs");
       }
 
       setRoles(options);
@@ -346,7 +347,7 @@ export default function SeekerCoachPage() {
   if (!allowed) return null;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen">
       <Navbar />
 
       <main id="main-content" className="container-responsive py-6 sm:py-8">
@@ -355,9 +356,9 @@ export default function SeekerCoachPage() {
         </BackLink>
 
         <PageHeading
-          eyebrow="Seeker tools"
+          eyebrow="Tools"
           title="Career coach"
-          description="Pick a role, then work on it: where you stand against it, a letter to send, and the questions to expect."
+          description="Pick a job to see your skill gaps, draft a cover letter and prepare for interviews."
           className="mb-6"
         />
 
@@ -365,47 +366,48 @@ export default function SeekerCoachPage() {
           <Card grid>
             <EmptyState
               icon={<Icon.spark className="h-6 w-6" />}
-              title="Coaching is switched off here"
-              description="This deployment has no model key configured, so gap analysis, letter drafting and interview prep are unavailable. Everything else — browsing, applying, messaging — works exactly as normal."
+              title="Career coach isn’t available"
+              description="AI tools aren’t set up yet. You can still browse, apply and message as normal."
               action={
                 <Link href="/jobs" className={buttonSecondary}>
-                  Browse roles
+                  Browse jobs
                   <Icon.arrowRight className="h-4 w-4" />
                 </Link>
               }
             />
           </Card>
         ) : (
-          <div className="grid gap-5 lg:grid-cols-3 lg:gap-6">
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-3 lg:gap-6">
             {/* ------------------------------------------------------ */}
             {/* Role picker                                             */}
             {/* ------------------------------------------------------ */}
-            <div className="lg:col-span-1">
+            <div className="min-w-0 lg:col-span-1">
               <Card className="lg:sticky lg:top-24">
                 <CardHeader
-                  eyebrow="Step one"
-                  title="Choose a role"
-                  description="Your applications first, then everything else open."
+                  eyebrow="Step 1"
+                  title="Choose a job"
+                  description="Jobs you’ve applied to come first."
                 />
 
                 <div className="border-b border-gray-200 p-3 dark:border-gray-700 sm:p-4">
                   <label htmlFor="role-filter" className="sr-only">
-                    Filter roles
+                    Filter jobs
                   </label>
                   <input
                     id="role-filter"
                     type="search"
                     value={filter}
                     onChange={(event) => setFilter(event.target.value)}
-                    placeholder="Filter by title or company"
+                    placeholder="Search by title or company"
                     className={`${inputClass} text-sm`}
                   />
                 </div>
 
                 {loadingRoles ? (
-                  <div className="flex justify-center py-10">
-                    <Spinner className="h-6 w-6" label="Loading roles" />
-                  </div>
+                  <>
+                    <span className="sr-only" role="status">Loading jobs</span>
+                    <SkeletonRows count={4} media={false} />
+                  </>
                 ) : rolesError ? (
                   <div className="p-3 sm:p-4">
                     <Alert variant="error">{rolesError}</Alert>
@@ -413,16 +415,16 @@ export default function SeekerCoachPage() {
                 ) : visibleRoles.length === 0 ? (
                   <EmptyState
                     icon={<Icon.briefcase className="h-6 w-6" />}
-                    title={roles.length === 0 ? "No roles yet" : "Nothing matches that"}
+                    title={roles.length === 0 ? "No jobs yet" : "Nothing matches that"}
                     description={
                       roles.length === 0
-                        ? "Once there are open postings, or you have applied to one, they show up here."
+                        ? "Open jobs will appear here."
                         : "Try a shorter filter."
                     }
                     action={
                       roles.length === 0 ? (
                         <Link href="/jobs" className={buttonSecondary}>
-                          Browse roles
+                          Browse jobs
                         </Link>
                       ) : undefined
                     }
@@ -446,26 +448,26 @@ export default function SeekerCoachPage() {
             {/* ------------------------------------------------------ */}
             {/* Tools                                                   */}
             {/* ------------------------------------------------------ */}
-            <div className="lg:col-span-2">
+            <div className="min-w-0 lg:col-span-2">
               {!selected ? (
                 <Card grid>
                   <EmptyState
                     icon={<Icon.graph className="h-6 w-6" />}
-                    title="Pick a role to start"
-                    description="Everything here is written against one specific posting, so there is nothing useful to say until you choose one."
+                    title="Pick a job to start"
+                    description="Your coaching is tailored to one job at a time."
                   />
                 </Card>
               ) : (
                 <Card>
                   <CardHeader
-                    eyebrow="Working on"
+                    eyebrow="Selected job"
                     title={selected.title}
                     description={
                       [selected.company, selected.location].filter(Boolean).join(" · ") || undefined
                     }
                     action={
                       <Link href={`/jobs/${selected.id}`} className={buttonGhost}>
-                        View posting
+                        View job
                         <Icon.arrowUpRight className="h-4 w-4" />
                       </Link>
                     }
@@ -475,7 +477,7 @@ export default function SeekerCoachPage() {
                       at 360px without scrolling or truncation. */}
                   <div
                     role="tablist"
-                    aria-label="Coaching tools"
+                    aria-label="Tools"
                     className="grid grid-cols-3 border-b border-gray-200 dark:border-gray-700"
                   >
                     {MODES.map((tool) => (
@@ -537,7 +539,7 @@ export default function SeekerCoachPage() {
 
                     {running === key && !result ? (
                       <div className="flex justify-center py-10">
-                        <Spinner label="Reading the posting against your profile" />
+                        <Spinner label="Comparing this job with your profile" />
                       </div>
                     ) : !result ? (
                       <IdlePanel mode={mode} />
@@ -638,8 +640,8 @@ function IdlePanel({ mode }: { mode: Mode }) {
     <div className="panel-sunken border-dashed px-4 py-8 text-center">
       <p className="mx-auto max-w-sm text-sm text-gray-500 dark:text-gray-400">
         {mode === "letter"
-          ? "Nothing is written until you ask for it. The draft comes from your profile only — the fuller that is, the better the letter."
-          : "Run this when you are ready. Your profile is read against this posting; nothing is shared with the employer."}
+          ? "Your draft uses only your profile, so the more complete it is, the better."
+          : "Your results stay private. Nothing is shared with the employer."}
       </p>
     </div>
   );
@@ -665,9 +667,9 @@ function ThinProfilePanel({
         <div className="mt-4">
           <Eyebrow className="mb-2">Add these</Eyebrow>
           <ul className="list-none space-y-2">
-            {blocked.missing.map((item) => (
+            {blocked.missing.map((item, index) => (
               <li
-                key={item}
+                key={`${index}-${item}`}
                 className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300"
               >
                 <Icon.plus className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
@@ -685,7 +687,7 @@ function ThinProfilePanel({
         </Link>
         <Link href="/seeker/dashboard" className={buttonSecondary}>
           <Icon.upload className="h-4 w-4" />
-          Upload a r&eacute;sum&eacute;
+          Upload a resume
         </Link>
       </div>
     </div>
@@ -733,11 +735,11 @@ function GapPanel({ gap, match }: { gap: GapPayload; match: MatchBreakdown | nul
       {gap.strengths.length > 0 && (
         <section>
           <Eyebrow accent className="mb-3">
-            What you already show
+            What you already have
           </Eyebrow>
           <ul className="list-none space-y-3">
-            {gap.strengths.map((item) => (
-              <li key={item.point} className="flex items-start gap-2.5">
+            {gap.strengths.map((item, index) => (
+              <li key={`${index}-${item.point}`} className="flex items-start gap-2.5">
                 <Icon.check className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-600 dark:text-green-400" />
                 <span className="min-w-0">
                   <span className="block text-sm font-medium text-gray-900 dark:text-white">
@@ -757,11 +759,11 @@ function GapPanel({ gap, match }: { gap: GapPayload; match: MatchBreakdown | nul
 
       {gap.gaps.length > 0 && (
         <section>
-          <Eyebrow className="mb-3">Not evidenced yet</Eyebrow>
+          <Eyebrow className="mb-3">Not in your profile yet</Eyebrow>
           <ul className="list-none space-y-3">
-            {gap.gaps.map((item) => (
+            {gap.gaps.map((item, index) => (
               <li
-                key={item.requirement}
+                key={`${index}-${item.requirement}`}
                 className="border-l-2 border-gray-200 pl-3 dark:border-gray-700"
               >
                 <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -786,8 +788,7 @@ function GapPanel({ gap, match }: { gap: GapPayload; match: MatchBreakdown | nul
           {/* Same framing as the job page's breakdown: unevidenced is not the
               same as absent, and the fix is often the profile, not a course. */}
           <p className="mt-3 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-            These are things the posting asks for that your profile does not mention. If you have
-            them, the fastest fix is to say so on your profile.
+            This job asks for these, but your profile doesn’t mention them. Add any you have.
           </p>
         </section>
       )}
@@ -797,7 +798,7 @@ function GapPanel({ gap, match }: { gap: GapPayload; match: MatchBreakdown | nul
           <Eyebrow className="mb-3">Next steps</Eyebrow>
           <ol className="list-none space-y-3">
             {gap.nextSteps.map((step, index) => (
-              <li key={step.action} className="flex items-start gap-3">
+              <li key={`${index}-${step.action}`} className="flex items-start gap-3">
                 <span
                   className="mono mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md border border-gray-200 text-[11px] font-medium text-gray-500 dark:border-gray-700 dark:text-gray-400"
                   aria-hidden="true"
@@ -822,8 +823,8 @@ function GapPanel({ gap, match }: { gap: GapPayload; match: MatchBreakdown | nul
         <section>
           <Eyebrow className="mb-2">Lead with</Eyebrow>
           <div className="flex flex-wrap gap-1.5">
-            {gap.emphasise.map((tag) => (
-              <Chip key={tag} accent>
+            {gap.emphasise.map((tag, index) => (
+              <Chip key={`${index}-${tag}`} accent>
                 {tag}
               </Chip>
             ))}
@@ -832,8 +833,7 @@ function GapPanel({ gap, match }: { gap: GapPayload; match: MatchBreakdown | nul
       )}
 
       <p className="border-t border-gray-200 pt-4 text-xs leading-relaxed text-gray-500 dark:border-gray-700 dark:text-gray-400">
-        Advice, not a verdict. It is written from your profile and this posting alone, and it has no
-        bearing on how the employer reads your application.
+        This is advice only. It’s based on your profile and this job, and employers don’t see it.
       </p>
     </div>
   );
@@ -860,10 +860,7 @@ function LetterPanel({
       {/* First thing in the panel, before the text itself: a draft that reads
           as finished is a draft that gets sent unread. */}
       <Alert variant="warning">
-        <span className="font-medium">This is a draft, and it is yours.</span> It was written from
-        your profile only, so it will not claim anything you have not told us — which also means it
-        will be missing things you know about yourself. Read it, change it, and make it sound like
-        you before you send it.
+        <span className="font-medium">This is your draft.</span> It uses only what’s in your profile, so add anything it missed and make it sound like you.
       </Alert>
 
       <div>
@@ -895,7 +892,7 @@ function LetterPanel({
           className={`${inputClass} resize-y text-sm leading-relaxed`}
         />
         <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
-          Nothing here is saved. Copy it into the cover letter box when you apply.
+          This isn’t saved. Copy it into your application.
         </p>
       </div>
 
@@ -905,24 +902,23 @@ function LetterPanel({
             Written from
           </Eyebrow>
           <div className="flex flex-wrap gap-1.5">
-            {letter.groundedOn.map((fact) => (
-              <Chip key={fact}>{fact}</Chip>
+            {letter.groundedOn.map((fact, index) => (
+              <Chip key={`${index}-${fact}`}>{fact}</Chip>
             ))}
           </div>
           <p className="mt-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-            The only facts about you the draft was allowed to use. If something here is wrong, fix
-            your profile rather than the letter.
+            The only facts used in this draft. If one is wrong, update your profile.
           </p>
         </section>
       )}
 
       {letter.omitted.length > 0 && (
         <section>
-          <Eyebrow className="mb-2">Deliberately left out</Eyebrow>
+          <Eyebrow className="mb-2">Left out</Eyebrow>
           <ul className="list-none space-y-1.5">
-            {letter.omitted.map((item) => (
+            {letter.omitted.map((item, index) => (
               <li
-                key={item}
+                key={`${index}-${item}`}
                 className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400"
               >
                 <Icon.x className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
@@ -931,8 +927,7 @@ function LetterPanel({
             ))}
           </ul>
           <p className="mt-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-            This posting asks for these and your profile does not evidence them, so the draft does
-            not claim them. If any of it is true of you, add it yourself.
+            This job asks for these, but your profile doesn’t mention them, so the draft doesn’t claim them. Add any that are true.
           </p>
         </section>
       )}
@@ -946,7 +941,7 @@ function InterviewPanel({ interview }: { interview: InterviewPayload }) {
       <ol className="list-none space-y-4">
         {interview.questions.map((item, index) => (
           <li
-            key={item.question}
+            key={`${index}-${item.question}`}
             className="rounded-lg border border-gray-200 p-4 dark:border-gray-700"
           >
             <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
@@ -961,7 +956,7 @@ function InterviewPanel({ interview }: { interview: InterviewPayload }) {
             {item.probes && (
               <p className="mt-2.5 text-sm text-gray-500 dark:text-gray-400">
                 <span className="font-medium text-gray-700 dark:text-gray-300">
-                  Really asking:{" "}
+                  What they’re testing:{" "}
                 </span>
                 {item.probes}
               </p>
@@ -982,9 +977,9 @@ function InterviewPanel({ interview }: { interview: InterviewPayload }) {
             Worth asking them
           </Eyebrow>
           <ul className="list-none space-y-2">
-            {interview.askThem.map((question) => (
+            {interview.askThem.map((question, index) => (
               <li
-                key={question}
+                key={`${index}-${question}`}
                 className="flex items-start gap-2.5 text-sm text-gray-700 dark:text-gray-300"
               >
                 <Icon.chat className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
@@ -996,8 +991,7 @@ function InterviewPanel({ interview }: { interview: InterviewPayload }) {
       )}
 
       <p className="border-t border-gray-200 pt-4 text-xs leading-relaxed text-gray-500 dark:border-gray-700 dark:text-gray-400">
-        Predicted from the posting and your profile. Treat it as practice, not as a leaked question
-        list.
+        Predicted from the job and your profile. Use it for practice.
       </p>
     </div>
   );

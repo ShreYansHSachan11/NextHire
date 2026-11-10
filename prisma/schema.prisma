@@ -49,6 +49,11 @@ model Company {
   name          String
   profile       String?
   createdAt     DateTime       @default(now())
+  /// Set for a company that only exists because its jobs were imported from a
+  /// public job board. Such a company has no users, and imported jobs are
+  /// matched only against these rows, so a real employer account can never end
+  /// up owning a job someone else posted.
+  isExternal    Boolean        @default(false)
   conversations Conversation[]
   jobs          Job[]
   users         User[]
@@ -71,14 +76,26 @@ model Job {
   /// of the match score.
   skills String[] @default([])
 
+  /// Where an imported job came from ("arbeitnow", "remoteok", "adzuna"); null
+  /// for a job posted on NextHire. Imported jobs are applied for on the
+  /// original posting at `sourceUrl`, not through NextHire.
+  source     String?
+  externalId String?
+  sourceUrl  String?
+  /// When the importer last saw the posting at its source. A job that stops
+  /// appearing is closed after a few days.
+  lastSeenAt DateTime?
+
   applications Application[]
   embedding    JobEmbedding?
   questions    JobQuestion[]
   explanations MatchExplanation[]
   company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
+  @@unique([source, externalId])
   @@index([companyId])
   @@index([isActive, createdAt])
+  @@index([source, lastSeenAt])
 }
 
 model Application {

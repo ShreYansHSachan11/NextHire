@@ -166,7 +166,7 @@ function ConversationsView() {
       setItems(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error("Failed to fetch conversations:", error);
-      setLoadError(error instanceof Error ? error.message : "Could not load your conversations");
+      setLoadError(error instanceof Error ? error.message : "Couldn’t load your conversations");
     } finally {
       setLoading(false);
     }
@@ -218,7 +218,7 @@ function ConversationsView() {
         if (!cancelled) setMessages(mergeMessages([], Array.isArray(data) ? data : []));
       } catch (error) {
         console.error("Failed to fetch messages:", error);
-        if (!cancelled) toast.error("Could not load this conversation");
+        if (!cancelled) toast.error("Couldn’t load this conversation");
       }
     })();
 
@@ -305,7 +305,7 @@ function ConversationsView() {
       openConversation(conversation);
     } catch (error) {
       console.error("Failed to start conversation:", error);
-      toast.error(error instanceof Error ? error.message : "Could not start the conversation");
+      toast.error(error instanceof Error ? error.message : "Couldn’t start the conversation");
     } finally {
       setStartingFor(null);
     }
@@ -321,19 +321,19 @@ function ConversationsView() {
   if (!allowed) return null; // the guard is already redirecting
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen">
       <Navbar />
 
       <main id="main-content" className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <PageHeading
-          eyebrow="Applicant threads"
+          eyebrow="Inbox"
           title="Messages"
-          description="Chat with the people who applied to your postings."
+          description="Chat with people who applied to your jobs."
           action={
             isConnected ? (
               <Eyebrow as="span" accent className="inline-flex items-center gap-2">
                 <span className="dot-live" aria-hidden="true" />
-                Socket live
+                Live
               </Eyebrow>
             ) : undefined
           }
@@ -375,10 +375,10 @@ function ConversationsView() {
                   <EmptyState
                     icon={<Icon.chat className="h-6 w-6" />}
                     title="No applicants yet"
-                    description="Once someone applies to one of your postings you can message them here."
+                    description="When someone applies, you can message them here."
                     action={
                       <Link href="/jobs/post" className={buttonPrimary}>
-                        Post a role
+                        Post a job
                         <Icon.arrowUpRight className="h-4 w-4" />
                       </Link>
                     }
@@ -418,7 +418,7 @@ function ConversationsView() {
                   <div className="band-sunken flex-1 space-y-4 overflow-y-auto p-4 sm:p-6">
                     {groups.length === 0 ? (
                       <p className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
-                        No messages yet — say hello.
+                        No messages yet. Say hello.
                       </p>
                     ) : (
                       groups.map((group) => (

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import {
@@ -25,6 +25,23 @@ import {
 import { queueJobEmbedding } from '@/lib/ai/embeddings';
 import { isAiEnabled } from '@/lib/ai/config';
 import { RATE_TIERS, checkRateLimit, rateLimited } from '@/lib/rateLimit';
+import { refreshStaleSources } from '@/lib/jobs/import';
+import {
+  EXPERIENCE_NOT_STATED,
+  EXPERIENCE_ORDER,
+  experienceBucketLabel,
+  experienceBuckets,
+  experienceForFilter,
+  placesForFilter,
+  placesIn,
+  type ExperienceBucketId,
+  type Place,
+  type PlaceKind,
+} from '@/lib/jobs/filters';
+
+// Room for the background refresh that `GET` schedules with `after()`; the
+// response itself is sent long before this.
+export const maxDuration = 300;
 
 /** Public feed columns. Deliberately no `embedding` — see FEED_INCLUDE_WITH_VECTOR. */
 const FEED_INCLUDE = {
@@ -66,36 +83,46 @@ function withoutVector<T extends { embedding?: unknown }>(job: T): Omit<T, 'embe
 /* -------------------------------------------------------------------------- */
 
 /**
- * The three selects on the feed's filter bar.
+ * The three filters on the feed's filter bar.
  *
  * They used to be applied in the browser, over whatever `FEED_LIMIT` rows had
  * already come back: a Berlin role at position 201 was invisible no matter what
  * was selected, and quietly more invisible the larger the corpus grew. They are
  * `where` clauses now, applied *before* `take`.
+ *
+ * Location and Experience take several values, any of which matches: someone
+ * open to Pune or Bengaluru wants both lists at once, not one at a time. What
+ * the values mean is `lib/jobs/filters.ts`'s business — a place name, folded
+ * from every spelling postings use, and a range of years.
  */
 interface FeedFilters {
-  location: string | null;
-  experience: string | null;
+  /** Place names, as the Location list offers them ("Bengaluru", "Remote"). */
+  location: string[];
+  /** Experience range ids from `EXPERIENCE_BUCKETS`, plus "not-stated". */
+  experience: string[];
   type: string | null;
 }
 
 /** Length caps, matching what `POST /api/jobs` will store in each column. */
-const FILTER_MAX = { location: 120, experience: 60, type: 60 } as const;
+// An old link may still carry a whole posting location ("Noida, Uttar Pradesh
+// · Bangalore, Karnataka · …") from when the list offered those as-is, so the
+// cap has to admit one.
+const FILTER_MAX = { location: 500, experience: 60, type: 60 } as const;
+
+/** How many values one multi-select may send; well past anything a person ticks. */
+const FILTER_VALUES_MAX = 40;
 
 /** What `readFilter` returns for a value longer than its column allows. */
 const TOO_LONG = Symbol('too-long');
 
 /**
- * Reads one select off the query string.
+ * Reads one value off the query string.
  *
- * The vocabulary is deliberately *not* checked against a fixed list. The options
- * come from `facets` below, which are the corpus's own distinct values, so an
- * allowlist here would be a second copy of the same truth and free to drift from
- * it — and `type` is only an allowlist today because the post-a-job form happens
- * to enforce one. A value nobody could have picked simply matches nothing, which
- * is the honest answer rather than an error. What *is* validated is the shape: a
- * value longer than the column is a malformed request, and saying so costs less
- * than a table scan proving the result is empty.
+ * The vocabulary is deliberately *not* checked against a fixed list. A value
+ * nobody could have picked simply matches nothing, which is the honest answer
+ * rather than an error. What *is* validated is the shape: a value longer than
+ * the column is a malformed request, and saying so costs less than a table scan
+ * proving the result is empty.
  */
 function readFilter(raw: string | null, max: number): string | null | typeof TOO_LONG {
   if (raw === null) return null;
@@ -106,25 +133,138 @@ function readFilter(raw: string | null, max: number): string | null | typeof TOO
 }
 
 /**
+ * Every value of a repeatable parameter: `?location=Pune&location=Bengaluru`.
+ * Repeated keys rather than one comma-joined value, because an old link's
+ * single value ("Bangalore, Karnataka") contains commas of its own.
+ */
+function readFilterList(raw: string[], max: number): string[] | typeof TOO_LONG {
+  const values: string[] = [];
+  for (const item of raw.slice(0, FILTER_VALUES_MAX)) {
+    const value = readFilter(item, max);
+    if (value === TOO_LONG) return TOO_LONG;
+    if (value) values.push(value);
+  }
+  return values;
+}
+
+/**
+ * The places the Location values ask for, by name, in the order asked and
+ * without repeats — so `?location=Bangalore&location=Bengaluru` is one filter,
+ * and an old `?location=Bangalore` comes back as "Bengaluru" for the client to
+ * show as ticked.
+ */
+function normaliseLocations(values: string[]): string[] {
+  const names = new Map<string, string>();
+  for (const value of values) {
+    for (const place of placesForFilter(value)) {
+      if (!names.has(place.key)) names.set(place.key, place.name);
+    }
+  }
+  return [...names.values()];
+}
+
+/** The same for Experience: range ids, in display order, without repeats. */
+function normaliseExperience(values: string[]): string[] {
+  const wanted = new Set(values.flatMap((value) => experienceForFilter(value)));
+  return EXPERIENCE_ORDER.filter((id) => wanted.has(id));
+}
+
+/**
  * Exact equality, case-insensitively; `null` means "any".
  *
  * Exact rather than `contains`, because the value came out of a facet and is
- * therefore a value the corpus actually holds. A substring test would quietly
- * make "Berlin" also mean "Berlin, Germany" — a different option, with a
- * different count, that the dropdown offered separately.
+ * therefore a value the corpus actually holds.
  */
 function equalsFilter(value: string | null): Prisma.StringNullableFilter | undefined {
   return value ? { equals: value, mode: 'insensitive' } : undefined;
 }
 
-/** The selects as `where` clauses. `undefined` is "no clause" to Prisma — which
- *  is what an unset select means; `null` would mean "the column is null". */
-function filterWhere(filters: FeedFilters): Prisma.JobWhereInput {
+/**
+ * How each distinct `location` and `experience` string in the active corpus
+ * reads, memoised: the same few hundred strings come back on every request, and
+ * reading one runs a few regular expressions over it. Bounded, so a corpus of
+ * ever-new free text cannot grow it without limit.
+ */
+const READING_CACHE_MAX = 5000;
+const placeReadings = new Map<string, Place[]>();
+const experienceReadings = new Map<string, ExperienceBucketId[]>();
+
+function remember<T>(cache: Map<string, T>, key: string, read: () => T): T {
+  const hit = cache.get(key);
+  if (hit) return hit;
+  if (cache.size >= READING_CACHE_MAX) cache.clear();
+  const value = read();
+  cache.set(key, value);
+  return value;
+}
+
+const placesOf = (value: string) => remember(placeReadings, value, () => placesIn(value));
+const experienceOf = (value: string | null) =>
+  value === null
+    ? [EXPERIENCE_NOT_STATED.id]
+    : remember(experienceReadings, value, () => experienceBuckets(value));
+
+/**
+ * The distinct strings each multi-value filter has to choose among.
+ *
+ * The filter is `column IN (strings that read as a chosen option)` — the
+ * reading happens here, in the same functions the facet counts use, so no
+ * schema change is needed and a count can never disagree with the list it
+ * promises. Read fresh rather than cached: a new posting's spelling must be
+ * findable the moment it is live, and two `GROUP BY`s over the active corpus
+ * cost a few milliseconds.
+ */
+interface ColumnValues {
+  location: string[];
+  experience: Array<string | null>;
+}
+
+async function loadColumnValues(filters: FeedFilters): Promise<ColumnValues> {
+  const active: Prisma.JobWhereInput = { isActive: true };
+  const [locations, experiences] = await Promise.all([
+    filters.location.length
+      ? prisma.job.groupBy({ by: ['location'], where: active })
+      : Promise.resolve([] as Array<{ location: string | null }>),
+    filters.experience.length
+      ? prisma.job.groupBy({ by: ['experience'], where: active })
+      : Promise.resolve([] as Array<{ experience: string | null }>),
+  ]);
   return {
-    location: equalsFilter(filters.location),
-    experience: equalsFilter(filters.experience),
-    type: equalsFilter(filters.type),
+    location: locations.flatMap((row) => (row.location ? [row.location] : [])),
+    experience: experiences.map((row) => row.experience),
   };
+}
+
+/**
+ * The filters as `where` clauses. `undefined` is "no clause" to Prisma — which
+ * is what an unset filter means; `null` would mean "the column is null".
+ */
+function filterWhere(filters: FeedFilters, columns: ColumnValues): Prisma.JobWhereInput {
+  const where: Prisma.JobWhereInput = { type: equalsFilter(filters.type) };
+
+  if (filters.location.length) {
+    const wanted = new Set(filters.location.map((name) => name.toLowerCase()));
+    where.location = {
+      in: columns.location.filter((value) => placesOf(value).some((place) => wanted.has(place.key))),
+    };
+  }
+
+  if (filters.experience.length) {
+    const wanted = new Set(filters.experience);
+    const matching = columns.experience.filter((value) =>
+      experienceOf(value).some((bucket) => wanted.has(bucket))
+    );
+    const stated = matching.filter((value): value is string => value !== null);
+    // "Not specified" also has to reach the rows whose column is null, which an
+    // `IN` list cannot name.
+    where.AND = [
+      matching.includes(null)
+        ? { OR: [{ experience: { in: stated } }, { experience: null }] }
+        : { experience: { in: stated } },
+    ];
+  }
+
+  return where;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -132,28 +272,41 @@ function filterWhere(filters: FeedFilters): Prisma.JobWhereInput {
 /* -------------------------------------------------------------------------- */
 
 interface Facet {
+  /** What goes in the URL. */
   value: string;
   count: number;
+  /** What the option says, where that differs from `value`. */
+  label?: string;
+  /** Location only: which part of the list the option belongs in. */
+  group?: PlaceKind;
+  /** Location only: other spellings the list's search box should find. */
+  also?: string[];
 }
 
 interface FeedFacets {
   location: Facet[];
   experience: Facet[];
   type: Facet[];
+  /**
+   * Jobs left by the *other* filters, per filter: how many come back if this
+   * one is cleared. Not the sum of the counts above — a job in three cities is
+   * counted under each of them, but comes back once.
+   */
+  pool: { location: number; experience: number; type: number };
   /** Active postings in total, ignoring every filter — the feed's denominator. */
   total: number;
 }
 
-/** Cap on how many options one select may offer. */
+/** Cap on how many options one list may offer. */
 const FACET_LIMIT = 200;
 
 /**
  * Collapses a `groupBy` result into display options.
  *
- * Postings spell a location every way a free-text box allows, so rows are folded
- * case-insensitively and their counts summed. The spelling shown is the most
- * common one (alphabetically first on a tie) rather than whichever row Postgres
- * returned first, so the label is stable between requests.
+ * Free-text columns are folded case-insensitively and their counts summed. The
+ * spelling shown is the most common one (alphabetically first on a tie) rather
+ * than whichever row Postgres returned first, so the label is stable between
+ * requests.
  */
 function foldFacet(
   rows: ReadonlyArray<{ value: string | null; count: number }>,
@@ -180,9 +333,6 @@ function foldFacet(
     }
   }
 
-  // Trimmed by popularity, then ordered for reading: a corpus with thousands of
-  // distinct free-text locations must not ship a thousand-option select, and the
-  // options worth keeping are the ones people actually posted.
   return [...folded.values()]
     .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value))
     .slice(0, FACET_LIMIT)
@@ -201,56 +351,113 @@ function byJobTypeOrder(a: Facet, b: Facet): number {
   return rank(a.value) - rank(b.value) || a.value.localeCompare(b.value);
 }
 
+const PLACE_GROUP_ORDER: Record<PlaceKind, number> = { remote: 0, city: 1, region: 2 };
+
 /**
- * The options for the three selects, with counts, over the whole active corpus.
+ * One option per place, however many ways postings spell it.
+ *
+ * A posting is counted once under every place it names — "Noida · Bangalore ·
+ * Gurugram" under each of the three, and under India — so a count is exactly
+ * what ticking that one option returns. Remote comes first, then cities, then
+ * countries and regions, each by how many jobs it has.
+ */
+function placeFacet(rows: ReadonlyArray<{ value: string | null; count: number }>): Facet[] {
+  const places = new Map<string, { place: Place; count: number; spellings: Map<string, number> }>();
+
+  for (const row of rows) {
+    if (!row.value) continue;
+    for (const place of placesOf(row.value)) {
+      const entry = places.get(place.key) ?? { place, count: 0, spellings: new Map() };
+      entry.count += row.count;
+      // An unlisted place is shown as most postings spell it.
+      entry.spellings.set(place.name, (entry.spellings.get(place.name) ?? 0) + row.count);
+      places.set(place.key, entry);
+    }
+  }
+
+  return [...places.values()]
+    .sort((a, b) => b.count - a.count || a.place.name.localeCompare(b.place.name))
+    .slice(0, FACET_LIMIT)
+    .map(({ place, count, spellings }) => ({
+      value: [...spellings].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0][0],
+      count,
+      group: place.kind,
+      ...(place.also ? { also: place.also } : {}),
+    }))
+    .sort(
+      (a, b) =>
+        PLACE_GROUP_ORDER[a.group] - PLACE_GROUP_ORDER[b.group] ||
+        b.count - a.count ||
+        a.value.localeCompare(b.value)
+    );
+}
+
+/** Every range, always, in order: a fixed list reads faster than a shifting one. */
+function experienceFacet(rows: ReadonlyArray<{ value: string | null; count: number }>): Facet[] {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    for (const bucket of experienceOf(row.value)) {
+      counts.set(bucket, (counts.get(bucket) ?? 0) + row.count);
+    }
+  }
+  return EXPERIENCE_ORDER.map((id) => ({
+    value: id,
+    label: experienceBucketLabel(id),
+    count: counts.get(id) ?? 0,
+  }));
+}
+
+const sumCounts = (rows: ReadonlyArray<{ _count: { _all: number } }>) =>
+  rows.reduce((total, row) => total + row._count._all, 0);
+
+/**
+ * The options for the three filters, with counts, over the whole active corpus.
  *
  * Three deliberate decisions about *what each count counts*:
  *
- * - **After the other two selects.** Drill-down semantics: a count answers the
- *   question the user is about to ask — "how many roles do I get if I pick
+ * - **After the other two filters.** Drill-down semantics: a count answers the
+ *   question the user is about to ask — "how many jobs do I get if I pick
  *   this" — so no listed option can lead to an empty result.
- * - **Never after its own select.** Choosing Berlin must not collapse the
- *   Location list to Berlin alone; the list is also the way back out to Munich.
+ * - **Never after its own filter.** Choosing Berlin must not collapse the
+ *   Location list to Berlin alone; the list is also the way to add Munich.
  * - **Never after `?q=`.** Deriving the options from the result set is the bug
- *   this replaces: searching "frontend" narrowed the Location dropdown to the
- *   few locations among the hits, exactly when the user most needs the others
- *   offered. A query is a relevance ranking; a select is a fact about a posting.
+ *   this replaces: searching "frontend" narrowed the Location list to the few
+ *   locations among the hits, exactly when the user most needs the others
+ *   offered. A query is a relevance ranking; a filter is a fact about a posting.
  *   The facets describe the filterable corpus, and the UI says so, so the count
- *   in brackets is not read as the hit count.
+ *   is not read as the hit count.
  */
 async function computeFacets(filters: FeedFilters): Promise<FeedFacets> {
   const active: Prisma.JobWhereInput = { isActive: true };
+  const columns = await loadColumnValues(filters);
+  const others = (cleared: Partial<FeedFilters>) => ({
+    ...active,
+    ...filterWhere({ ...filters, ...cleared }, columns),
+  });
 
   const [locations, experiences, types, total] = await Promise.all([
-    prisma.job.groupBy({
-      by: ['location'],
-      where: { ...active, ...filterWhere({ ...filters, location: null }) },
-      _count: { _all: true },
-    }),
-    prisma.job.groupBy({
-      by: ['experience'],
-      where: { ...active, ...filterWhere({ ...filters, experience: null }) },
-      _count: { _all: true },
-    }),
-    prisma.job.groupBy({
-      by: ['type'],
-      where: { ...active, ...filterWhere({ ...filters, type: null }) },
-      _count: { _all: true },
-    }),
-    // Unfiltered on purpose: this is the denominator ("12 of 340 open roles")
+    prisma.job.groupBy({ by: ['location'], where: others({ location: [] }), _count: { _all: true } }),
+    prisma.job.groupBy({ by: ['experience'], where: others({ experience: [] }), _count: { _all: true } }),
+    prisma.job.groupBy({ by: ['type'], where: others({ type: null }), _count: { _all: true } }),
+    // Unfiltered on purpose: this is the denominator ("12 of 340 open jobs")
     // and the one number that tells an empty feed apart from an empty filter.
     prisma.job.count({ where: active }),
   ]);
 
   return {
-    location: foldFacet(locations.map((row) => ({ value: row.location, count: row._count._all }))),
-    experience: foldFacet(
+    location: placeFacet(locations.map((row) => ({ value: row.location, count: row._count._all }))),
+    experience: experienceFacet(
       experiences.map((row) => ({ value: row.experience, count: row._count._all }))
     ),
     type: foldFacet(
       types.map((row) => ({ value: row.type, count: row._count._all })),
       byJobTypeOrder
     ),
+    pool: {
+      location: sumCounts(locations),
+      experience: sumCounts(experiences),
+      type: sumCounts(types),
+    },
     total,
   };
 }
@@ -280,9 +487,11 @@ async function loadFacets(filters: FeedFilters): Promise<FeedFacets> {
   // JSON rather than a delimiter join: with no separator to choose, no filter
   // value can contain one and collide with a different combination. Lowercased
   // because the `where` clauses themselves are case-insensitive.
-  const key = JSON.stringify(
-    [filters.location, filters.experience, filters.type].map((value) => (value ?? '').toLowerCase())
-  );
+  const key = JSON.stringify([
+    filters.location.map((value) => value.toLowerCase()).sort(),
+    [...filters.experience].sort(),
+    (filters.type ?? '').toLowerCase(),
+  ]);
 
   const cached = facetCache.get(key);
   if (cached && Date.now() - cached.at < FACET_TTL_MS) return cached.facets;
@@ -403,7 +612,10 @@ function applyOverrides(
   const unchanged = { query, overridden: [] };
   if (!query) return unchanged;
 
-  const contested = OVERRIDABLE_CHIPS.filter(({ select }) => filters[select]);
+  const contested = OVERRIDABLE_CHIPS.filter(({ select }) => {
+    const value = filters[select];
+    return Array.isArray(value) ? value.length > 0 : Boolean(value);
+  });
   if (contested.length === 0) return unchanged;
 
   // The same parser `hybridJobSearch` runs internally, so this says what the
@@ -436,8 +648,10 @@ function applyOverrides(
  *   ?companyId=…  jobs for one company, with applicant details (owner/admin only)
  *   ?q=…          hybrid search over active jobs (lexical + vector, fused by
  *                 rank; degrades to lexical-only when AI is off)
- *   ?location=…   exact (case-insensitive) match on the posting's location
- *   ?experience=… exact (case-insensitive) match on the experience column
+ *   ?location=…   a place, repeatable — any of them matches; every spelling
+ *                 of a city counts as that city (see `lib/jobs/filters.ts`)
+ *   ?experience=… a range of years (0-1, 1-3, 3-5, 5-10, 10-plus, not-stated),
+ *                 repeatable — any of them matches
  *   ?type=…       exact (case-insensitive) match on the employment type
  *   ?sort=match   order by match score, for a signed-in seeker
  *   ?meta=1       return an envelope — jobs, how the query was read (semantic,
@@ -453,6 +667,10 @@ function applyOverrides(
  * adopt them without adopting the envelope.
  */
 export async function GET(req: NextRequest) {
+  // Imported sources not refreshed for six hours are re-imported once this
+  // response has gone out; the visitor never waits on it.
+  after(() => refreshStaleSources().catch((error) => console.error('Job refresh failed:', error)));
+
   try {
     const { searchParams } = new URL(req.url);
     const companyId = searchParams.get('companyId');
@@ -507,13 +725,17 @@ export async function GET(req: NextRequest) {
     const wantsMeta = searchParams.get('meta') === '1';
     const sortByMatch = searchParams.get('sort') === 'match';
 
-    const location = readFilter(searchParams.get('location'), FILTER_MAX.location);
-    const experience = readFilter(searchParams.get('experience'), FILTER_MAX.experience);
+    const location = readFilterList(searchParams.getAll('location'), FILTER_MAX.location);
+    const experience = readFilterList(searchParams.getAll('experience'), FILTER_MAX.experience);
     const type = readFilter(searchParams.get('type'), FILTER_MAX.type);
     if (location === TOO_LONG || experience === TOO_LONG || type === TOO_LONG) {
       return badRequest('That filter value is too long');
     }
-    const filters: FeedFilters = { location, experience, type };
+    const filters: FeedFilters = {
+      location: normaliseLocations(location),
+      experience: normaliseExperience(experience),
+      type,
+    };
 
     // An explicit select beats the same filter inferred from the query text; see
     // `OVERRIDABLE_CHIPS` for why, and what comes back to the UI as a result.
@@ -564,7 +786,19 @@ export async function GET(req: NextRequest) {
     let search: HybridSearchResult | null = null;
     if (searchQuery && searchAllowed) {
       try {
-        search = await hybridJobSearch(searchQuery, { limit: SEMANTIC_LIMIT });
+        // The selects narrow the candidates *inside* the search, before its
+        // top-60 cut; applied only afterwards, a search plus a city often came
+        // back empty although matching jobs existed.
+        const selectWhere = filterWhere(filters, await loadColumnValues(filters));
+        const narrowed = Object.values(selectWhere).some((clause) => clause !== undefined);
+        const within = narrowed
+          ? new Set(
+              (
+                await prisma.job.findMany({ where: { isActive: true, ...selectWhere }, select: { id: true } })
+              ).map((row) => row.id)
+            )
+          : undefined;
+        search = await hybridJobSearch(searchQuery, { limit: SEMANTIC_LIMIT, within });
       } catch (searchError) {
         console.error('GET /api/jobs hybrid search failed:', searchError);
         search = null;
@@ -592,7 +826,7 @@ export async function GET(req: NextRequest) {
      */
     const where: Prisma.JobWhereInput = {
       isActive: true,
-      ...filterWhere(filters),
+      ...filterWhere(filters, await loadColumnValues(filters)),
       ...(semanticHits ? { id: { in: semanticHits.map((hit) => hit.jobId) } } : {}),
     };
 

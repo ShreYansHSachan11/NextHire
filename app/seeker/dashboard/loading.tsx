@@ -20,7 +20,7 @@ import { ApplicationRowSkeleton, MatchCardSkeleton } from "@/app/components/skel
  */
 export default function DashboardLoading() {
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen">
       <Navbar />
 
       <main id="main-content" className="container-responsive py-6 sm:py-8">
@@ -55,7 +55,9 @@ export default function DashboardLoading() {
           {Array.from({ length: 3 }, (_, index) => (
             <Card key={index} className="space-y-3 p-4">
               <Skeleton className="h-3 w-24" />
-              <Skeleton className="h-7 w-12" />
+              <span className="flex h-7 items-center">
+                <Skeleton className="h-5 w-14" rounded="rounded-full" />
+              </span>
               <Skeleton className="h-3 w-32" />
             </Card>
           ))}

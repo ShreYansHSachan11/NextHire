@@ -19,7 +19,7 @@ import { Skeleton } from "@/app/components/ui";
  */
 export default function ConversationsLoading() {
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen">
       <Navbar />
       <main
         id="main-content"

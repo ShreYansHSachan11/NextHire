@@ -12,7 +12,7 @@ import { Card, Skeleton } from "@/app/components/ui";
  */
 export default function Loading() {
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen">
       <Navbar />
       <main id="main-content" className="container-responsive py-6 sm:py-8">
         <div aria-hidden="true">
@@ -68,7 +68,7 @@ export default function Loading() {
         </div>
 
         <span className="sr-only" role="status">
-          Loading this role
+          Loading this job
         </span>
       </main>
     </div>

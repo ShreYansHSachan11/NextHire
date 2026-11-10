@@ -11,16 +11,17 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* ==========================================================================
-   NextHire design system — "signal"
+   NextHire design system — glass on near-black
    --------------------------------------------------------------------------
-   A precise, technical language rather than a decorative one: hairline rules,
-   a cool slate-navy neutral ramp, monospace for machine-generated labels, and
-   a single emerald accent reserved for AI/match signal. Nothing glows; the
-   futurism comes from density and precision.
+   A near-black neutral canvas, one slate blue accent, translucent panels lit by a
+   soft ambient glow, generous corner radii and pill-shaped controls. Dark is
+   the default theme. Deep slate (#3d5a80) is the fill, under white type, in both
+   themes. It is too dark to read as text on near-black, so the dark theme sets
+   accent words and icons in lighter tints of the same hue.
 
    The neutral, primary and accent ramps below intentionally override Tailwind's
    defaults, so every existing `bg-gray-50` / `border-gray-200` / `text-blue-600`
-   in the app shifts onto the new palette without touching each call site.
+   in the app shifts onto the palette without touching each call site.
    ========================================================================== */
 
 @theme inline {
@@ -40,48 +41,47 @@
  * (With `inline` the literal hex is baked into each utility and that is impossible.)
  */
 @theme {
-  /* Neutral ramp: cool slate in the light range, true navy in the dark range. */
-  --color-gray-50: #f7f8fa;
-  --color-gray-100: #eff1f5;
-  --color-gray-200: #e2e6ec;
-  --color-gray-300: #cbd2dc;
-  --color-gray-400: #94a0b0;
-  /* `text-gray-500` is the app's secondary-text class. The old #6b7889 measured
-     4.2:1 on the light canvas, i.e. below AA for body copy, so the light value is
-     darkened here and re-lightened for the dark theme further down. */
-  --color-gray-500: #5c6878;
-  --color-gray-600: #4e5a6b;
-  --color-gray-700: #27313f;
-  --color-gray-800: #131b2a;
-  --color-gray-900: #0b111c;
-  --color-gray-950: #060a12;
+  /* Neutral ramp: warm off-whites in the light range, true near-black in the
+     dark range. `text-gray-500` is the app's secondary-text class, so its light
+     value clears 4.5:1 here and it is re-lightened for the dark theme below. */
+  --color-gray-50: #f6f7f9;
+  --color-gray-100: #eef0f3;
+  --color-gray-200: #e3e6eb;
+  --color-gray-300: #cdd2da;
+  --color-gray-400: #6a707c;
+  --color-gray-500: #59606c;
+  --color-gray-600: #4a505b;
+  --color-gray-700: #2a2f38;
+  --color-gray-800: #161a20;
+  --color-gray-900: #0a0c10;
+  --color-gray-950: #05070a;
 
-  /* Primary: indigo, used for links, focus and the top signal rail. */
-  --color-blue-50: #eef2ff;
-  --color-blue-100: #e0e7ff;
-  --color-blue-200: #c7d2fe;
-  --color-blue-300: #a5b4fc;
-  --color-blue-400: #818cf8;
-  --color-blue-500: #6366f1;
-  --color-blue-600: #4f46e5;
-  --color-blue-700: #4338ca;
-  --color-blue-800: #3730a3;
-  --color-blue-900: #312e81;
+  /* The one accent. Both Tailwind hues the app uses, blue for links and focus
+     and green for match quality and live state, resolve to the same slate ramp.
+     400 reads on near-black, and 600 up reads as text on white. */
+  --color-blue-50: #eef2f8;
+  --color-blue-100: #dde5f0;
+  --color-blue-200: #c3d0e3;
+  --color-blue-300: #a9bddd;
+  --color-blue-400: #8fa9d0;
+  --color-blue-500: #5f7fa8;
+  --color-blue-600: #3d5a80;
+  --color-blue-700: #31496a;
+  --color-blue-800: #263a55;
+  --color-blue-900: #1c2b40;
+  --color-blue-950: #121c2b;
 
-  /* Accent: emerald. Reserved for match quality, live state and confirmation.
-     600 and 700 are pulled darker than stock emerald because `text-green-600`
-     is used as text ("3 unread", "98% match") and stock #059669 only reaches
-     3.6:1 on white — fine for an icon, not for a word. */
-  --color-green-50: #ecfdf5;
-  --color-green-100: #d1fae5;
-  --color-green-200: #a7f3d0;
-  --color-green-300: #6ee7b7;
-  --color-green-400: #34d399;
-  --color-green-500: #10b981;
-  --color-green-600: #04795b;
-  --color-green-700: #036249;
-  --color-green-800: #065f46;
-  --color-green-900: #064e3b;
+  --color-green-50: #eef2f8;
+  --color-green-100: #dde5f0;
+  --color-green-200: #c3d0e3;
+  --color-green-300: #a9bddd;
+  --color-green-400: #8fa9d0;
+  --color-green-500: #5f7fa8;
+  --color-green-600: #3d5a80;
+  --color-green-700: #31496a;
+  --color-green-800: #263a55;
+  --color-green-900: #1c2b40;
+  --color-green-950: #121c2b;
 }
 
 /* ==========================================================================
@@ -114,16 +114,27 @@
      The step size is calibrated against the systems that publish theirs:
      Atlassian dark runs #161A1D → #1D2125 → #22272B → #282E33 (+5–7 per
      channel), M3's dark surface tones run 4 → 10 → 12 → 17, Carbon's g100 runs
-     #161616 → #262626 → #393939 (+16–25). Ours sits mid-range at about +7 per
+     #161616 → #262b34 → #393939 (+16–25). Ours sits mid-range at about +7 per
      channel per tier. Shadow is kept rather than dropped, because Atlassian's
      rule is that the lighter surface and its shadow are always paired — the
      pairing is what reads as depth.
 
-     M2's guidance against pure black (#121212, not #000 — "light text on a
-     dark gray surface has less contrast than light text on a black surface")
-     is why the dark canvas is #0b111c, and its rule that dark accents move
-     toward the 200 tone of their hue is why --accent is emerald-400 in dark
-     and emerald-600 in light.
+     The canvas is close to black rather than Material's #121212: glass reads
+     by the contrast between a lit pane and what is behind it, so the canvas
+     stays dark and the panes carry the lightness.
+
+   GLASS
+
+   `--surface`, `--surface-raised` and `--surface-overlay` stay solid. They are
+   what the contrast audit measures and what `color-mix` starts from. Panels
+   paint the `--glass-*` tokens, which composite to about the same value over the
+   canvas, on top of the ambient glow in `body::before`. Only panes with content
+   scrolling behind them blur (the header, `.panel-sticky`): behind any other
+   pane there is just a smooth gradient, so blur would cost a recomposite on
+   every scrolled frame and change nothing you can see. Floating layers stay
+   nearly opaque: a popover opens inside the blurred header, and a browser does
+   not blur the page through a blurred ancestor. Blur is dropped entirely for
+   `prefers-reduced-transparency` and `prefers-contrast: more`.
 
    Refs: https://m3.material.io/styles/elevation/overview
          https://m2.material.io/design/color/dark-theme.html
@@ -133,19 +144,19 @@
 
 :root {
   /* --- Surfaces ---------------------------------------------------------- */
-  --canvas: #f7f8fa;
-  --surface: #ffffff;
+  --canvas: #f1f3f7;
+  --surface: #fbfcfd;
   --surface-raised: #ffffff;
   --surface-overlay: #ffffff;
   /* The only tier that is *darker* than the canvas in light mode. */
-  --surface-sunken: #eff1f5;
+  --surface-sunken: #e8ebf0;
 
   /* --- Ink --------------------------------------------------------------- */
-  --ink: #0b111c;
-  --ink-muted: #4e5a6b;
+  --ink: #0a0c10;
+  --ink-muted: #4a505b;
   /* The faintest text tier still has to clear 4.5:1 — `.eyebrow` is 11px, so it
      never qualifies for the large-text exemption. */
-  --ink-faint: #5c6878;
+  --ink-faint: #59606c;
   /* Ink for use *on* an accent fill (badge counters, filled buttons). */
   --ink-on-accent: #ffffff;
 
@@ -155,9 +166,9 @@
      (fields, outline buttons). Refactoring UI's "don't use a border when a
      shadow or a background change will do" is why `--line-subtle` exists at
      all — it is the divider you reach for instead of a full border. */
-  --line-subtle: #eff1f5;
-  --line: #e2e6ec;
-  --line-strong: #cbd2dc;
+  --line-subtle: #eceef2;
+  --line: #dfe3e9;
+  --line-strong: #c8ced7;
   /*
    * The boundary of an interactive control — a text field, an outline button,
    * the unreached half of a pipeline track. Separated from the decorative
@@ -168,19 +179,25 @@
    * border-subtle vs border-strong and lands in the same place: its White theme
    * border-strong-01 is Gray 50, 3.5:1 on white.
    */
-  --line-control: #7f8d9f;
+  --line-control: #7b8391;
 
   /* --- Accent ------------------------------------------------------------
      `--accent` paints graphics (meter fills, live dots) where 3:1 is the bar;
      `--accent-text` is the same hue pulled far enough down to set words in. */
-  --accent: #059669;
-  --accent-text: #036249;
+  --accent: #3d5a80;
+  --accent-text: #31496a;
   /* A solid accent that white type can sit on. `--accent` itself only reaches
      3.8:1 against white, which is an icon colour, not a label colour. */
-  --accent-fill: #036249;
-  --accent-soft: #ecfdf5;
-  --accent-line: #a7f3d0;
-  --rail: linear-gradient(90deg, #4f46e5 0%, #6366f1 45%, #10b981 100%);
+  --accent-fill: #3d5a80;
+  --accent-soft: #e8eef6;
+  /* The tint for a whole card, much quieter than the one for a chip. */
+  --accent-wash: rgb(61 90 128 / 0.06);
+  --accent-glow: rgb(61 90 128 / 0.16);
+  --accent-line: #b9c8dd;
+  /* The loud fill for the few brand moments; the dark theme turns it teal. */
+  --brand-gradient: linear-gradient(115deg, #3d5a80 0%, #5f7fa8 100%);
+  --brand-gradient-hover: linear-gradient(115deg, #4a6b96 0%, #6d8db6 100%);
+  --shadow-glow: var(--shadow-floating);
 
   /* --- Elevation ---------------------------------------------------------
      Three steps, each larger *and* softer than the last, all cast straight
@@ -188,9 +205,9 @@
      source above the page rather than as three unrelated blurs. The ambient
      (large, faint) and direct (small, tighter) pair per level is Primer's
      two-part resting/floating shadow construction. */
-  --shadow-raised: 0 1px 2px 0 rgb(11 17 28 / 0.05), 0 1px 3px -1px rgb(11 17 28 / 0.06);
-  --shadow-floating: 0 2px 4px -2px rgb(11 17 28 / 0.06), 0 8px 20px -6px rgb(11 17 28 / 0.1);
-  --shadow-overlay: 0 4px 8px -4px rgb(11 17 28 / 0.08), 0 18px 40px -12px rgb(11 17 28 / 0.18);
+  --shadow-raised: 0 1px 2px 0 rgb(10 10 10 / 0.04), 0 8px 24px -12px rgb(10 10 10 / 0.08);
+  --shadow-floating: 0 2px 4px -2px rgb(10 10 10 / 0.06), 0 14px 32px -10px rgb(10 10 10 / 0.12);
+  --shadow-overlay: 0 4px 8px -4px rgb(10 10 10 / 0.08), 0 24px 48px -12px rgb(10 10 10 / 0.2);
   /* Dark mode adds a 1px top highlight so a raised surface catches the light
      from above; in light mode there is nothing to catch, so it is `none` and
      the same declaration works in both themes. */
@@ -213,9 +230,9 @@
      a strict 2:1 because our light neutral is a saturated navy rather than
      Material's near-black and lands heavier at the same alpha.
      Ref: https://m3.material.io/foundations/interaction/states/state-layers */
-  --wash-hover: rgb(11 17 28 / 0.05);
-  --wash-active: rgb(11 17 28 / 0.1);
-  --wash-selected: rgb(11 17 28 / 0.07);
+  --wash-hover: rgb(10 10 10 / 0.05);
+  --wash-active: rgb(10 10 10 / 0.1);
+  --wash-selected: rgb(10 10 10 / 0.07);
   /* Kept as the original name so existing call sites keep working. */
   --hover-wash: var(--wash-hover);
   /* M3 puts disabled content at 38%; 50% keeps our mono labels readable enough
@@ -234,26 +251,28 @@
      `text-blue-600 underline-offset-2 hover:underline dark:text-blue-400`;
      a token lets the contrast audit check the colour on every surface it can
      land on, which a raw utility pair cannot be. */
-  --link: #4f46e5;
+  --link: #31496a;
 
-  --focus-ring: #4f46e5;
+  --focus-ring: #3d5a80;
   --focus-ring-width: 2px;
   --focus-ring-offset: 2px;
 
   /* --- Radius ------------------------------------------------------------
      One scale so a chip inside a card inside a dialog reads as nested rather
      than as three unrelated corner treatments. */
-  --radius-xs: 0.25rem;
-  --radius-sm: 0.375rem;
-  --radius-md: 0.5rem;
+  --radius-xs: 0.375rem;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.625rem;
   /* The control family — buttons, fields, selects — sits one step softer
      than `--radius-md` so a 40px control reads as rounded rather than as a
      rectangle with the corners knocked off, and close enough to the `--radius-lg`
      cards that a control inside one does not look like a different kit. */
-  --radius-control: 0.625rem;
-  --radius-lg: 0.75rem;
-  --radius-xl: 1rem;
+  --radius-control: 0.875rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
   --radius-pill: 999px;
+  /* Cards and panels: the largest radius, so nested controls read as inset. */
+  --radius-panel: 1.5rem;
 
   /* --- Density -----------------------------------------------------------
      The house style is deliberately dense — an instrument panel, not a
@@ -283,15 +302,15 @@
   --space-8: 2rem;
   --space-9: 3rem;
 
-  --control-h-sm: 2rem;
-  --control-h-md: 2.5rem;
-  --control-h-lg: 3rem;
+  --control-h-sm: 2.25rem;
+  --control-h-md: 2.75rem;
+  --control-h-lg: 3.25rem;
 
   /* Panel padding, so `p-4`/`px-6 py-5`/`p-5` stop appearing on three cards in
      the same row. */
   --pad-tight: 0.75rem;
-  --pad-panel: 1rem;
-  --pad-roomy: 1.5rem;
+  --pad-panel: 1.25rem;
+  --pad-roomy: 1.75rem;
   /* One dense list row: tall enough for a 24px target, short enough to fit a
      feed on one screen. */
   --row-py: 0.625rem;
@@ -300,143 +319,183 @@
   /* --- Misc --------------------------------------------------------------- */
   /* Primary button inverts between themes so it always reads as the loudest
      element on the page. */
-  --btn-bg: #0b111c;
+  --btn-bg: #3d5a80;
   --btn-fg: #ffffff;
-  --btn-bg-hover: #27313f;
-  --btn-bg-active: #131b2a;
+  --btn-bg-hover: #4a6b96;
+  --btn-bg-active: #31496a;
 
   /* Graph-paper rule colour used by .grid-field. */
-  --grid-line: rgb(11 17 28 / 0.06);
+  --grid-line: rgb(10 10 10 / 0.05);
 
   /* The sticky header. Previously `bg-white/85` in light and `bg-gray-900/85`
      in dark — i.e. a *surface* in one theme and the *canvas* in the other, which
      is why the bar looked detached on one and welded on the other. Both are the
      surface tier now. */
-  --header-bg: rgb(255 255 255 / 0.86);
+  --header-bg: rgb(255 255 255 / 0.72);
 
   /* Skeleton placeholder fill. A token rather than `bg-gray-200
      dark:bg-gray-700` per call site, because three surfaces were hand-rolling
      their own and they had drifted apart. */
-  --skeleton: #e6e9ef;
+  --skeleton: #e3e7ec;
+  --skeleton-shine: rgb(255 255 255 / 0.75);
+
+  /* --- Glass -------------------------------------------------------------
+     See the GLASS note above. `--canvas-lit` is the solid colour at the peak of
+     `--ambient-glow`, so the audit can measure text at the brightest point a
+     pane can sit over. */
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%234a505b' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6.5 4 4 4-4'/%3E%3C/svg%3E");
+
+  --glass-bg: rgb(255 255 255 / 0.66);
+  --glass-raised: rgb(255 255 255 / 0.82);
+  --glass-overlay: rgb(255 255 255 / 0.96);
+  --glass-sunken: rgb(10 10 10 / 0.04);
+  --glass-edge: rgb(10 10 10 / 0.08);
+  --glass-sheen: inset 0 1px 0 0 rgb(255 255 255 / 0.7);
+  --glass-blur: saturate(1.5) blur(20px);
+  --ambient-glow: rgb(61 90 128 / 0.16);
+  --ambient-soft: rgb(255 255 255 / 0.7);
+  --canvas-lit: #d4dadf;
 }
 
 .dark {
   /* --- Surfaces ----------------------------------------------------------
-     Carbon's rule, applied literally: each layer is one step lighter than the
-     one it sits on. The steps are ~4–6 ΔL apart, which is enough to separate
-     two abutting panels without turning the page grey. */
-  --canvas: #0b111c;
-  --surface: #131b2a;
-  --surface-raised: #1a2433;
-  --surface-overlay: #1e2839;
-  /* Sunken goes *below* the canvas, the same direction as in light mode. */
-  --surface-sunken: #070d17;
+     Near-black with a trace of teal, so the canvas, the panels and the accent
+     read as one family. Each layer is one step lighter than the one it sits on
+     (Carbon's layering rule); the steps are small because the panes are glass
+     and the ambient glow behind them does part of the separating. */
+  --canvas: #04080a;
+  --surface: #0b1114;
+  --surface-raised: #10181c;
+  --surface-overlay: #141e23;
+  --surface-sunken: #070c0e;
 
   /* --- Ink --------------------------------------------------------------- */
-  --ink: #f2f5f9;
-  /*
-   * Both quiet tiers move one step lighter than they used to (#94a0b0 / #8896a8).
-   * The reason is the new elevation ladder: the faint tier now has to clear 4.5:1
-   * on the *lightest* thing it can land on, which is a hovered row inside an
-   * overlay — `--surface-overlay` plus the hover state layer — not just on
-   * `--surface`. At the old values that composite measured 4.45:1. The step
-   * between muted and faint is the same size it always was; the pair has simply
-   * shifted up the ramp together.
-   */
-  --ink-muted: #a4b0c0;
-  --ink-faint: #99a7b9;
-  --ink-on-accent: #0b111c;
+  --ink: #eef5f6;
+  /* Both quiet tiers clear 4.5:1 on the lightest composite they can land on: a
+     hovered row inside an overlay. */
+  --ink-muted: #a9b7bc;
+  --ink-faint: #98a7ad;
+  /* Teal is a light fill, so the type on it is dark. */
+  --ink-on-accent: #032b26;
 
-  /* --- Hairlines ---------------------------------------------------------
-     Dark borders are a touch lighter than the surface they outline rather than
-     darker, because a darker line on navy reads as a gap rather than an edge. */
-  --line-subtle: #1c2534;
-  --line: #27313f;
-  --line-strong: #3a4657;
-  /* 3:1 against every surface tier including the overlay, the same job the
-     light value does. */
-  --line-control: #6f7d8f;
+  /* --- Hairlines --------------------------------------------------------- */
+  --line-subtle: #111a1e;
+  --line: #1a252a;
+  --line-strong: #29373d;
+  /* 3:1 against every surface tier including the overlay. */
+  --line-control: #6f8188;
 
-  /* --- Accent ------------------------------------------------------------- */
-  --accent: #34d399;
-  --accent-text: #34d399;
-  --accent-fill: #34d399;
-  --accent-soft: rgb(16 185 129 / 0.12);
-  --accent-line: rgb(52 211 153 / 0.38);
+  /* --- Accent ------------------------------------------------------------
+     Teal for graphics, a lighter teal for words. The brand gradient runs teal
+     into cyan and is used for the few loud things: the primary button, the
+     mark, one phrase of the headline, a strong fit bar. */
+  --accent: #2dd4bf;
+  --accent-text: #5eead4;
+  --accent-fill: #2dd4bf;
+  --accent-soft: rgb(45 212 191 / 0.12);
+  --accent-wash: rgb(45 212 191 / 0.05);
+  --accent-glow: rgb(45 212 191 / 0.18);
+  --accent-line: rgb(94 234 212 / 0.35);
+  --brand-gradient: linear-gradient(115deg, #5eead4 0%, #38bdf8 100%);
+  --brand-gradient-hover: linear-gradient(115deg, #7ff0dd 0%, #5cc8f9 100%);
 
-  /* --- Elevation ---------------------------------------------------------
-     Darker and deeper than the light values, because on navy a 6%-black shadow
-     is invisible — but deliberately still secondary to the lightness step
-     above. M3: in dark themes "shadows can appear harsh"; tone does the work.
-     `--shadow-lip` is the 1px top highlight that makes a raised surface look
-     lit from above; it is the dark-mode equivalent of a light-mode shadow. */
-  --shadow-raised: 0 1px 2px 0 rgb(0 0 0 / 0.45);
+  /* --- Elevation --------------------------------------------------------- */
+  --shadow-raised: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 12px 32px -16px rgb(0 0 0 / 0.7);
   --shadow-floating: 0 2px 6px -2px rgb(0 0 0 / 0.5), 0 10px 24px -8px rgb(0 0 0 / 0.55);
   --shadow-overlay: 0 6px 14px -6px rgb(0 0 0 / 0.55), 0 26px 52px -16px rgb(0 0 0 / 0.65);
-  --shadow-lip: inset 0 1px 0 0 rgb(255 255 255 / 0.05);
+  --shadow-lip: inset 0 1px 0 0 rgb(255 255 255 / 0.06);
+  /* The teal halo around a highlighted card or the primary button. */
+  --shadow-glow: 0 0 0 1px rgb(94 234 212 / 0.18), 0 18px 48px -20px rgb(45 212 191 / 0.45);
 
   /* --- Interaction state layers ------------------------------------------
-     Same ramp, flipped to a white film: M3 derives the state layer from the
-     *content* colour, which in a dark theme is the light one. Hover (0.08) and
-     pressed (0.12) are M3's published values exactly; against the light theme
-     above they keep Material's light-ink-reads-quieter asymmetry without going
-     all the way to its 2× factor.
+     A white film, M3's published hover (0.08) and pressed (0.12). The ceiling
+     is contrast: an 11px `.eyebrow` on a selected row inside an overlay still
+     has to clear 4.5:1, which is what sets 0.09 for selected. */
+  --wash-hover: rgb(255 255 255 / 0.07);
+  --wash-active: rgb(255 255 255 / 0.11);
+  --wash-selected: rgb(255 255 255 / 0.08);
 
-     The ceiling on these is not taste, it is contrast: every one of them lightens
-     the surface underneath, and an 11px `.eyebrow` sitting on a *selected row
-     inside an overlay* — the lightest persistent composite the kit can produce —
-     still has to clear 4.5:1. That composite is what sets 0.09 for selected, and
-     it is why the states do not stack (see `.interactive`). 0.12 for pressed is
-     above what the 11px tier would survive, which is acceptable only because a
-     pressed state lasts as long as the pointer is down; the two body tiers are
-     held to 4.5:1 on it and are verified there. */
-  --wash-hover: rgb(255 255 255 / 0.08);
-  --wash-active: rgb(255 255 255 / 0.12);
-  --wash-selected: rgb(255 255 255 / 0.09);
-
-  /* --- Focus -------------------------------------------------------------
-     blue-300 rather than blue-400: #818cf8 measures 3.7:1 on the navy canvas
-     but only 2.9:1 on `--surface-overlay`, so a focused control inside a
-     popover fell under SC 1.4.11. #a5b4fc clears 3:1 on every surface tier. */
-  --link: #818cf8;
-
-  --focus-ring: #a5b4fc;
+  /* --- Focus ------------------------------------------------------------- */
+  --link: #5eead4;
+  --focus-ring: #5eead4;
 
   /* --- Misc --------------------------------------------------------------- */
-  --btn-bg: #f2f5f9;
-  --btn-fg: #0b111c;
-  --btn-bg-hover: #ffffff;
-  --btn-bg-active: #cbd2dc;
+  --btn-bg: #2dd4bf;
+  --btn-fg: #032b26;
+  --btn-bg-hover: #5eead4;
+  --btn-bg-active: #14b8a6;
 
-  --grid-line: rgb(148 160 176 / 0.09);
-  --header-bg: rgb(19 27 42 / 0.86);
-  --skeleton: #232e3e;
+  --grid-line: rgb(255 255 255 / 0.045);
+  --header-bg: rgb(8 13 16 / 0.72);
+  --skeleton: #18232a;
+  --skeleton-shine: rgb(255 255 255 / 0.06);
 
   /*
-   * Re-tuning two steps of the Tailwind ramp for this theme only. `text-gray-400`
-   * and `text-gray-500` are the app's secondary and tertiary text classes; the
-   * light values are too dark to read on navy, so the same classes resolve lighter
-   * here. This works only because the colour `@theme` above is not `inline`.
-   * They track `--ink-muted` and `--ink-faint` exactly — the same two tiers
-   * reached by two routes. Keeping them in step is what stops a page picking one
-   * and a kit component picking the other for the same job.
+   * Re-tuning the Tailwind ramps for this theme only. `text-gray-400`/`-500` are
+   * the app's secondary and tertiary text classes and track `--ink-muted` and
+   * `--ink-faint` exactly. The dark end of the gray ramp takes the canvas's teal
+   * cast, so `dark:border-gray-700` and friends match the token hairlines.
+   * This works only because the colour `@theme` above is not `inline`.
    */
-  --color-gray-400: #a4b0c0;
-  --color-gray-500: #99a7b9;
+  --color-gray-400: #a9b7bc;
+  --color-gray-500: #98a7ad;
+  --color-gray-700: #1d282d;
+  --color-gray-800: #111a1e;
+  --color-gray-900: #0b1114;
+  --color-gray-950: #04080a;
+
+  /* The one accent, in both Tailwind hues the app uses. */
+  --color-blue-50: #effcf9;
+  --color-blue-100: #ccfbf1;
+  --color-blue-200: #99f6e4;
+  --color-blue-300: #7ff0dd;
+  --color-blue-400: #5eead4;
+  --color-blue-500: #2dd4bf;
+  --color-blue-600: #14b8a6;
+  --color-blue-700: #0f766e;
+  --color-blue-800: #115e59;
+  --color-blue-900: #134e4a;
+  --color-blue-950: #042f2e;
+
+  --color-green-50: #effcf9;
+  --color-green-100: #ccfbf1;
+  --color-green-200: #99f6e4;
+  --color-green-300: #7ff0dd;
+  --color-green-400: #5eead4;
+  --color-green-500: #2dd4bf;
+  --color-green-600: #14b8a6;
+  --color-green-700: #0f766e;
+  --color-green-800: #115e59;
+  --color-green-900: #134e4a;
+  --color-green-950: #042f2e;
+
+  /* --- Glass ------------------------------------------------------------- */
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23a9b7bc' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6.5 4 4 4-4'/%3E%3C/svg%3E");
+
+  --glass-bg: rgb(170 235 230 / 0.035);
+  --glass-raised: rgb(170 235 230 / 0.06);
+  --glass-overlay: rgb(17 26 30 / 0.97);
+  --glass-sunken: rgb(0 0 0 / 0.3);
+  --glass-edge: rgb(170 235 230 / 0.09);
+  --glass-sheen: inset 0 1px 0 0 rgb(255 255 255 / 0.05);
+  --ambient-glow: rgb(20 184 166 / 0.17);
+  --ambient-soft: rgb(56 189 248 / 0.07);
+  --canvas-lit: #0a1a1b;
 }
 
 html {
   color-scheme: light;
   scroll-behavior: smooth;
+  scrollbar-gutter: stable;
   /*
    * WCAG 2.2 SC 2.4.11 Focus Not Obscured. `Navbar` is `sticky top-0` over an
-   * `h-16` (64px) bar, so an in-page jump — or a Tab onto a link below the fold
-   * — could land behind the header. 64px of header + 16px of clearance.
+   * `h-16` (64px) bar floating 12px below the viewport top, so an in-page jump — or a Tab onto a link below the fold
+   * — could land behind the header. 76px of header + 20px of clearance.
    * The Understanding doc names scroll padding as the fix, and this also
    * replaces the local `scroll-mt-24` workaround on the seeker dashboard.
    * https://www.w3.org/WAI/WCAG22/Understanding/focus-not-obscured-minimum.html
    */
-  scroll-padding-top: 5rem;
+  scroll-padding-top: 6rem;
 }
 
 html.dark {
@@ -453,24 +512,40 @@ html.dark {
  */
 @media (prefers-contrast: more) {
   :root {
-    --surface-sunken: #e6eaf0;
-    --line-subtle: #e2e6ec;
-    --line: #cbd2dc;
-    --line-strong: #94a0b0;
-    --line-control: #66748a;
+    --surface-sunken: #e2e6eb;
+    --line-subtle: #dfe3e9;
+    --line: #c8ced7;
+    --line-strong: #959ca9;
+    --line-control: #616977;
     --ink-faint: var(--ink-muted);
   }
 
   .dark {
-    --surface: #182231;
-    --surface-raised: #212c3d;
-    --surface-overlay: #293449;
-    --surface-sunken: #04080f;
-    --line-subtle: #27313f;
-    --line: #3a4657;
-    --line-strong: #55637a;
-    --line-control: #8b99ad;
+    --surface: #121b1f;
+    --surface-raised: #1a252a;
+    --surface-overlay: #202c32;
+    --surface-sunken: #000000;
+    --line-subtle: #1a252a;
+    --line: #29373d;
+    --line-strong: #3b4a51;
+    --line-control: #85979e;
     --ink-faint: var(--ink-muted);
+  }
+}
+
+/* Solid panes for anyone who asks for less transparency or more contrast. */
+@media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
+  :root,
+  .dark {
+    --glass-bg: var(--surface);
+    --glass-raised: var(--surface-raised);
+    --glass-overlay: var(--surface-overlay);
+    --glass-sunken: var(--surface-sunken);
+    --glass-edge: var(--line);
+    --glass-blur: none;
+    --header-bg: var(--surface);
+    --ambient-glow: transparent;
+    --ambient-soft: transparent;
   }
 }
 
@@ -479,9 +554,24 @@ body {
   color: var(--ink);
   /* Was Arial/Helvetica, which overrode the Inter font loaded in the layout. */
   font-family: var(--font-sans);
-  overflow-x: hidden;
+  overflow-x: clip;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+/*
+ * What the glass has to refract. Fixed, so panes keep the same light as the page
+ * scrolls under them, and behind everything, so it never affects a hit target.
+ */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(70vw 60vh at 88% -8%, var(--ambient-glow), transparent 70%),
+    radial-gradient(60vw 60vh at 4% 104%, var(--ambient-soft), transparent 70%);
 }
 
 /* Display type is set tight and dark — the reference's defining move. */
@@ -587,57 +677,21 @@ nav {
  */
 
 ::selection {
-  background: rgb(79 70 229 / 0.18);
+  background: rgb(61 90 128 / 0.22);
 }
 
 .dark ::selection {
-  background: rgb(129 140 248 / 0.28);
+  background: rgb(45 212 191 / 0.3);
+}
+
+/* Dark: the light pools at the top centre, behind the hero, as on a stage. */
+html.dark body::before {
+  background:
+    radial-gradient(60vw 55vh at 50% -12%, var(--ambient-glow), transparent 70%),
+    radial-gradient(45vw 50vh at 100% 30%, var(--ambient-soft), transparent 70%);
 }
 
 @layer components {
-  /* ==========================================================================
-     Signal rail — the thin gradient strip pinned above the navigation.
-     ========================================================================== */
-
-  .signal-rail {
-    height: 3px;
-    width: 100%;
-    background: var(--rail);
-  }
-
-  /*
-   * The same rail, in motion, across the top of the window while a route
-   * change is in flight. It reuses `--rail` on purpose: the strip that sits
-   * above the navigation and the strip that reports progress are the same
-   * object, one at rest and one working, rather than two unrelated bars.
-   *
-   * Above the sticky header (z-50) and above the skip link's own stacking, so
-   * it is never the thing hidden behind the chrome it is reporting on.
-   */
-  .route-progress {
-    position: fixed;
-    inset: 0 0 auto 0;
-    z-index: 200;
-    height: 3px;
-    pointer-events: none;
-    background: transparent;
-  }
-
-  .route-progress-bar {
-    height: 100%;
-    background: var(--rail);
-    border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
-    transition: width 180ms cubic-bezier(0.4, 0, 0.2, 1);
-    /* A sliver of glow, so the bar reads as lit rather than as a border. */
-    box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 55%, transparent);
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .route-progress-bar {
-      transition: none;
-    }
-  }
-
   /* ==========================================================================
      Monospace labels
      Machine-generated values (match scores, model versions, counts, statuses)
@@ -719,70 +773,65 @@ nav {
      ========================================================================== */
 
   .panel {
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-lg);
-    /* The resting shadow is what separates a white card from a near-white
-       canvas in light mode; in dark mode the lightness step has already done
-       that and this is barely visible, which is correct. */
-    box-shadow: var(--shadow-raised);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-edge);
+    border-radius: var(--radius-panel);
+    box-shadow: var(--shadow-raised), var(--glass-sheen);
+  }
+
+  /* A panel that sticks while the page scrolls under it. Solid enough to read,
+     with the blur that the resting panels leave out. */
+  .panel-sticky {
+    background: var(--header-bg);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
   }
 
   /* Same surface, no corner radius — for a panel that meets the viewport edge
      or is stacked flush with its neighbours. */
   .panel-flush {
-    background: var(--surface);
-    border: 1px solid var(--line);
-    box-shadow: var(--shadow-raised);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-edge);
+    box-shadow: var(--shadow-raised), var(--glass-sheen);
   }
 
   /* One step up: a panel on a panel, a summary card that leads a page, or a
      `.panel-interactive` under the pointer. */
   .panel-raised {
-    background: var(--surface-raised);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-floating), var(--shadow-lip);
+    background: var(--glass-raised);
+    border: 1px solid var(--glass-edge);
+    border-radius: var(--radius-panel);
+    box-shadow: var(--shadow-floating), var(--glass-sheen);
   }
 
-  /* Floating layer: dropdowns, popovers, toasts, dialogs. */
-  /*
-   * The border is --line-strong, not --line, on this tier alone. Primer and
-   * Atlassian both reach the same place by a different route: their floating
-   * shadows carry a `0 0 0 1px` ring whose alpha is 0 in light and opaque in
-   * dark (Primer #d1d9e000 → #3d444d; Atlassian #00000000 → #39424a), because
-   * on a dark background it is the ring, not the blur, that separates a popover
-   * from the page behind it. One stronger border says the same thing once
-   * instead of once per shadow.
-   */
+  /* Floating layer: dropdowns, popovers, toasts, dialogs. Nearly opaque, because
+     it usually opens inside the blurred header and cannot blur the page itself.
+     The stronger border is what separates it from the panels behind it. */
   .panel-overlay {
-    background: var(--surface-overlay);
+    background: var(--glass-overlay);
     border: 1px solid var(--line-strong);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-overlay), var(--shadow-lip);
+    box-shadow: var(--shadow-overlay), var(--glass-sheen);
   }
 
-  /* Below the canvas: wells, inset lists, the field an empty state sits in.
-     No shadow — a recessed surface is not lit from above. */
+  /* Wells, inset lists, the field an empty state sits in. No sheen or shadow — a
+     recessed surface is not lit from above. */
   .panel-sunken {
-    background: var(--surface-sunken);
+    background: var(--glass-sunken);
     border: 1px solid var(--line-subtle);
     border-radius: var(--radius-lg);
     box-shadow: none;
   }
 
-  /* Highlighted/selected state: emerald hairline plus the faintest tint. */
+  /* Highlighted/selected state: accent hairline plus a faint tint of it. */
   .panel-signal {
     border-color: var(--accent-line);
-    background: color-mix(in srgb, var(--accent) 4%, var(--surface));
+    background: linear-gradient(var(--accent-wash), var(--accent-wash)), var(--glass-bg);
   }
 
   /*
    * A card the whole of which is a target (a job card, a stat tile). Rest is
-   * `.panel`; hover lifts one tier; press settles back down. Borrowed wholesale
-   * from Material's "elevation changes on interaction" and Polaris's card
-   * hover, and it replaces the four different hover treatments that had grown
-   * on the four card-shaped things in the app.
+   * `.panel`; hover lifts one tier; press settles back down.
    */
   .panel-interactive {
     transition-property: background-color, border-color, box-shadow, transform;
@@ -793,13 +842,13 @@ nav {
   /* `background-color`, not the `background` shorthand: the shorthand would
      reset `background-image` and wipe out `.grid-field`'s rules on hover. */
   .panel-interactive:hover {
-    background-color: var(--surface-raised);
+    background-color: var(--glass-raised);
     border-color: var(--line-strong);
-    box-shadow: var(--shadow-floating), var(--shadow-lip);
+    box-shadow: var(--shadow-floating), var(--glass-sheen);
   }
 
   .panel-interactive:active {
-    box-shadow: var(--shadow-raised);
+    box-shadow: var(--shadow-raised), var(--glass-sheen);
   }
 
   /* Graph-paper field, used behind AI/telemetry panels. */
@@ -868,8 +917,8 @@ nav {
 
   /* Full-bleed dark band for the "how it works" style sections. */
   .band-dark {
-    background: #0b111c;
-    color: #f2f5f9;
+    background: #0a0c10;
+    color: #f4f6f9;
     /*
      * This band is dark in *both* themes, so it needs the light rule colour in
      * both — the global `--grid-line` is ink-on-paper and vanishes into it.
@@ -879,10 +928,26 @@ nav {
      * used to do.
      */
     --grid-line: rgb(255 255 255 / 0.045);
+    --skeleton: rgb(255 255 255 / 0.12);
+    --skeleton-shine: rgb(255 255 255 / 0.08);
+    --ink: #f4f6f9;
+    --ink-muted: #aeb5c1;
+    --ink-faint: #a1a9b6;
+    --accent-text: #a9bddd;
+    --color-gray-400: #aeb5c1;
+    --color-gray-500: #a1a9b6;
+    --glass-bg: rgb(255 255 255 / 0.07);
+    --glass-edge: rgb(255 255 255 / 0.12);
+    --glass-sheen: inset 0 1px 0 0 rgb(255 255 255 / 0.1);
+    --line: #2a2f38;
+    --accent: #8fa9d0;
+    --accent-wash: rgb(90 130 185 / 0.06);
+    --btn-bg: #44658f;
+    --btn-fg: #ffffff;
   }
 
   .dark .band-dark {
-    background: #060a12;
+    background: var(--glass-sunken);
   }
 
   /*
@@ -894,7 +959,83 @@ nav {
    * both, which is the whole point of the ladder.
    */
   .band-sunken {
-    background: var(--surface-sunken);
+    background: var(--glass-sunken);
+  }
+
+  /*
+   * Lit mesh gradient for the big storytelling blocks, on top of `.band-dark`.
+   * The grain is what stops a dark gradient banding into visible steps.
+   */
+  /* Doubled so it outranks `.dark .band-dark`, which would repaint the gradient
+     with the plain sunken tint. */
+  .band-dark.aurora {
+    position: relative;
+    isolation: isolate;
+    overflow: clip;
+    background:
+      radial-gradient(70% 55% at 85% -5%, rgb(84 120 170 / 0.5), transparent 70%),
+      radial-gradient(60% 55% at 0% 105%, rgb(56 78 130 / 0.5), transparent 70%),
+      radial-gradient(45% 40% at 45% 55%, rgb(61 90 128 / 0.22), transparent 75%),
+      #0a0c10;
+  }
+
+  .aurora::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    opacity: 0.09;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /*
+   * The solid slate card: the loudest surface, used once per section for the thing
+   * that matters most. It works by re-scoping tokens, so anything in the kit
+   * placed on it (panel, text utilities, icons, buttons) turns light on its own.
+   */
+  .surface-accent {
+    --glass-bg: #3d5a80;
+    --glass-raised: #45658f;
+    --glass-edge: rgb(255 255 255 / 0.14);
+    --glass-sheen: inset 0 1px 0 0 rgb(255 255 255 / 0.2);
+    --line-strong: rgb(255 255 255 / 0.2);
+    --line: rgb(255 255 255 / 0.22);
+    --line-control: #ffffff;
+    --ink: #ffffff;
+    --ink-muted: #dce5f2;
+    --ink-faint: #dce5f2;
+    --accent-text: #ffffff;
+    --accent: #ffffff;
+    --skeleton: rgb(255 255 255 / 0.18);
+    --skeleton-shine: rgb(255 255 255 / 0.22);
+    --wash-hover: rgb(255 255 255 / 0.1);
+    --wash-active: rgb(255 255 255 / 0.16);
+    --btn-bg: #ffffff;
+    --btn-fg: #263a55;
+    --btn-bg-hover: #e6ecf5;
+    --btn-bg-active: #cfdaea;
+    --color-white: #ffffff;
+    --color-gray-900: #ffffff;
+    --color-gray-700: #eef2f8;
+    --color-gray-600: #dce5f2;
+    --color-gray-500: #dce5f2;
+    --color-gray-400: #dce5f2;
+    --color-gray-300: #eef2f8;
+    --color-blue-400: #ffffff;
+    --color-blue-600: #ffffff;
+    --color-green-400: #ffffff;
+    --color-green-600: #ffffff;
+    --color-amber-400: #ffffff;
+    --color-amber-600: #ffffff;
+    color: var(--ink);
+  }
+
+  /* A pane lit from one corner, for telemetry strips and leading cards. */
+  .panel-lit {
+    background:
+      radial-gradient(90% 180% at 100% 0%, var(--accent-glow), transparent 62%),
+      var(--glass-bg);
   }
 
   /* The sticky header's own surface, so the bar is the same tier in both
@@ -902,8 +1043,11 @@ nav {
      other. */
   .header-surface {
     background: var(--header-bg);
-    backdrop-filter: saturate(1.4) blur(12px);
-    -webkit-backdrop-filter: saturate(1.4) blur(12px);
+    border: 1px solid var(--glass-edge);
+    border-radius: 1.75rem;
+    box-shadow: var(--shadow-floating), var(--glass-sheen);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
   }
 
   /* Small square tile that holds an icon — the accent one leads SignalPanel,
@@ -913,9 +1057,9 @@ nav {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--line);
-    background: var(--surface);
+    border-radius: var(--radius-control);
+    border: 1px solid var(--glass-edge);
+    background: var(--glass-bg);
     color: var(--ink-muted);
   }
 
@@ -945,8 +1089,7 @@ nav {
      status filter on the seeker dashboard. Distinct from a chip row: chips are
      an additive set you can hold several of, a segmented control holds exactly
      one, so the selected segment is filled rather than tinted. Carbon and
-     Polaris both mark it this way, and the fill is ink rather than the accent
-     because emerald is reserved for match quality and live state.
+     Polaris both mark it this way.
 
      Selection is read off `aria-pressed` / `aria-selected` rather than a
      `selected` class, so the state the eye sees and the state a screen reader
@@ -957,17 +1100,18 @@ nav {
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-1);
-    padding: var(--space-1);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-lg);
+    padding: var(--space-2);
+    border: 1px solid var(--glass-edge);
+    border-radius: var(--radius-xl);
+    background: var(--glass-bg);
   }
 
   .segment {
     display: inline-flex;
     align-items: center;
     gap: var(--space-2);
-    border-radius: var(--radius-md);
-    padding: 0.375rem 0.6875rem;
+    border-radius: var(--radius-pill);
+    padding: 0.4375rem 0.875rem;
     font-size: 0.8125rem;
     font-weight: 500;
     letter-spacing: 0;
@@ -1027,9 +1171,9 @@ nav {
   }
 
   .bubble-peer {
-    border: 1px solid var(--line);
+    border: 1px solid var(--glass-edge);
     border-bottom-left-radius: var(--radius-xs);
-    background: var(--surface);
+    background: var(--glass-bg);
     color: var(--ink);
   }
 
@@ -1055,7 +1199,7 @@ nav {
 
   .bubble-own .bubble-time {
     color: inherit;
-    opacity: 0.75;
+    opacity: 0.85;
   }
 
   /*
@@ -1084,7 +1228,7 @@ nav {
   .segment[aria-pressed="true"] .segment-count,
   .segment[aria-selected="true"] .segment-count {
     color: inherit;
-    opacity: 0.75;
+    opacity: 0.85;
   }
 
   /* ==========================================================================
@@ -1169,7 +1313,7 @@ nav {
     box-shadow: inset 2px 0 0 0 var(--accent);
   }
 
-  /* Square, borderless control that holds a single glyph: the theme toggle,
+  /* Round, borderless control that holds a single glyph: the theme toggle,
      the notification bell, the mobile menu trigger. All three had their own
      hover colours and two of them disagreed in dark mode. */
   .btn-icon {
@@ -1179,7 +1323,8 @@ nav {
     height: var(--control-h-md);
     width: var(--control-h-md);
     flex-shrink: 0;
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-pill);
+    background-color: var(--wash-hover);
     color: var(--ink-muted);
   }
 
@@ -1238,6 +1383,19 @@ nav {
     gap: var(--space-2);
   }
 
+  /* The track at full width, where it is the subject of a card rather than a
+     note beside a badge. */
+  .track-fill {
+    display: flex;
+    width: 100%;
+  }
+
+  .track-fill > .track-seg {
+    flex: 1;
+    height: 4px;
+    width: auto;
+  }
+
   .track-seg {
     display: block;
     height: 3px;
@@ -1259,30 +1417,34 @@ nav {
      Skeletons
 
      One fill token instead of `bg-gray-200 dark:bg-gray-700` repeated in three
-     hand-rolled skeletons that had drifted to three different greys. The pulse
-     is opacity-only so it does not repaint a large area, and the global
-     `prefers-reduced-motion` block above already flattens it.
+     hand-rolled skeletons that had drifted to three different greys. A soft
+     highlight crosses each bar, which reads as "arriving" where a pulse reads as
+     a block blinking. The highlight only moves on `transform`, so it costs no
+     repaint, and it is left out entirely under reduced motion.
      ========================================================================== */
 
   .skeleton {
+    position: relative;
     display: block;
+    overflow: hidden;
     border-radius: var(--radius-sm);
     background: var(--skeleton);
   }
 
   @media (prefers-reduced-motion: no-preference) {
-    .skeleton {
-      animation: skeleton-pulse 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    .skeleton::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent, var(--skeleton-shine), transparent);
+      transform: translateX(-100%);
+      animation: skeleton-sweep 1.8s ease-in-out infinite;
     }
   }
 
-  @keyframes skeleton-pulse {
-    0%,
-    100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.55;
+  @keyframes skeleton-sweep {
+    to {
+      transform: translateX(100%);
     }
   }
 
@@ -1295,13 +1457,41 @@ nav {
     align-items: center;
     gap: var(--space-3);
     border: 1px solid var(--line);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-pill);
     background: var(--canvas);
-    padding: var(--space-2) var(--space-4);
+    padding: var(--space-2) 0.625rem;
     font-size: 0.75rem;
     line-height: 1.25;
     color: var(--ink-muted);
     white-space: nowrap;
+  }
+
+  /* A chip never grows past its row. Its label clips with an ellipsis; the icon
+     and the dismiss control keep their size. `.chip-wrap` lets a chip that
+     must show everything (a job's location on its own page) wrap instead. */
+  .chip {
+    max-width: 100%;
+  }
+
+  .chip > svg,
+  .chip > .chip-dismiss {
+    flex-shrink: 0;
+  }
+
+  .chip-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* A pill reads oddly once it is several lines tall. */
+  .chip-wrap {
+    white-space: normal;
+    border-radius: var(--radius-control);
+  }
+
+  .chip-wrap .chip-label {
+    overflow: visible;
   }
 
   .dark .chip {
@@ -1369,7 +1559,7 @@ nav {
     justify-content: center;
     gap: var(--space-4);
     min-height: var(--control-h-md);
-    border-radius: var(--radius-control);
+    border-radius: var(--radius-pill);
     background: var(--btn-bg);
     color: var(--btn-fg);
     padding: 0.625rem var(--space-6);
@@ -1405,8 +1595,8 @@ nav {
     gap: var(--space-4);
     min-height: var(--control-h-md);
     border: 1px solid var(--line-control);
-    border-radius: var(--radius-control);
-    background: var(--surface);
+    border-radius: var(--radius-pill);
+    background: var(--glass-bg);
     color: var(--ink);
     padding: 0.625rem var(--space-6);
     font-size: 0.875rem;
@@ -1488,8 +1678,8 @@ nav {
     justify-content: center;
     gap: var(--space-3);
     min-height: var(--control-h-sm);
-    border-radius: var(--radius-sm);
-    padding: var(--space-3) 0.625rem;
+    border-radius: var(--radius-pill);
+    padding: var(--space-3) 0.75rem;
     font-size: 0.875rem;
     font-weight: 500;
     color: var(--ink-muted);
@@ -1551,7 +1741,7 @@ nav {
     min-height: var(--control-h-md);
     border: 1px solid var(--line-control);
     border-radius: var(--radius-control);
-    background: var(--surface);
+    background: var(--glass-bg);
     color: var(--ink);
     padding: 0.625rem 0.875rem;
     font-size: 0.9375rem;
@@ -1578,10 +1768,8 @@ nav {
      `background-image` only: `.field`'s `background` shorthand still supplies
      the colour, and `select.field` outranks it for the image alone.
 
-     The chevron is spelled out twice rather than tinted, because a background
-     image cannot read `currentColor`. Both values are `--ink-muted` — the same
-     token the rest of the control's secondary ink comes from, so the arrow
-     tracks the theme rather than sitting one step off it.
+     A background image cannot read `currentColor`, so the chevron is a token
+     with one value per theme, both matching `--ink-muted`.
      ========================================================================== */
 
   select.field {
@@ -1589,14 +1777,17 @@ nav {
     cursor: pointer;
     /* The glyph's 1rem box, its 0.75rem inset, and a gap before the text. */
     padding-right: 2.5rem;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%234e5a6b' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6.5 4 4 4-4'/%3E%3C/svg%3E");
+    /* One line, always. An option like "Bangalore · Noida · Gurugram — 1 role"
+       otherwise wraps and the control grows taller than its neighbours; the
+       full text is still in the open list. */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    background-image: var(--select-chevron);
     background-repeat: no-repeat;
     background-position: right 0.75rem center;
     background-size: 1rem 1rem;
-  }
-
-  .dark select.field {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23a4b0c0' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6.5 4 4 4-4'/%3E%3C/svg%3E");
   }
 
   /*
@@ -1621,6 +1812,90 @@ nav {
     background-position: left 0.75rem center;
   }
 
+  /* ==========================================================================
+     Multi-select picker (app/components/MultiSelect.tsx)
+
+     A button that opens a checkbox list, for filters where several values can
+     be picked at once — a native `<select multiple>` is a scrolling box that
+     needs Ctrl-click, which nobody discovers. The closed control is drawn to
+     be indistinguishable from `select.field` beside it: same box, same
+     chevron, same single line that ellipsizes rather than wraps.
+     ========================================================================== */
+
+  .field-picker {
+    display: block;
+    text-align: start;
+    cursor: pointer;
+    padding-right: 2.5rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    background-image: var(--select-chevron);
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 1rem 1rem;
+  }
+
+  .field-picker[aria-expanded="true"] {
+    border-color: var(--focus-ring);
+  }
+
+  .field-picker:dir(rtl) {
+    padding-right: 0.875rem;
+    padding-left: 2.5rem;
+    background-position: left 0.75rem center;
+  }
+
+  .picker-panel {
+    position: absolute;
+    z-index: 40;
+    top: calc(100% + 0.25rem);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+    background: var(--surface-overlay);
+    box-shadow: var(--shadow-overlay);
+    padding: 0.25rem;
+    color: var(--ink);
+  }
+
+  .picker-heading {
+    padding: 0.625rem 0.625rem 0.25rem;
+  }
+
+  .picker-option {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    min-height: 2.5rem;
+    padding: 0.375rem 0.625rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.9375rem;
+    cursor: pointer;
+  }
+
+  .picker-option:hover,
+  .picker-option:focus-within {
+    background: var(--surface-sunken);
+  }
+
+  .picker-option[data-disabled="true"] {
+    cursor: not-allowed;
+    color: var(--ink-faint);
+  }
+
+  .picker-option[data-disabled="true"]:hover {
+    background: transparent;
+  }
+
+  .picker-count {
+    margin-inline-start: auto;
+    padding-inline-start: 0.5rem;
+    color: var(--ink-faint);
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+  }
+
   /*
    * The open list, where the browser lets us have it.
    *
@@ -1639,9 +1914,8 @@ nav {
    * control falls back to the styling above.
    *
    * Both the control and the picker have to opt in, or the picker stays
-   * OS-drawn. `base-select` also draws its own `::picker-icon`, so the
-   * background-image chevron and the padding reserved for it come back off —
-   * otherwise there are two arrows.
+   * OS-drawn. `base-select` also draws its own `::picker-icon`; that is hidden
+   * and the background-image chevron above kept, for the reason given below.
    */
   @supports (appearance: base-select) {
     select.field,
@@ -1649,29 +1923,25 @@ nav {
       appearance: base-select;
     }
 
+    /* The label in a base-select is an anonymous box that cannot be told to
+       shrink or ellipsize, so a long one ran under the arrow. Instead the
+       content is clipped at the content box, which ends where the padding
+       reserved for the arrow begins, and the arrow is the control's own
+       background, which overflow never clips. */
     select.field {
-      background-image: none;
-      padding-right: 0.875rem;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 0.5rem;
+      display: block;
       text-align: start;
+      overflow: clip;
+      overflow-clip-margin: content-box;
     }
 
-    select.field:dir(rtl) {
-      padding-left: 0.875rem;
-    }
-
-    /* Ours now, so it can do what every other disclosure in the app does and
-       turn over to point at the panel it opened. */
     select.field::picker-icon {
-      color: var(--ink-muted);
-      transition: transform 150ms cubic-bezier(0.4, 0, 0.2, 1);
+      display: none;
     }
 
-    select.field:open::picker-icon {
-      transform: rotate(180deg);
+    /* The open list keeps whole labels, wrapped if need be. */
+    select.field option {
+      white-space: normal;
     }
 
     select.field::picker(select) {
@@ -1716,11 +1986,6 @@ nav {
       color: var(--accent, var(--ink-muted));
     }
 
-    @media (prefers-reduced-motion: reduce) {
-      select.field::picker-icon {
-        transition: none;
-      }
-    }
   }
 
   /*
@@ -1771,14 +2036,19 @@ nav {
   /* An inline link inside running text. Underline on hover rather than always,
      because these sit inside short prose where a permanent rule is noisy; the
      colour plus the focus outline carry it otherwise. */
+  /* Underlined at rest, not only on hover: inside a sentence, colour alone
+     does not mark a link for everyone (WCAG 1.4.1). The line is faint until
+     hovered so it does not shout. */
   .link {
     color: var(--link);
+    text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
     text-underline-offset: 2px;
     border-radius: var(--radius-xs);
   }
 
   .link:hover {
-    text-decoration: underline;
+    text-decoration-color: currentColor;
   }
 
   /* ==========================================================================
@@ -1935,7 +2205,7 @@ nav {
 
   .field:disabled {
     opacity: var(--disabled-opacity);
-    background: var(--surface-sunken);
+    background-color: var(--surface-sunken);
     cursor: not-allowed;
   }
 
@@ -2201,4 +2471,291 @@ nav {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--ink-faint);
+}
+
+/* ==========================================================================
+   Brand moments and motion
+   --------------------------------------------------------------------------
+   The handful of places that carry the brand gradient and the glow, plus the
+   small animations that show the AI at work: a scan line reading a resume,
+   skills arriving one by one, a fit bar filling. Every animation here is
+   decorative, sits on `aria-hidden` illustration, and is switched off under
+   `prefers-reduced-motion` (the final frame is what renders instead).
+   ========================================================================== */
+
+@layer components {
+  /* The primary button and the mark take the gradient. `background-image`
+     rather than the shorthand, so the solid `--btn-bg` underneath still paints
+     in forced-colors and wherever gradients are dropped. Hover and press are
+     restated because the base rules use the shorthand, which would wipe it. */
+  .btn-ink,
+  .btn-ink:hover:not(:disabled),
+  .btn-ink:active:not(:disabled) {
+    background-image: var(--brand-gradient);
+  }
+
+  .btn-ink:hover:not(:disabled) {
+    background-image: var(--brand-gradient-hover);
+    box-shadow: var(--shadow-glow);
+  }
+
+  .btn-ink:active:not(:disabled) {
+    background-image: var(--brand-gradient);
+    box-shadow: none;
+  }
+
+  /* Inside the slate/teal cards the button is a plain light pill; the gradient
+     would vanish into the card. */
+  .surface-accent .btn-ink,
+  .surface-accent .btn-ink:hover:not(:disabled),
+  .surface-accent .btn-ink:active:not(:disabled) {
+    background-image: none;
+  }
+
+  .tile-ink {
+    background-image: var(--brand-gradient);
+    border-color: transparent;
+  }
+
+  /* A phrase of display type in the brand gradient. The colour underneath is
+     the fallback where `background-clip: text` is not supported. */
+  .text-gradient {
+    color: var(--accent-text);
+    background-image: var(--brand-gradient);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  /* The small pill above the hero headline. */
+  .badge-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-4);
+    border: 1px solid var(--glass-edge);
+    border-radius: var(--radius-pill);
+    background: var(--glass-bg);
+    padding: 0.3125rem 0.875rem 0.3125rem 0.625rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--ink-muted);
+    box-shadow: var(--glass-sheen);
+  }
+
+  /* A card that is the subject of its section: accent hairline and a halo. */
+  .panel-glow {
+    border-color: var(--accent-line);
+    box-shadow: var(--shadow-glow), var(--glass-sheen);
+  }
+
+  /* Interactive cards pick up the accent edge on hover in the dark theme,
+     where a lighter fill alone barely registers. */
+  .dark .panel-interactive:hover {
+    border-color: var(--accent-line);
+    box-shadow: var(--shadow-glow), var(--glass-sheen);
+  }
+
+  /* A strong fit bar fills with the gradient. */
+  .dark .meter-fill:not(.meter-fill-muted) {
+    background: var(--brand-gradient);
+  }
+
+  /* --- Dark theme re-tunes for the scoped surfaces ----------------------- */
+
+  /* `.band-dark` hard-codes slate tokens for the light theme, where it is the
+     one dark island. In the dark theme it inherits the teal set instead. */
+  .dark .band-dark {
+    --accent: #2dd4bf;
+    --accent-text: #5eead4;
+    --accent-wash: rgb(45 212 191 / 0.05);
+    --btn-bg: #2dd4bf;
+    --btn-fg: #032b26;
+    --ink-muted: #a9b7bc;
+    --ink-faint: #98a7ad;
+    --color-gray-400: #a9b7bc;
+    --color-gray-500: #98a7ad;
+    --line: #1a252a;
+    --glass-bg: rgb(170 235 230 / 0.04);
+    --glass-edge: rgb(170 235 230 / 0.1);
+  }
+
+  .dark .band-dark.aurora {
+    background:
+      radial-gradient(60% 55% at 85% -5%, rgb(20 184 166 / 0.22), transparent 70%),
+      radial-gradient(55% 55% at 0% 105%, rgb(56 189 248 / 0.12), transparent 70%),
+      #050a0c;
+  }
+
+  /* Grain at the light-theme strength greys out a near-black band. */
+  .dark .aurora::after {
+    opacity: 0.035;
+  }
+
+  /* The loud card, dark edition: a deep teal pane with a lit edge and a light
+     pill button, instead of the solid slate fill. */
+  .dark .surface-accent {
+    --glass-bg: #08181a;
+    --glass-raised: #0c2023;
+    --glass-edge: rgb(94 234 212 / 0.28);
+    --glass-sheen: inset 0 1px 0 0 rgb(94 234 212 / 0.14);
+    --ink-muted: #b4cfcc;
+    --ink-faint: #b4cfcc;
+    --accent: #5eead4;
+    --accent-text: #5eead4;
+    --color-gray-600: #b4cfcc;
+    --color-gray-500: #b4cfcc;
+    --color-gray-400: #b4cfcc;
+    --color-blue-400: #5eead4;
+    --color-green-400: #5eead4;
+    --btn-bg: #eef5f6;
+    --btn-fg: #04221e;
+    --btn-bg-hover: #ffffff;
+    --btn-bg-active: #d5e4e6;
+    background-image: radial-gradient(80% 120% at 50% 0%, rgb(45 212 191 / 0.18), transparent 65%);
+    box-shadow: var(--shadow-glow), var(--glass-sheen);
+  }
+
+  /* --- Resume scan illustration (homepage hero) -------------------------- */
+
+  .scan-doc {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--glass-edge);
+    border-radius: var(--radius-lg);
+    background: var(--glass-sunken);
+    padding: 1.125rem 1.25rem;
+  }
+
+  .scan-line {
+    position: absolute;
+    inset-inline: 0;
+    top: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    box-shadow: 0 0 18px 2px var(--accent-glow);
+    opacity: 0.9;
+  }
+
+  /* The band of light the scan line leaves behind it. */
+  .scan-line::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    bottom: 2px;
+    height: 2.5rem;
+    background: linear-gradient(to top, var(--accent-wash), transparent);
+  }
+
+  .scan-bar {
+    display: block;
+    height: 0.4375rem;
+    border-radius: var(--radius-pill);
+    background: var(--skeleton);
+  }
+
+  .live-dot {
+    position: relative;
+    display: inline-block;
+    height: 0.4375rem;
+    width: 0.4375rem;
+    border-radius: 999px;
+    background: var(--accent);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .scan-line {
+      animation: scan-move 3.2s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+    }
+
+    .reveal-pop {
+      animation: reveal-pop 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+      animation-delay: var(--delay, 0ms);
+    }
+
+    .grow-x {
+      transform-origin: left center;
+      animation: grow-x 1.1s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+      animation-delay: var(--delay, 0ms);
+    }
+
+    .float-slow {
+      animation: float-slow 6s ease-in-out infinite;
+    }
+
+    .text-gradient {
+      animation: gradient-drift 8s ease-in-out infinite alternate;
+    }
+
+    .live-dot::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: inherit;
+      animation: live-ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+    }
+  }
+
+  @keyframes scan-move {
+    0% {
+      transform: translateY(0);
+      opacity: 0;
+    }
+    10%,
+    85% {
+      opacity: 0.9;
+    }
+    100% {
+      transform: translateY(var(--scan-distance, 7.5rem));
+      opacity: 0;
+    }
+  }
+
+  @keyframes reveal-pop {
+    from {
+      opacity: 0;
+      transform: translateY(6px) scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes grow-x {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+
+  @keyframes float-slow {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-6px);
+    }
+  }
+
+  @keyframes gradient-drift {
+    from {
+      background-position: 0% 50%;
+    }
+    to {
+      background-position: 100% 50%;
+    }
+  }
+
+  @keyframes live-ping {
+    75%,
+    100% {
+      transform: scale(2.4);
+      opacity: 0;
+    }
+  }
 }

@@ -32,7 +32,7 @@ export const themeInitScript = `
     var stored = localStorage.getItem('${THEME_STORAGE_KEY}');
     var theme = stored === 'light' || stored === 'dark'
       ? stored
-      : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      : 'dark';
     document.documentElement.classList.toggle('dark', theme === 'dark');
     document.documentElement.style.colorScheme = theme;
   } catch (e) {}
@@ -42,7 +42,7 @@ export const themeInitScript = `
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // Start from what the inline script already applied, so the first client
   // render matches the server-rendered markup.
-  const [theme, setThemeState] = useState<Theme>("light");
+  const [theme, setThemeState] = useState<Theme>("dark");
 
   useEffect(() => {
     const isDark = document.documentElement.classList.contains("dark");
@@ -64,33 +64,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const toggleTheme = useCallback(() => {
     setTheme(document.documentElement.classList.contains("dark") ? "light" : "dark");
   }, [setTheme]);
-
-  /**
-   * Follow the OS while the user has not made a choice of their own — someone
-   * on a scheduled dark mode expects the app to turn over with everything else
-   * at sunset, not at their next reload.
-   */
-  useEffect(() => {
-    const query = window.matchMedia("(prefers-color-scheme: dark)");
-
-    const onChange = (event: MediaQueryListEvent) => {
-      let stored: string | null = null;
-      try {
-        stored = localStorage.getItem(THEME_STORAGE_KEY);
-      } catch {
-        // Treated as "no preference stored".
-      }
-      if (stored === "light" || stored === "dark") return;
-
-      const next: Theme = event.matches ? "dark" : "light";
-      setThemeState(next);
-      document.documentElement.classList.toggle("dark", next === "dark");
-      document.documentElement.style.colorScheme = next;
-    };
-
-    query.addEventListener("change", onChange);
-    return () => query.removeEventListener("change", onChange);
-  }, []);
 
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme, setTheme }}>
@@ -141,7 +114,7 @@ export function ThemeToggle({ className = "" }: { className?: string }) {
   // the label stays neutral and the glyph is chosen by the `dark:` variant
   // rather than by React. That is what keeps the icon correct on first paint.
   const label = !mounted
-    ? "Switch colour theme"
+    ? "Switch theme"
     : theme === "dark"
       ? "Switch to light theme"
       : "Switch to dark theme";

@@ -200,7 +200,7 @@ export default function NotificationBell() {
               {/* Deliberately not a heading: a dropdown in the header would
                   otherwise inject an h2/h3 ahead of the page's own h1. The
                   group's `aria-label` names this region instead. */}
-              <p className="eyebrow">Signal feed</p>
+              <p className="eyebrow">Notifications</p>
               {unreadCount > 0 && (
                 <p className="mono mt-0.5 text-xs text-green-700 dark:text-green-400">
                   {unreadCount} unread
@@ -226,7 +226,7 @@ export default function NotificationBell() {
             ) : notifications.length === 0 ? (
               <div className="px-4 py-8 text-center">
                 <Icon.bell className="mx-auto mb-2 h-8 w-8 text-gray-400 dark:text-gray-500" aria-hidden="true" />
-                <p className="eyebrow">No signal</p>
+                <p className="eyebrow">You’re all caught up</p>
               </div>
             ) : (
               <ul className="divide-y divide-gray-100 dark:divide-gray-700">

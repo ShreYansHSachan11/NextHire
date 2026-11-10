@@ -56,3 +56,21 @@ GEMINI_TEXT_MODEL="gemini-3.6-flash"
 # four times cheaper than the 3072 default for very little loss in quality.
 GEMINI_EMBEDDING_DIMENSIONS="768"
 GEMINI_TIMEOUT_MS="20000"
+
+# --- Imported jobs (optional) -------------------------------------------------
+# Real postings from public job boards: Arbeitnow and Remote OK need no key.
+# Run an import with `npm run jobs:import` while the app is running.
+# Shared secret for the import endpoint (and for Vercel Cron, which sends it as
+# `Authorization: Bearer <secret>`). Generate with: openssl rand -base64 32
+CRON_SECRET=
+# Company careers boards (lib/jobs/boards.ts) need no key either. Opening a
+# job re-checks it at its source, and opening the jobs list re-imports any
+# source not refreshed in 6 hours. Set to 0 to turn both off.
+JOBS_AUTO_REFRESH=
+# Adzuna (optional) adds more jobs in India, with salaries in ₹. Its keys need
+# a card on file at https://developer.adzuna.com; skipped while these are blank.
+ADZUNA_APP_ID=
+ADZUNA_APP_KEY=
+# Two-letter country code (in, gb, us, …) and job category; defaults: in, it-jobs.
+ADZUNA_COUNTRY=
+ADZUNA_CATEGORY=

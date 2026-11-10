@@ -8,7 +8,7 @@ import type { Metadata } from "next";
  * whose `h1` already names the role, and this segment is owner-only, so there is
  * nothing to share or index.
  */
-export const metadata: Metadata = { title: "Edit posting" };
+export const metadata: Metadata = { title: "Edit job" };
 
 export default function EditJobLayout({ children }: { children: React.ReactNode }) {
   return children;

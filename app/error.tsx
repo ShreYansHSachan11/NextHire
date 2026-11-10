@@ -21,7 +21,7 @@ export default function Error({
   return (
     <main
       id="main-content"
-      className="grid-field flex min-h-screen items-center justify-center bg-gray-50 px-4 dark:bg-gray-900"
+      className="grid-field flex min-h-screen items-center justify-center px-4"
     >
       <div className="panel w-full max-w-md p-8 text-center">
         <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 dark:border-red-800 dark:bg-red-950/40 dark:text-red-400">
@@ -34,10 +34,10 @@ export default function Error({
             />
           </svg>
         </div>
-        <p className="eyebrow mt-4">Unhandled exception</p>
+        <p className="eyebrow mt-4">Error</p>
         <h1 className="mt-2 text-xl font-semibold text-gray-900 dark:text-white">Something went wrong</h1>
         <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-          The page hit an unexpected error. Trying again often clears it.
+          Please try again. If it keeps happening, come back in a few minutes.
         </p>
         {/* The digest is the only safe identifier to show — never the message. */}
         {error.digest && <p className="mono mt-3 text-xs text-gray-400 dark:text-gray-500">REF {error.digest}</p>}

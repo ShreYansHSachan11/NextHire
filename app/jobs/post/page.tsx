@@ -115,9 +115,9 @@ async function requestAi<T>(path: string, body: Record<string, unknown>): Promis
 
 /** The three buckets the route returns, in the employer's language. */
 const FINDING_LABELS: Record<string, string> = {
-  exclusionary: "Narrows the pool",
-  requirement: "Requirement worth questioning",
-  jargon: "Insider jargon",
+  exclusionary: "May limit applicants",
+  requirement: "Consider removing",
+  jargon: "Jargon",
 };
 
 interface Finding {
@@ -319,14 +319,14 @@ const STEPS = [
   {
     id: "role",
     number: "01",
-    title: "The role",
-    description: "What the job is, in your own words. This is what the match engine reads.",
+    title: "The job",
+    description: "Describe the job in your own words. We use this to find matches.",
   },
   {
     id: "particulars",
     number: "02",
-    title: "Particulars",
-    description: "Type, location, pay and skills — the facts candidates filter and self-select on.",
+    title: "Job details",
+    description: "Type, location, pay and skills.",
   },
   {
     id: "screening",
@@ -338,7 +338,7 @@ const STEPS = [
     id: "review",
     number: "04",
     title: "Review and post",
-    description: "Everything as it will be stored, on one screen, before it goes live.",
+    description: "Check everything before it goes live.",
   },
 ] as const;
 
@@ -554,7 +554,7 @@ export default function PostJobPage() {
       setSkillNotice(
         added > 0
           ? `${added} suggested ${added === 1 ? "skill" : "skills"} added. Remove any that do not fit.`
-          : "No new skills to suggest — the list already covers the posting."
+          : "No new skills to suggest — the list already covers the job."
       );
       return;
     }
@@ -577,7 +577,7 @@ export default function PostJobPage() {
     // wholly different description would invite applying a stale rewrite.
     setReview(null);
     setAppliedPhrases([]);
-    toast.success("Draft inserted — read it through and edit before posting.");
+    toast.success("Draft inserted — read it through and edit before job.");
   };
 
   /* --------------------------- inclusivity check -------------------------- */
@@ -741,7 +741,7 @@ export default function PostJobPage() {
     setQuestionNotice(
       additions.length > 0
         ? `${additions.length} suggested ${additions.length === 1 ? "question" : "questions"} added below. Edit or remove anything that does not fit.`
-        : "No new questions to suggest for this posting."
+        : "No new questions to suggest for this job."
     );
   };
 
@@ -762,7 +762,7 @@ export default function PostJobPage() {
       setQuestions([]);
       toast.success("Screening questions saved.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not save the screening questions");
+      toast.error(err instanceof Error ? err.message : "Couldn’t save the screening questions");
     } finally {
       setRetryingQuestions(false);
     }
@@ -873,7 +873,7 @@ export default function PostJobPage() {
       );
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Job posting failed";
+      const message = err instanceof Error ? err.message : "Couldn’t post the job";
       setError(message);
       toast.error(message);
     } finally {
@@ -890,7 +890,7 @@ export default function PostJobPage() {
      * nothing jumps. Same reasoning as the sibling `loading.tsx`.
      */
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="min-h-screen">
         <Navbar />
         <main id="main-content" className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
           <p className="sr-only" role="status">
@@ -944,7 +944,7 @@ export default function PostJobPage() {
     },
     review: {
       tone: roleDone && particularsDone ? "done" : "todo",
-      label: roleDone && particularsDone ? "Ready to post" : "Waiting on the steps above",
+      label: roleDone && particularsDone ? "Ready to post" : "Complete the steps above",
     },
   };
 
@@ -952,14 +952,14 @@ export default function PostJobPage() {
 
   /** Everything still standing between this draft and a live posting. */
   const blockers: { step: StepId; label: string }[] = [];
-  if (!titleFilled) blockers.push({ step: "role", label: "The posting needs a job title." });
+  if (!titleFilled) blockers.push({ step: "role", label: "Add a job title." });
   if (!descriptionFilled) {
-    blockers.push({ step: "role", label: "The posting needs a description." });
+    blockers.push({ step: "role", label: "Add a job description." });
   }
   if (!typeChosen) blockers.push({ step: "particulars", label: "Choose a job type." });
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen">
       <Navbar />
 
       <main id="main-content" className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
@@ -968,9 +968,9 @@ export default function PostJobPage() {
         </BackLink>
 
         <PageHeading
-          eyebrow="Company · New posting"
+          eyebrow="New job"
           title="Post a job"
-          description="Everything you write here is what the match engine reads, so the more specific the role, the sharper the candidate list."
+          description="The more specific your job description, the better your matches."
           className="mb-6"
         />
 
@@ -980,8 +980,7 @@ export default function PostJobPage() {
 
             {questionsUnsaved && (
               <p className="mt-2">
-                The posting saved, but its screening questions did not. They are still in the form
-                below — nothing has been lost.
+                Your job is live, but the screening questions didn’t save. They’re still in the form below.
               </p>
             )}
 
@@ -998,7 +997,7 @@ export default function PostJobPage() {
                 </Button>
               )}
               <Link href={`/jobs/${created.id}`} className="btn-ink btn-touch">
-                View the posting
+                View the job
                 <Icon.arrowUpRight className="h-4 w-4" />
               </Link>
               <Link href="/company/dashboard" className="btn-outline btn-touch">
@@ -1012,9 +1011,7 @@ export default function PostJobPage() {
           <Alert variant="warning" className="mb-6">
             <p className="font-semibold">Your account is not linked to a company yet.</p>
             <p className="mt-1">
-              Jobs are posted on behalf of a company workspace, and we could not find one for this
-              account. Signing out and back in usually refreshes the link. If it persists, contact
-              support and we will connect your account.
+              We couldn’t find a company for this account. Try signing out and back in. If that doesn’t work, contact support.
             </p>
           </Alert>
         )}
@@ -1101,7 +1098,7 @@ export default function PostJobPage() {
                           {reviewing ? (
                             <>
                               <Spinner className="h-4 w-4" />
-                              Reading the draft…
+                              Checking…
                             </>
                           ) : (
                             <>
@@ -1131,7 +1128,7 @@ export default function PostJobPage() {
                   <textarea
                     id="description"
                     name="description"
-                    placeholder="Describe the role, the day-to-day work, and what you are looking for…"
+                    placeholder="Describe the job, the day-to-day work and who you’re looking for…"
                     value={formData.description}
                     onChange={handleChange}
                     required
@@ -1162,7 +1159,7 @@ export default function PostJobPage() {
                         <span className="flex items-center gap-1.5 text-green-600 dark:text-green-400">
                           <Icon.spark className="h-4 w-4" />
                           <Eyebrow as="span" accent>
-                            AI draft · unsaved
+                            AI draft
                           </Eyebrow>
                         </span>
                         <Readout className="text-xs text-gray-500 dark:text-gray-400">
@@ -1171,8 +1168,7 @@ export default function PostJobPage() {
                       </div>
 
                       <p className="mt-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                        Written by the model from the details above. Read it, correct anything it
-                        got wrong, and nothing is posted until you submit the form.
+                        Written by AI from your details. Check it and fix anything that’s wrong. Nothing is posted until you submit.
                       </p>
 
                       <div className="panel-sunken mt-3 max-h-64 overflow-y-auto whitespace-pre-wrap p-3 text-sm leading-relaxed text-gray-700 dark:text-gray-200">
@@ -1276,7 +1272,7 @@ export default function PostJobPage() {
                         <span className="flex items-center gap-1.5 text-green-600 dark:text-green-400">
                           <Icon.spark className="h-4 w-4" />
                           <Eyebrow as="span" accent>
-                            Wording check · advisory
+                            Wording check
                           </Eyebrow>
                         </span>
                         <Readout className="text-xs text-gray-500 dark:text-gray-400">
@@ -1292,8 +1288,7 @@ export default function PostJobPage() {
                       )}
 
                       <p className="mt-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                        Suggestions only — none of this blocks the posting. Apply what you agree
-                        with and ignore the rest.
+                        These are only suggestions. Use what helps.
                       </p>
 
                       {review.findings.length === 0 ? (
@@ -1392,7 +1387,7 @@ export default function PostJobPage() {
             >
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                 <div>
-                  <Label htmlFor="type" required hint="Candidates filter the feed by this.">
+                  <Label htmlFor="type" required hint="Applicants can filter by this.">
                     Job type
                   </Label>
                   {/* Sourced from the shared list so this never drifts away from
@@ -1433,7 +1428,7 @@ export default function PostJobPage() {
                 <div>
                   <Label
                     htmlFor="salary"
-                    hint="Optional, but postings that state pay get noticeably more applicants."
+                    hint="Optional. Showing pay helps applicants decide."
                   >
                     Salary range
                   </Label>
@@ -1452,7 +1447,7 @@ export default function PostJobPage() {
                 <div>
                   <Label
                     htmlFor="experience"
-                    hint="Optional. Free text — write it the way candidates would read it."
+                    hint="Optional. For example, 3+ years."
                   >
                     Experience
                   </Label>
@@ -1475,7 +1470,7 @@ export default function PostJobPage() {
                   <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
                     <Label
                       htmlFor="skill-input"
-                      hint="Optional. Press Enter or type a comma to add a tag."
+                      hint="Optional. Press Enter or add a comma after each skill."
                     >
                       Skills
                     </Label>
@@ -1490,7 +1485,7 @@ export default function PostJobPage() {
                         {suggesting ? (
                           <>
                             <Spinner className="h-4 w-4" />
-                            Reading the posting…
+                            Checking…
                           </>
                         ) : (
                           <>
@@ -1593,8 +1588,7 @@ export default function PostJobPage() {
             >
               <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
                 <p className="min-w-0 flex-1 text-sm leading-relaxed text-gray-600 dark:text-gray-400">
-                  Applicants answer these when they apply, and you see the answers on the
-                  application. Up to {MAX_QUESTIONS}.
+                  Applicants answer these when they apply. Up to {MAX_QUESTIONS}.
                 </p>
                 {aiAvailable && (
                   <button
@@ -1707,8 +1701,7 @@ export default function PostJobPage() {
               ) : (
                 <p className="flex items-start gap-2 text-sm leading-relaxed text-gray-700 dark:text-gray-200">
                   <Icon.checkCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-600 dark:text-green-400" />
-                  Everything required is filled in. Read it through below — the posting goes live
-                  the moment you submit.
+                  You’re ready. Check the details below. Your job goes live as soon as you post it.
                 </p>
               )}
 
@@ -1762,7 +1755,7 @@ export default function PostJobPage() {
                 <Eyebrow as="h3">Screening questions</Eyebrow>
                 {questions.length === 0 ? (
                   <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                    None. Candidates apply with a message and a résumé only.
+                    None. People apply with a cover letter and resume.
                   </p>
                 ) : (
                   <ol className="mt-2 space-y-2">
@@ -1784,8 +1777,7 @@ export default function PostJobPage() {
                             still says a knockout marks rather than rejects. */}
                         {question.knockout && question.expected && (
                           <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">
-                            Answers other than “{question.expected}” are marked for your attention.
-                            Nobody is filtered out.
+                            Answers other than “{question.expected}” are flagged for you. No one is filtered out.
                           </span>
                         )}
                       </li>
@@ -1797,7 +1789,7 @@ export default function PostJobPage() {
               <div className="mt-6 flex flex-col-reverse gap-3 border-t border-gray-200 pt-5 dark:border-gray-700 sm:flex-row sm:items-center sm:justify-end">
                 <p className="eyebrow text-center sm:mr-auto sm:text-left">
                   {hasCompany
-                    ? "Posting goes live immediately"
+                    ? "Your job goes live right away"
                     : "Your account is not linked to a company"}
                 </p>
                 <Link href="/company/dashboard" className={`${buttonSecondary} w-full sm:w-auto`}>
@@ -1813,7 +1805,7 @@ export default function PostJobPage() {
                   {loading ? (
                     <>
                       <Spinner className="h-4 w-4" decorative />
-                      Posting…
+                      Job…
                     </>
                   ) : (
                     <>
@@ -1878,7 +1870,7 @@ function StepRail({
   onJump: (id: StepId) => void;
 }) {
   return (
-    <div className="panel p-3 sm:sticky sm:top-16 sm:z-20 sm:p-4">
+    <div className="panel panel-sticky p-3 sm:sticky sm:top-[5.25rem] sm:z-20 sm:p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <Eyebrow as="h2">Post a job · {STEPS.length} steps</Eyebrow>
         <Eyebrow as="span">
@@ -2137,7 +2129,7 @@ function QuestionEditor({
 
       {question.rationale && (
         <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-          Suggested to probe: {question.rationale}
+          Why ask: {question.rationale}
         </p>
       )}
 
@@ -2164,7 +2156,7 @@ function QuestionEditor({
             which is exactly when the server will honour a knockout. */}
         {choices.length > 0 && (
           <div>
-            <Label htmlFor={expectedId} hint="Optional. Needed before this can flag anyone.">
+            <Label htmlFor={expectedId} hint="Optional. Needed to flag answers.">
               Answer you are looking for
             </Label>
             <select
@@ -2269,8 +2261,8 @@ function QuestionEditor({
             className="mt-1 pl-7 text-xs leading-relaxed text-gray-500 dark:text-gray-400"
           >
             {question.expected === null
-              ? "Choose the answer you are looking for first — there is nothing to compare against yet."
-              : `Applications that do not answer “${question.expected}” are marked for your attention. They still arrive in your queue, and nobody is filtered out on your behalf.`}
+              ? "Choose the answer you’re looking for first."
+              : `Applications that don’t answer “${question.expected}” are flagged for you. No one is filtered out.`}
           </p>
         </div>
       </div>

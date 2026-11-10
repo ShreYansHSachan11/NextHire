@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 /** See `app/company/dashboard/layout.tsx` — a client page cannot export metadata. */
-export const metadata: Metadata = { title: "Candidate queue" };
+export const metadata: Metadata = { title: "Applicants" };
 
 export default function ApplicationsLayout({ children }: { children: React.ReactNode }) {
   return children;

@@ -201,7 +201,7 @@ type PipelineOutcome =
   /** `unavailable` is the 503: no model on this deployment, so stop offering it. */
   | { ok: false; unavailable: boolean; message: string };
 
-const PIPELINE_FAILED = "The pool summary is unavailable right now. Please try again in a moment.";
+const PIPELINE_FAILED = "The applicant summary isn’t available right now. Try again shortly.";
 
 /**
  * Deliberately not `apiFetch`: that helper turns every failure into one Error
@@ -345,7 +345,7 @@ export default function ApplicationsPage() {
       } catch (error) {
         if (isCancelled()) return;
         console.error("Failed to load applications:", error);
-        setLoadError(error instanceof Error ? error.message : "Could not load applications");
+        setLoadError(error instanceof Error ? error.message : "Couldn’t load applications");
       } finally {
         // A superseded run does not get to clear the spinner the run that
         // replaced it is still using.
@@ -486,7 +486,7 @@ export default function ApplicationsPage() {
         // The row reverts on its own, but a revert nobody explains reads as a
         // change that worked and then un-worked. Error
         // toasts are `aria-live="assertive"`, so it is heard as well as seen.
-        toast.error(error instanceof Error ? error.message : "Could not update the application");
+        toast.error(error instanceof Error ? error.message : "Couldn’t update the application");
       } finally {
         setSavingStatusId(null);
       }
@@ -503,7 +503,7 @@ export default function ApplicationsPage() {
       router.push(`/conversations?conversationId=${conversation.id}`);
     } catch (error) {
       console.error("Failed to start conversation:", error);
-      toast.error(error instanceof Error ? error.message : "Could not start the conversation");
+      toast.error(error instanceof Error ? error.message : "Couldn’t start the conversation");
     } finally {
       setMessagingUserId(null);
     }
@@ -519,14 +519,14 @@ export default function ApplicationsPage() {
   if (!allowed) return null; // the guard is already redirecting
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen">
       <Navbar />
 
       <main id="main-content" className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <PageHeading
-          eyebrow="Candidate queue"
-          title="Job applications"
-          description="Review and respond to everyone who applied to your postings."
+          eyebrow="Hiring"
+          title="Applicants"
+          description="Review everyone who applied to your jobs."
         />
 
         {/* Stats */}
@@ -536,7 +536,7 @@ export default function ApplicationsPage() {
             value={formatCount(statusCounts.PENDING ?? 0)}
             tone="amber"
             icon={<Icon.clock className="h-5 w-5" />}
-            hint="Not yet triaged"
+            hint="Not reviewed yet"
           />
           <StatCard
             label="Shortlisted"
@@ -564,7 +564,7 @@ export default function ApplicationsPage() {
             value={formatCount(statusCounts.REJECTED ?? 0)}
             tone="red"
             icon={<Icon.x className="h-5 w-5" />}
-            hint="Closed out"
+            hint="Closed"
           />
         </div>
 
@@ -616,7 +616,7 @@ export default function ApplicationsPage() {
               </div>
 
               <div className="min-w-0 lg:w-44">
-                <Label htmlFor="filter-job">Role</Label>
+                <Label htmlFor="filter-job">Job</Label>
                 <select
                   id="filter-job"
                   value={filters.jobId}
@@ -625,7 +625,7 @@ export default function ApplicationsPage() {
                   }
                   className={inputClass}
                 >
-                  <option value="">All roles</option>
+                  <option value="">All jobs</option>
                   {jobs.map((job) => (
                     <option key={job.id} value={job.id}>
                       {job.title}
@@ -635,7 +635,7 @@ export default function ApplicationsPage() {
               </div>
 
               <div className="min-w-0 lg:w-40">
-                <Label htmlFor="filter-resume">R&eacute;sum&eacute;</Label>
+                <Label htmlFor="filter-resume">Resume</Label>
                 <select
                   id="filter-resume"
                   value={filters.hasResume}
@@ -645,8 +645,8 @@ export default function ApplicationsPage() {
                   className={inputClass}
                 >
                   <option value="">All applications</option>
-                  <option value="yes">With r&eacute;sum&eacute;</option>
-                  <option value="no">Without r&eacute;sum&eacute;</option>
+                  <option value="yes">With resume</option>
+                  <option value="no">Without resume</option>
                 </select>
               </div>
 
@@ -691,8 +691,8 @@ export default function ApplicationsPage() {
               {sort === "fit" && (
                 <Eyebrow>
                   {rankJobId
-                    ? "Scored live against the selected role"
-                    : "Fit captured at apply time · choose a role to score live"}
+                    ? "Scored against the selected job"
+                    : "Fit when they applied · choose a job for a live score"}
                 </Eyebrow>
               )}
               <p
@@ -709,7 +709,7 @@ export default function ApplicationsPage() {
             only means anything against a single posting's requirements. */}
         {pipelineAvailable && filters.jobId && (
           <PipelinePanel
-            jobTitle={selectedJob?.title ?? "this role"}
+            jobTitle={selectedJob?.title ?? "this job"}
             result={pipelines[filters.jobId] ?? null}
             loading={pipelineLoading === filters.jobId}
             error={pipelineError}
@@ -768,13 +768,13 @@ export default function ApplicationsPage() {
                 }
                 description={
                   applications.length === 0
-                    ? "Once candidates apply to your postings they will show up here."
-                    : "Try widening the search or clearing the filters."
+                    ? "Applicants will appear here when they apply."
+                    : "Try a broader search or clear the filters."
                 }
                 action={
                   applications.length === 0 ? (
                     <Link href="/jobs/post" className={buttonPrimary}>
-                      Post a role
+                      Post a job
                       <Icon.arrowUpRight className="h-4 w-4" />
                     </Link>
                   ) : (
@@ -842,15 +842,12 @@ function PipelinePanel({
     <Card className="mt-4">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-200 px-4 py-4 dark:border-gray-700 sm:px-6">
         <div className="min-w-0">
-          <Eyebrow className="mb-1.5">Sorting aid · not a verdict</Eyebrow>
+          <Eyebrow className="mb-1.5">AI summary · not a verdict</Eyebrow>
           <h2 className="text-base font-semibold text-gray-900 dark:text-white sm:text-lg">
-            Shape of the pool for {jobTitle}
+            Applicant summary for {jobTitle}
           </h2>
           <p className="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400">
-            Describes everyone who applied, in aggregate: what recurs, what the posting asks for
-            that the pool shows little of, and what that suggests asking in a first screen. It does
-            not rank, grade or recommend anybody — that call is yours, and it has none of the
-            evidence you do.
+            A summary of everyone who applied: common strengths, common gaps and what to ask first. It doesn’t rank or recommend anyone. The decision is yours.
           </p>
         </div>
 
@@ -858,11 +855,11 @@ function PipelinePanel({
           variant="secondary"
           onClick={onRun}
           loading={loading}
-          loadingLabel="Reading the pool"
+          loadingLabel="Summarizing applicants"
           icon={<Icon.spark className="h-4 w-4" />}
           className="flex-shrink-0"
         >
-          {loading ? "Reading the pool…" : result ? "Run again" : "Summarise the pool"}
+          {loading ? "Summarizing…" : result ? "Run again" : "Summarize applicants"}
         </Button>
       </div>
 
@@ -871,21 +868,21 @@ function PipelinePanel({
           <Alert variant="error">{error}</Alert>
         ) : loading ? (
           <div className="py-6 text-center">
-            <Spinner className="h-8 w-8" label="Reading the pool" />
+            <Spinner className="h-8 w-8" label="Summarizing applicants" />
           </div>
         ) : !result ? (
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Nothing has been generated for this role yet.
+            No summary for this job yet.
           </p>
         ) : !summary ? (
           /* The route answers this without a model call: too few people to
              describe a shape without it becoming a remark about individuals. */
           <p className="text-sm text-gray-600 dark:text-gray-300">
             {result.reason === "empty"
-              ? "Nobody has applied to this posting yet, so there is no pool to describe."
+              ? "No one has applied to this job yet."
               : `Only ${result.stats.total} ${
                   result.stats.total === 1 ? "person has" : "people have"
-                } applied so far. That is too few to describe as a pool without the summary turning into a comment on individuals — read the applications directly instead.`}
+                } applied so far. That’s too few for a summary, so review their applications directly.`}
           </p>
         ) : (
           <div className="space-y-5">
@@ -895,29 +892,29 @@ function PipelinePanel({
 
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-x-8">
               <PoolList
-                title="What recurs across the pool"
+                title="Common strengths"
                 items={summary.commonStrengths}
-                empty="Nothing recurs often enough to call out."
+                empty="No common strengths stand out yet."
               />
               <PoolList
-                title="Asked for, but thin in the pool"
+                title="Common gaps"
                 items={summary.notableGaps}
-                empty="Nothing the posting asks for is missing across the board."
-                note="A gap is a question to ask, not a fault to hold against anyone."
+                empty="No common gaps."
+                note="Treat gaps as questions to ask, not reasons to reject."
               />
             </div>
 
             <PoolList
-              title="Worth probing in a first screen"
+              title="Ask in a first interview"
               items={summary.whatToProbe}
-              empty="Nothing specific to add beyond the posting itself."
+              empty="Nothing to add beyond the job description."
             />
 
             {result.stats.topSkills.length > 0 && (
               <div className="border-t border-gray-200 pt-4 dark:border-gray-700">
                 {/* Counted, not generated — this part is arithmetic over the
                     profiles and does not depend on the model at all. */}
-                <Eyebrow>Most common skills in the pool · counted</Eyebrow>
+                <Eyebrow>Most common skills</Eyebrow>
                 <ul className="mt-2 flex flex-wrap gap-1.5">
                   {result.stats.topSkills.map(({ skill, count }) => (
                     <li key={skill}>
@@ -939,8 +936,7 @@ function PipelinePanel({
                 : `Written from ${result.stats.total} ${
                     result.stats.total === 1 ? "applicant" : "applicants"
                   }, ${result.stats.withProfile} of whom have profile details on file. `}
-              Names, contact details and résumés were not part of what it read. Counts are from when
-              it ran.
+              Names, contact details and resumes weren’t used. Counts are from when it ran.
             </p>
           </div>
         )}
@@ -1105,10 +1101,10 @@ function ApplicationRow({
               condemn anybody. */}
           {match ? (
             <div>
-              <MatchScore value={match.score} caption="Role fit" describedBy={fitCaveatId} />
+              <MatchScore value={match.score} caption="Job fit" describedBy={fitCaveatId} />
               <Meter
                 value={match.score}
-                label={`Role fit, ${match.score} out of 100`}
+                label={`Job fit, ${match.score} out of 100`}
                 className="mt-1.5"
               />
             </div>
@@ -1147,15 +1143,15 @@ function ApplicationRow({
               filename and used a script-driven download that Cloudinary's
               cross-origin responses ignore anyway. */}
           {resume ? (
-            <a href={resume.url} target="_blank" rel="noopener noreferrer" className={buttonSecondary}>
+            <a href={`/api/resumes/${resume.id}/file`} target="_blank" rel="noopener noreferrer" className={buttonSecondary}>
               <Icon.document className="h-4 w-4 flex-shrink-0" />
               <span className="truncate">
-                {resume.fileName ? `Open ${resume.fileName}` : "Open résumé"}
+                {resume.fileName ? `Open ${resume.fileName}` : "Open resume"}
               </span>
               <Icon.external className="h-3.5 w-3.5 flex-shrink-0" />
             </a>
           ) : (
-            <Eyebrow>No r&eacute;sum&eacute; uploaded</Eyebrow>
+            <Eyebrow>No resume uploaded</Eyebrow>
           )}
 
           <Button
@@ -1182,12 +1178,12 @@ function ApplicationRow({
                 equal bars would misstate a 70/18/7/5 blend. */}
             <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-x-6">
               <MeterRow
-                label="Semantic fit"
+                label="Experience fit"
                 value={match.facets.semantic}
                 weight={MATCH_WEIGHTS.semantic}
               />
               <MeterRow
-                label="Skills overlap"
+                label="Skills match"
                 value={match.facets.skills}
                 weight={MATCH_WEIGHTS.skills}
               />
@@ -1215,7 +1211,7 @@ function ApplicationRow({
                     ))
                   ) : (
                     <p className="text-xs text-gray-500 dark:text-gray-400">
-                      No overlapping tags recorded.
+                      No shared skills found.
                     </p>
                   )}
                 </div>
@@ -1224,13 +1220,13 @@ function ApplicationRow({
               <div>
                 {/* "Not evidenced" rather than "missing": the profile may simply
                     be thin. Neutral chips — a gap is a question, not a fault. */}
-                <Eyebrow>Not evidenced in the profile</Eyebrow>
+                <Eyebrow>Not in their profile</Eyebrow>
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
                   {match.missingSkills.length > 0 ? (
                     match.missingSkills.map((skill) => <Chip key={skill}>{skill}</Chip>)
                   ) : (
                     <p className="text-xs text-gray-500 dark:text-gray-400">
-                      Nothing on the posting is unaccounted for.
+                      All listed skills are covered.
                     </p>
                   )}
                 </div>
@@ -1238,8 +1234,7 @@ function ApplicationRow({
             </div>
 
             <p className="mt-5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-              Computed from this posting and the candidate&rsquo;s profile. A gap here is
-              something to ask about in a screen, not a reason to pass.
+              Based on this job and their profile. Treat gaps as questions to ask, not reasons to pass.
             </p>
           </Card>
         </div>
@@ -1291,8 +1286,8 @@ function ApplicationRow({
                 queue on this page is everyone who applied. */}
             <p className="mt-4 border-t border-gray-200 pt-3 text-xs leading-relaxed text-gray-500 dark:border-gray-700 dark:text-gray-400">
               {flaggedAnswers.length > 0
-                ? "An answer you did not ask for marks this application for your attention. Nobody has been rejected, filtered or hidden — this queue is everyone who applied, and the decision is still yours."
-                : "Answered when they applied. Questions you marked as knockouts are checked here; nothing is filtered on your behalf either way."}
+                ? "This answer differs from the one you asked for. No one has been rejected or hidden, and the decision is yours."
+                : "Answered when they applied. Nothing is filtered automatically."}
             </p>
           </Card>
         </div>

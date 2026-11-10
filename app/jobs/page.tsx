@@ -10,24 +10,20 @@ import Navbar from "@/app/components/Navbar";
 import { useToast } from "@/app/components/Toast";
 import {
   Alert,
-  Avatar,
   Button,
   buttonGhost,
   buttonPrimary,
   buttonSecondary,
   Card,
-  Chip,
   EmptyState,
   Eyebrow,
-  formatCount,
-  formatDate,
   Icon,
   inputClass,
   Label,
-  MatchScore,
-  Meter,
   PageHeading,
 } from "@/app/components/ui";
+import JobCard from "@/app/components/JobCard";
+import MultiSelect from "@/app/components/MultiSelect";
 import { JobCardSkeleton } from "@/app/components/skeletons";
 import { apiFetch } from "@/lib/clientAuth";
 
@@ -70,6 +66,8 @@ interface JobListItem {
   isActive: boolean;
   _count?: { applications: number };
   skills?: string[];
+  /** Set for a job imported from a public job board. */
+  source?: string | null;
   match?: MatchBreakdown | null;
   /** 0-100 retrieval score, present only on results of a `?q=` search. */
   relevance?: number | null;
@@ -97,8 +95,15 @@ type SearchMode = "hybrid" | "lexical" | "filters";
 
 /** One option for a select, counted over the corpus — see `facets` below. */
 interface Facet {
+  /** What goes in the URL. */
   value: string;
   count: number;
+  /** What the option says, where that differs from `value` ("3–5 years" for "3-5"). */
+  label?: string;
+  /** Location only: "remote", "city" or "region", for the list's headings. */
+  group?: string;
+  /** Location only: other spellings the list's search box finds ("Bangalore"). */
+  also?: string[];
 }
 
 /**
@@ -115,11 +120,24 @@ interface FeedFacets {
   location: Facet[];
   experience: Facet[];
   type: Facet[];
+  /**
+   * Jobs left by the other filters, per filter — how many come back if this one
+   * is cleared. Not the sum of its counts: a job in three cities is counted
+   * under each, but comes back once. Optional for an older server.
+   */
+  pool?: { location: number; experience: number; type: number };
   /** Active postings in total, ignoring every filter. */
   total: number;
 }
 
 const EMPTY_FACETS: FeedFacets = { location: [], experience: [], type: [], total: 0 };
+
+/** Headings in the Location list, in the order the server groups it. */
+const LOCATION_GROUPS: Record<string, string> = {
+  remote: "Work from anywhere",
+  city: "Cities",
+  region: "Countries and regions",
+};
 
 /** The `?meta=1` envelope. Without it the route still returns a bare array. */
 interface JobFeedResponse {
@@ -133,7 +151,7 @@ interface JobFeedResponse {
   /** Null when no search ran. */
   mode: SearchMode | null;
   /** What the server actually filtered on, normalised. */
-  filters: { location: string | null; experience: string | null; type: string | null };
+  filters: { location: string[]; experience: string[]; type: string | null };
   /** The text actually searched, once overruled filters were cut out of it. */
   query: string;
   /** Options for the three selects. */
@@ -161,13 +179,40 @@ function parseSort(value: string | null): SortKey | null {
   return key && SORT_KEYS.includes(key) ? key : null;
 }
 
+/**
+ * What the filter bar is set to. Location and Experience take several values,
+ * any of which matches — someone open to Pune or Bengaluru wants both at once.
+ * Experience holds range ids ("3-5"), which the server labels in its facets.
+ */
 interface Filters {
-  location: string;
-  experience: string;
+  location: string[];
+  experience: string[];
   type: string;
 }
 
-const EMPTY_FILTERS: Filters = { location: "", experience: "", type: "" };
+/** The two filters that take several values. */
+type ListFilterKey = "location" | "experience";
+
+const EMPTY_FILTERS: Filters = { location: [], experience: [], type: "" };
+
+/** Every value of a repeatable parameter, trimmed, blanks and repeats dropped. */
+function readList(values: string[]): string[] {
+  const seen = new Set<string>();
+  return values
+    .map((value) => value.trim())
+    .filter((value) => {
+      const key = value.toLowerCase();
+      if (!value || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+const sameList = (a: string[], b: string[]) =>
+  a.length === b.length && a.every((value, index) => value === b[index]);
+
+/** Lowercased and sorted, for comparing two picks as sets. */
+const sortedKeys = (values: string[]) => values.map((value) => value.toLowerCase()).sort();
 
 /**
  * The whole of the feed's state, as it appears in the URL.
@@ -180,15 +225,15 @@ const EMPTY_FILTERS: Filters = { location: "", experience: "", type: "" };
 function feedSearchParams(search: string, filters: Filters, sort: SortKey | null): string {
   const params = new URLSearchParams();
   if (search) params.set("q", search);
-  if (filters.location) params.set("location", filters.location);
-  if (filters.experience) params.set("experience", filters.experience);
+  // One key per value — `?location=Pune&location=Bengaluru` — rather than one
+  // comma-joined value: a single old link value ("Bangalore, Karnataka") has
+  // commas of its own, and repeated keys keep those links meaning what they did.
+  for (const value of filters.location) params.append("location", value);
+  for (const value of filters.experience) params.append("experience", value);
   if (filters.type) params.set("type", filters.type);
   if (sort) params.set("sort", sort);
   return params.toString();
 }
-
-/** A posting is flagged "New" for its first week on the feed. */
-const NEW_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Referenced by all three selects through `aria-describedby`; see §2.3. */
 const facetCaveatId = "facet-caveat";
@@ -209,43 +254,60 @@ function facetCount(options: Facet[], value: string): number | null {
   return hit ? hit.count : null;
 }
 
+/** What an option says: the facet's label where it has one ("3–5 years" for "3-5"). */
+function facetLabel(options: Facet[], value: string): string {
+  return options.find((option) => option.value.toLowerCase() === value.toLowerCase())?.label ?? value;
+}
+
+/** Several picked values, in the few words a sentence or button can hold. */
+function listLabel(labels: string[], noun: string): string {
+  return labels.length <= 2 ? labels.join(" or ") : `${labels.length} ${noun}`;
+}
+
 /**
  * Which control emptied the list.
  *
  * The facets are counted server-side over every active posting, narrowed by the
- * *other* two selects and never by the query (see `FeedFacets`). So:
+ * *other* two filters and never by the query (see `FeedFacets`). So:
  *
- *  - a selected option counted at zero is, together with the other selects,
- *    excluding everything — that select is the culprit, and the sum of its
- *    facet's counts is exactly what comes back when it is dropped;
- *  - if every selected option still has roles behind it and the list is empty
+ *  - a filter whose picked options are all counted at zero is, together with
+ *    the other filters, excluding everything — that filter is the culprit, and
+ *    the facet's `pool` is exactly what comes back when it is dropped;
+ *  - if some picked option still has jobs behind it and the list is empty
  *    regardless, the one constraint the counts cannot see is the search text.
  *
  * An option that is not in the list at all (`null`) is one whose postings have
  * since closed, which is the same diagnosis as a zero with no number to promise.
  *
- * Where more than one select is at fault, the one that frees the most is
+ * Where more than one filter is at fault, the one that frees the most is
  * offered: it is the single change that recovers the most of the corpus.
  */
 function findCulprit(search: string, filters: Filters, facets: FeedFacets): Culprit {
-  const candidates: Array<{ key: keyof Filters; label: string; count: number | null; freed: number }> = [];
+  const candidates: Array<{ key: keyof Filters; label: string; count: number; freed: number }> = [];
 
-  const consider = (key: keyof Filters, value: string, label: string, options: Facet[]) => {
-    if (!value) return;
+  const consider = (key: keyof Filters, values: string[], noun: string, options: Facet[]) => {
+    if (values.length === 0) return;
     candidates.push({
       key,
-      label,
-      count: facetCount(options, value),
-      freed: options.reduce((total, option) => total + option.count, 0),
+      label: listLabel(
+        values.map((value) => facetLabel(options, value)),
+        noun
+      ),
+      // Zero only when every picked option is zero — any of them matches.
+      count: values.reduce((total, value) => total + (facetCount(options, value) ?? 0), 0),
+      // `pool` rather than the sum of the counts, which counts a job once per
+      // city it names. The sum is the fallback for an older server, where each
+      // job had exactly one option and the two were the same number.
+      freed: facets.pool?.[key] ?? options.reduce((total, option) => total + option.count, 0),
     });
   };
 
-  consider("location", filters.location, filters.location, facets.location);
-  consider("experience", filters.experience, `${filters.experience} years`, facets.experience);
-  consider("type", filters.type, filters.type, facets.type);
+  consider("location", filters.location, "locations", facets.location);
+  consider("experience", filters.experience, "experience ranges", facets.experience);
+  consider("type", filters.type ? [filters.type] : [], "types", facets.type);
 
   const blocking = candidates
-    .filter((candidate) => candidate.count === null || candidate.count === 0)
+    .filter((candidate) => candidate.count === 0)
     .sort((a, b) => b.freed - a.freed);
 
   if (blocking.length > 0) {
@@ -253,11 +315,11 @@ function findCulprit(search: string, filters: Filters, facets: FeedFacets): Culp
     return { kind: "filter", key: worst.key, label: worst.label, freed: worst.freed };
   }
 
-  // Every select still has roles behind it, so the text is what removed them.
+  // Every filter still has jobs behind it, so the text is what removed them.
   // Truncated because a pasted paragraph should not become a button label.
   if (search) return { kind: "query", term: search.length > 28 ? `${search.slice(0, 27)}…` : search };
 
-  // Filters that each have roles behind them but no overlap once combined —
+  // Filters that each have jobs behind them but no overlap once combined —
   // no single one is at fault, so nothing is named and "Clear everything" is
   // the honest only door.
   return null;
@@ -265,18 +327,15 @@ function findCulprit(search: string, filters: Filters, facets: FeedFacets): Culp
 
 /** The sentence above the recovery buttons, matched to what they will do. */
 function emptyStateReason(culprit: Culprit, total: number): string {
-  const corpus = `${total} open ${total === 1 ? "role" : "roles"}`;
+  const corpus = `${total} open ${total === 1 ? "job" : "jobs"}`;
   if (culprit?.kind === "filter") {
-    return `Nothing in the ${corpus} matches “${culprit.label}” alongside your other filters.`;
+    return `None of the ${corpus} match “${culprit.label}” with your other filters.`;
   }
   if (culprit?.kind === "query") {
-    return `Your filters still have roles behind them — it is the search for “${culprit.term}” that none of the ${corpus} answer.`;
+    return `Your filters have results, but none of the ${corpus} match “${culprit.term}”.`;
   }
-  return `None of the ${corpus} match every filter at once. Try widening one of them, or clear them all.`;
+  return `None of the ${corpus} match every filter at once. Try removing a filter.`;
 }
-
-/** Evidence, not decoration - three named skills is enough to earn a score. */
-const CARD_SKILL_LIMIT = 3;
 
 /**
  * `useSearchParams` opts the subtree into client-side rendering, which Next 15
@@ -311,8 +370,8 @@ function JobsFeed() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialQuery = searchParams.get("q")?.trim() ?? "";
-  const initialLocation = searchParams.get("location")?.trim() ?? "";
-  const initialExperience = searchParams.get("experience")?.trim() ?? "";
+  const initialLocation = readList(searchParams.getAll("location"));
+  const initialExperience = readList(searchParams.getAll("experience"));
   const initialType = searchParams.get("type")?.trim() ?? "";
   const initialSort = parseSort(searchParams.get("sort"));
 
@@ -410,8 +469,8 @@ function JobsFeed() {
         // The selects go to the server now: they are `where` clauses applied
         // before its page cap, so a match on posting 201 is findable instead of
         // invisible. Empty means "any", and is left off the query string.
-        if (selects.location) params.set("location", selects.location);
-        if (selects.experience) params.set("experience", selects.experience);
+        for (const value of selects.location) params.append("location", value);
+        for (const value of selects.experience) params.append("experience", value);
         if (selects.type) params.set("type", selects.type);
 
         const data = await apiFetch<JobFeedResponse>(`/api/jobs?${params.toString()}`);
@@ -435,9 +494,24 @@ function JobsFeed() {
         // older server sends no facets, and empty selects would read as "this
         // corpus has no locations" instead of "unknown".
         if (data.facets) setFacets(data.facets);
+        // The server reads each value into the option it means — an old link's
+        // "Bangalore" or "Bangalore, Karnataka" is Bengaluru, "3–5 years" is the
+        // 3–5 range — and says so in `filters`. Adopting that is what makes the
+        // matching box show as ticked and rewrites the URL to the current form.
+        // Compared as sets, so the order things were ticked in is left alone.
+        const read = data.filters;
+        if (
+          read &&
+          Array.isArray(read.location) &&
+          Array.isArray(read.experience) &&
+          (!sameList(sortedKeys(read.location), sortedKeys(selects.location)) ||
+            !sameList(sortedKeys(read.experience), sortedKeys(selects.experience)))
+        ) {
+          setFilters((current) => ({ ...current, location: read.location, experience: read.experience }));
+        }
       } catch (err) {
         if (isCancelled()) return;
-        setError(err instanceof Error ? err.message : "Failed to load jobs");
+        setError(err instanceof Error ? err.message : "Couldn’t load jobs");
       } finally {
         if (!isCancelled()) {
           setRefreshing(false);
@@ -496,7 +570,9 @@ function JobsFeed() {
     router.replace(next ? `/jobs?${next}` : "/jobs", { scroll: false });
   }, [search, filters, sort, router, searchParams]);
 
-  const hasFilters = Boolean(search || filters.location || filters.experience || filters.type);
+  const hasFilters = Boolean(
+    search || filters.location.length || filters.experience.length || filters.type
+  );
 
   // "Best match" only exists when there is something to sort by. Anonymous
   // visitors, company accounts and un-indexed seekers never see the option.
@@ -592,9 +668,16 @@ function JobsFeed() {
     setFilters(EMPTY_FILTERS);
   };
 
-  /** One select back to "any", leaving the reader's other decisions alone. */
+  /** One filter back to "any", leaving the reader's other decisions alone. */
   const clearFilter = (key: keyof Filters) =>
-    setFilters((current) => ({ ...current, [key]: "" }));
+    setFilters((current) => ({ ...current, [key]: key === "type" ? "" : [] }));
+
+  /** One value out of a multi-value filter — one chip's worth. */
+  const removeFilterValue = (key: ListFilterKey, value: string) =>
+    setFilters((current) => ({
+      ...current,
+      [key]: current[key].filter((item) => item.toLowerCase() !== value.toLowerCase()),
+    }));
 
   /** The search box back to empty, leaving the three selects alone. */
   const clearQuery = () => {
@@ -619,16 +702,31 @@ function JobsFeed() {
    * as", because the two are different claims: one is what the reader chose,
    * the other is what the server understood.
    */
+  /*
+   * One chip per picked value, so "Pune" can go without taking "Bengaluru"
+   * with it.
+   */
   const appliedChips = useMemo(
-    () =>
-      (
-        [
-          { key: "location", label: filters.location, control: "Location" },
-          { key: "experience", label: filters.experience && `${filters.experience} years`, control: "Experience" },
-          { key: "type", label: filters.type, control: "Job type" },
-        ] as const
-      ).filter((chip): chip is typeof chip & { label: string } => Boolean(chip.label)),
-    [filters.location, filters.experience, filters.type]
+    () => [
+      ...filters.location.map((value) => ({
+        id: `location-${value}`,
+        label: facetLabel(facets.location, value),
+        control: "Location",
+        remove: () => removeFilterValue("location", value),
+      })),
+      ...filters.experience.map((value) => ({
+        id: `experience-${value}`,
+        label: facetLabel(facets.experience, value),
+        control: "Experience",
+        remove: () => removeFilterValue("experience", value),
+      })),
+      ...(filters.type
+        ? [{ id: "type", label: filters.type, control: "Job type", remove: () => clearFilter("type") }]
+        : []),
+    ],
+    // `removeFilterValue` and `clearFilter` only call `setFilters`, which is
+    // stable, so the picks and their labels are the whole dependency.
+    [filters.location, filters.experience, filters.type, facets.location, facets.experience]
   );
 
   /**
@@ -681,7 +779,13 @@ function JobsFeed() {
       payload.remote = true;
     }
     if (filters.type) payload.type = filters.type;
-    if (filters.location) payload.location = filters.location;
+    // An alert holds one location, matched as text against each posting, so
+    // only a single pick can travel with it; several would be narrowed to one
+    // the reader did not choose. "Remote" is the alert's own remote flag.
+    if (filters.location.length === 1) {
+      if (filters.location[0].toLowerCase() === "remote") payload.remote = true;
+      else payload.location = filters.location[0];
+    }
     return payload;
   }, [chips, filters.location, filters.type]);
 
@@ -710,7 +814,7 @@ function JobsFeed() {
       ? ""
       : error
         ? ""
-        : `${resultCount === 0 ? "No" : resultCount} ${resultCount === 1 ? "role" : "roles"} matched${
+        : `${resultCount === 0 ? "No" : resultCount} ${resultCount === 1 ? "job" : "jobs"} found${
             previousCount !== null ? `, ${previousCount > resultCount ? "down" : "up"} from ${previousCount}` : ""
           }${semantic ? ", ranked by semantic relevance" : ""}.`;
 
@@ -727,9 +831,9 @@ function JobsFeed() {
   return (
     <FeedShell>
       <PageHeading
-        eyebrow="Live job feed"
-        title="Open roles"
-        description="Every role currently accepting applications on NextHire."
+        eyebrow="Job search"
+        title="Open jobs"
+        description="Browse every job accepting applications on NextHire."
         className="mb-6"
       />
 
@@ -766,7 +870,7 @@ function JobsFeed() {
                   type="search"
                   value={searchInput}
                   onChange={(event) => setSearchInput(event.target.value)}
-                  placeholder="Title, company, keyword…"
+                  placeholder="Job title, company or keyword"
                   className={`${inputClass} pl-9`}
                 />
               </div>
@@ -779,25 +883,32 @@ function JobsFeed() {
                 paragraph two elements away. Only when the note is on screen —
                 an `aria-describedby` pointing at nothing is worse than none.
                 https://www.w3.org/WAI/ARIA/apg/practices/names-and-descriptions/ */}
-            <FilterSelect
+            {/* Location and Experience take several values, any of which
+                matches; see `MultiSelect` for the control and
+                `lib/jobs/filters.ts` for how postings are read into them. */}
+            <MultiSelect
               id="filter-location"
               label="Location"
               allLabel="All locations"
-              value={filters.location}
+              pluralNoun="locations"
+              searchPlaceholder="Search cities"
               options={facets.location}
-              unit="role"
-              describedBy={facetCaveatId}
-              onChange={(value) => setFilters((current) => ({ ...current, location: value }))}
+              groupLabels={LOCATION_GROUPS}
+              selected={filters.location}
+              unit="job"
+              describedBy={search ? facetCaveatId : undefined}
+              onChange={(next) => setFilters((current) => ({ ...current, location: next }))}
             />
-            <FilterSelect
+            <MultiSelect
               id="filter-experience"
               label="Experience"
               allLabel="All levels"
-              value={filters.experience}
+              pluralNoun="ranges"
               options={facets.experience}
-              unit="role"
-              describedBy={facetCaveatId}
-              onChange={(value) => setFilters((current) => ({ ...current, experience: value }))}
+              selected={filters.experience}
+              unit="job"
+              describedBy={search ? facetCaveatId : undefined}
+              onChange={(next) => setFilters((current) => ({ ...current, experience: next }))}
             />
             <FilterSelect
               id="filter-type"
@@ -805,8 +916,8 @@ function JobsFeed() {
               allLabel="All types"
               value={filters.type}
               options={facets.type}
-              unit="role"
-              describedBy={facetCaveatId}
+              unit="job"
+              describedBy={search ? facetCaveatId : undefined}
               onChange={(value) => setFilters((current) => ({ ...current, type: value }))}
             />
 
@@ -822,7 +933,7 @@ function JobsFeed() {
                     search, relevance is offered and is the default — but date
                     order is still there to be asked for, which it was not when
                     "Best relevance" was a label painted over `newest`. */}
-                {semantic && <option value="relevance">Best relevance</option>}
+                {semantic && <option value="relevance">Most relevant</option>}
                 <option value="newest">Newest first</option>
                 <option value="applicants">Most applicants</option>
                 {hasMatches && <option value="match">Best match</option>}
@@ -837,11 +948,15 @@ function JobsFeed() {
           {/* The `.eyebrow` class rather than <Eyebrow>: this needs an `id` for
               the selects' aria-describedby, and the component does not take
               one. Same rendered result. */}
-          {Boolean(search) && (
-            <p id={facetCaveatId} className="eyebrow mt-3">
-              Filter counts cover every open role, not just this search.
-            </p>
-          )}
+          {/* Always laid out, shown only during a search: when it was mounted
+              on the first keystroke it pushed the whole list down 100px. */}
+          <p
+            id={facetCaveatId}
+            className={`eyebrow mt-3 ${search ? "" : "invisible"}`}
+            aria-hidden={search ? undefined : true}
+          >
+            Counts include all open jobs, not just this search.
+          </p>
         </Card>
       </section>
 
@@ -860,17 +975,17 @@ function JobsFeed() {
       {!loading && !error && (appliedChips.length > 0 || chips.length > 0) && (
         <section aria-label="Applied filters" className="mb-4 flex flex-wrap items-start gap-x-5 gap-y-2">
           {appliedChips.length > 0 && (
-            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5">
               <Eyebrow as="span">Filtered by</Eyebrow>
               {appliedChips.map((chip) => (
                 <RemovableChip
-                  key={chip.key}
+                  key={chip.id}
                   label={chip.label}
                   icon={<Icon.filter className="h-3.5 w-3.5" aria-hidden="true" />}
                   // Names the control as well as the value, so a screen-reader
-                  // user hears which of three identical-sounding chips this is.
-                  removeLabel={`Remove the ${chip.control} filter, ${chip.label}`}
-                  onRemove={() => clearFilter(chip.key)}
+                  // user hears which of several identical-sounding chips this is.
+                  removeLabel={`Remove ${chip.label} from the ${chip.control} filter`}
+                  onRemove={chip.remove}
                 />
               ))}
             </div>
@@ -900,7 +1015,7 @@ function JobsFeed() {
           what is left here are the notes *about* the search, plus the save
           action, which is an action and does not belong among the tokens. */}
       {showSearchNotes && (
-        <section aria-label="How this search was read" className="mb-4 sm:mb-5">
+        <section aria-label="How we read your search" className="mb-4 sm:mb-5">
           {canSaveSearch && (
             /* Keyed on the query so a new search gets a fresh panel rather than
                the previous one's name, error or success note. */
@@ -921,7 +1036,7 @@ function JobsFeed() {
               unavailable, and the results are still a real ranking. */}
           {mode === "lexical" && (
             <Eyebrow as="p" className="mt-2">
-              Ranked on keywords — semantic search isn&rsquo;t available right now.
+              Showing keyword results. Smart search isn&rsquo;t available right now.
             </Eyebrow>
           )}
         </section>
@@ -931,12 +1046,12 @@ function JobsFeed() {
         <Alert variant="info" className="mb-4 sm:mb-5">
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
             <span>
-              Your profile isn&rsquo;t indexed yet, so these roles aren&rsquo;t scored for fit.{" "}
+              Complete your profile to see your fit for each job.{" "}
               <Link
                 href="/seeker/dashboard"
                 className="font-semibold underline underline-offset-2 hover:no-underline"
               >
-                Add a r&eacute;sum&eacute; or profile details
+                Add a resume or profile details
               </Link>
               .
             </span>
@@ -970,14 +1085,14 @@ function JobsFeed() {
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <Eyebrow as="span">
               {resultCount === 0
-                ? "No roles matched"
-                : `${resultCount} ${resultCount === 1 ? "role" : "roles"} matched`}
+                ? "No jobs found"
+                : `${resultCount} ${resultCount === 1 ? "job" : "jobs"} found`}
               {/* The denominator is the corpus, from the server. It used to be
                   `jobList.length`, which was the page the filters had already
                   been applied to — so it read "12 / 12 total" and measured
                   nothing. */}
               {hasFilters && resultCount > 0 && facets.total > resultCount && (
-                <span className="text-gray-400 dark:text-gray-500">
+                <span className="text-[var(--ink-muted)]">
                   {" "}
                   / {facets.total} open {facets.total === 1 ? "role" : "roles"}
                 </span>
@@ -988,7 +1103,7 @@ function JobsFeed() {
                 is the control reporting back; the same "12" with no reference
                 point is a readout that happens to have moved. */}
             {previousCount !== null && (
-              <Eyebrow as="span" className="text-gray-400 dark:text-gray-500">
+              <Eyebrow as="span" className="text-[var(--ink-muted)]">
                 {previousCount > resultCount ? "down" : "up"} from {previousCount}
               </Eyebrow>
             )}
@@ -996,14 +1111,14 @@ function JobsFeed() {
             {/* More rows match than one page returns, so the list is the newest
                 slice of the answer rather than the answer. */}
             {truncated && (
-              <Eyebrow as="span">Showing the newest {resultCount} — narrow to see more</Eyebrow>
+              <Eyebrow as="span">Showing the newest {resultCount} · use filters to see more</Eyebrow>
             )}
 
             {/* Explains why a result with no keyword overlap is on the list. */}
             {semantic && (
               <Eyebrow as="span" accent className="inline-flex items-center gap-1">
                 <Icon.spark className="h-3.5 w-3.5" aria-hidden="true" />
-                Semantic match
+                Smart match
               </Eyebrow>
             )}
           </div>
@@ -1050,17 +1165,17 @@ function JobsFeed() {
               icon={<Icon.search className="h-6 w-6" />}
               title={
                 facets.total === 0
-                  ? "No open roles right now"
+                  ? "No open jobs right now"
                   : hasFilters
-                    ? "No roles match these filters"
+                    ? "No jobs match these filters"
                     : "Nothing to show"
               }
               description={
                 facets.total === 0
-                  ? "Nothing is being advertised at the moment. Check back soon."
+                  ? "Check back soon for new jobs."
                   : hasFilters
                     ? emptyStateReason(culprit, facets.total)
-                    : "The feed came back empty. Reloading usually sorts it out."
+                    : "We couldn’t load any jobs. Try reloading."
               }
               action={
                 facets.total > 0 && hasFilters ? (
@@ -1078,7 +1193,7 @@ function JobsFeed() {
                         onClick={() => clearFilter(culprit.key)}
                         className={buttonPrimary}
                       >
-                        Drop &ldquo;{culprit.label}&rdquo;
+                        Remove &ldquo;{culprit.label}&rdquo;
                         {culprit.freed > 0 && (
                           <span className="font-normal opacity-80">
                             {" "}
@@ -1125,7 +1240,7 @@ function JobsFeed() {
 /** Page chrome shared by the feed and its Suspense fallback. */
 function FeedShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen">
       <Navbar />
       <main id="main-content" className="container-responsive py-6 sm:py-8">
         {children}
@@ -1223,11 +1338,19 @@ function spanOf(haystack: string, needle: string): { start: number; end: number 
  */
 function overrideNote(chip: SearchFilterChip, filters: Filters): string {
   const field = chip.key === "type" ? "Job type" : "Location";
-  const winner = chip.key === "type" ? filters.type : filters.location;
+  const winners = chip.key === "type" ? [filters.type] : filters.location;
+  // The parser labels a city in full ("Bengaluru, India"); the Location list
+  // names it short ("Bengaluru").
+  const read = chip.label.toLowerCase();
+  const covered = winners.some((winner) => {
+    const name = winner.toLowerCase();
+    return name === read || name === read.split(",")[0].trim();
+  });
 
-  if (winner.toLowerCase() === chip.label.toLowerCase()) {
+  if (covered) {
     return `The ${field} filter already covers “${chip.label}” from your search.`;
   }
+  const winner = winners.length <= 2 ? winners.join(" or ") : `${winners.length} locations`;
   return `Your search read “${chip.label}”, but the ${field} filter is set to “${winner}” — the filter wins.`;
 }
 
@@ -1319,9 +1442,9 @@ function RemovableChip({
   onRemove: () => void;
 }) {
   return (
-    <span className="chip">
+    <span className="chip" title={label.length > 32 ? label : undefined}>
       {icon}
-      {label}
+      <span className="chip-label">{label}</span>
       <button type="button" onClick={onRemove} className="chip-dismiss hit-24">
         <Icon.x className="h-3 w-3" aria-hidden="true" />
         <span className="sr-only">{removeLabel}</span>
@@ -1427,7 +1550,7 @@ function SaveSearchPanel({
        * `apiFetch` carries that message and drops the status, so it is shown as
        * written rather than flattened into one generic failure.
        */
-      setError(err instanceof Error ? err.message : "Could not save that search");
+      setError(err instanceof Error ? err.message : "Couldn’t save that search");
     } finally {
       setSaving(false);
     }
@@ -1450,7 +1573,7 @@ function SaveSearchPanel({
         />
 
         <div className="mt-3">
-          <Label htmlFor="save-search-frequency">Tell me about new matches</Label>
+          <Label htmlFor="save-search-frequency">Notify me about new matches</Label>
           <select
             id="save-search-frequency"
             value={frequency}
@@ -1485,160 +1608,6 @@ function SaveSearchPanel({
           </button>
         </div>
       </form>
-    </Card>
-  );
-}
-
-/**
- * One result.
- *
- * The reading order is the deciding order, top to bottom: who and what
- * (title, company, location) → what it pays and how it is worked → what the
- * posting says → the evidence behind the score → when it was posted. NN/g's
- * information-scent work is the reason the title is the only large text and the
- * only link: the scent a reader follows is the label of the thing they are
- * about to open, and everything else on the card exists to help them *not*
- * open it. Compensation sits first among the facts because it is the fact
- * candidates rank a listing on before they read a line of it.
- * https://www.nngroup.com/articles/information-scent/
- *
- * `scored` is a feed-level fact rather than a card-level one — see the call
- * site. It reserves the score column and the meter slot on every card in a
- * scored feed so rows do not go ragged, and reserves nothing at all in a feed
- * where no row can be scored.
- */
-function JobCard({ job, scored }: { job: JobListItem; scored: boolean }) {
-  const applicants = job._count?.applications ?? 0;
-  const isNew = Date.now() - new Date(job.createdAt).getTime() < NEW_WINDOW_MS;
-
-  // Every match affordance hangs off this one binding. When it is null - an
-  // anonymous visitor, a company account, a seeker with no indexed profile, or
-  // no `GEMINI_API_KEY` at all - the card renders exactly as it did before
-  // matching existed. That is the whole contract.
-  const match = job.match ?? null;
-  const sharedSkills = match?.sharedSkills.slice(0, CARD_SKILL_LIMIT) ?? [];
-  const extraSkills = (match?.sharedSkills.length ?? 0) - sharedSkills.length;
-
-  return (
-    // The card is a plain surface and the title carries the only anchor, which
-    // is stretched over the card with `after:absolute`. That keeps one link per
-    // card with the role title as its accessible name, while the whole tile
-    // stays clickable.
-    // `@container` plus `@lg:` rather than `sm:`. The card is *narrower* at the
-    // `lg` viewport than at `md` — the feed goes to two columns at `lg`, so each
-    // card drops from about 720px to about 490px — while every `sm:`-prefixed
-    // style stays on from 640px upward. The card was therefore getting its
-    // roomiest padding and its largest title exactly where it had least room.
-    // A container query asks the width the card actually has.
-    <Card interactive className="@container group relative flex flex-col p-4 @lg:p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-start gap-3">
-          <Avatar name={job.company?.name ?? "C"} className="h-11 w-11 text-base" />
-          <div className="min-w-0">
-            {/* `text-balance` on the one piece of display type on the card:
-                a two-line title that breaks 9/2 is measurably harder to scan
-                than one that breaks 6/5. Free in Tailwind v4. */}
-            <h2 className="text-pretty text-base font-semibold leading-snug text-gray-900 dark:text-white @lg:text-lg">
-              <Link href={`/jobs/${job.id}`} className="after:absolute after:inset-0 after:rounded-xl">
-                <span className="line-clamp-2 text-balance">{job.title}</span>
-              </Link>
-            </h2>
-            <p className="mt-1 truncate text-sm text-gray-500 dark:text-gray-400">
-              {job.company?.name ?? "Company"}
-              {job.location && (
-                <>
-                  <span aria-hidden="true"> · </span>
-                  {job.location}
-                </>
-              )}
-            </p>
-          </div>
-        </div>
-
-        {/* The score column, and nothing else. The applicant count used to sit
-            under it, which put a competitive signal and a personal one in the
-            same stack reading as one block; it has moved to the footer beside
-            the posting date, where the other metadata lives. `min-h` holds the
-            column open across a scored feed so rows stay level. */}
-        <div
-          className={`flex flex-shrink-0 flex-col items-end gap-1.5 ${scored ? "min-h-[3.25rem]" : ""}`}
-        >
-          {/* The feed only ever returns open roles, so the old Active/Inactive
-              badge was always green. Recency is the useful signal instead, and
-              a fresh posting is exactly the "live" state emerald is for. */}
-          {isNew && (
-            <span className="rounded-md border border-green-300 bg-green-50 px-1.5 py-0.5 text-[11px] font-medium text-green-700 dark:border-green-700 dark:bg-green-950/40 dark:text-green-300">
-              New
-            </span>
-          )}
-          {match && <MatchScore value={match.score} caption="Profile fit" />}
-        </div>
-      </div>
-
-      {/* `text-pretty` stops the clamped snippet ending on an orphan. */}
-      <p className="mt-3 line-clamp-2 text-pretty text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-        {job.description}
-      </p>
-
-      {/* Salary first: it is the fact a reader sorts on before reading a word
-          of the posting. Location is deliberately absent — it is already on the
-          line under the title, and repeating it here spends the most valuable
-          row on the card restating something two lines above it. */}
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        {job.salary && <Chip icon={<Icon.money className="h-3.5 w-3.5" />}>{job.salary}</Chip>}
-        {job.type && <Chip icon={<Icon.clock className="h-3.5 w-3.5" />}>{job.type}</Chip>}
-        {job.experience && (
-          <Chip icon={<Icon.briefcase className="h-3.5 w-3.5" />}>{job.experience} years</Chip>
-        )}
-      </div>
-
-      {/* A number on its own is an assertion. These are the receipts for it. */}
-      {sharedSkills.length > 0 && (
-        <div className="mt-3">
-          <Eyebrow accent className="mb-1.5">
-            Matched skills
-          </Eyebrow>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {sharedSkills.map((skill) => (
-              <Chip key={skill} accent>
-                {skill}
-              </Chip>
-            ))}
-            {extraSkills > 0 && <Eyebrow as="span">+{extraSkills} more</Eyebrow>}
-          </div>
-        </div>
-      )}
-
-      {/* The score again as bar length, directly under the evidence for it and
-          above the footer rule, so score → receipts → bar reads as one block.
-          It used to sit *below* the footer, detached from everything it is
-          about. The slot is reserved across a scored feed whether or not this
-          particular row has a score, so cards keep the same height. */}
-      {scored && (
-        <div className="mt-3 min-h-[0.375rem]">
-          {match && (
-            <Meter value={match.score} label={`Profile fit: ${match.score} out of 100`} />
-          )}
-        </div>
-      )}
-
-      {/* A minimum gap that also absorbs the slack, so two cards in the same
-          row line their footers up however much content each one has. */}
-      <div className="mt-4 flex-1" aria-hidden="true" />
-
-      <div className="flex items-center justify-between gap-3 border-t border-gray-200 pt-3 @lg:gap-4 dark:border-gray-700">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5">
-          <Eyebrow as="span">Posted {formatDate(job.createdAt)}</Eyebrow>
-          <Eyebrow as="span">{formatCount(applicants)} applied</Eyebrow>
-        </div>
-        <span
-          className="flex flex-shrink-0 items-center gap-1 text-xs font-semibold text-gray-400 transition-colors group-hover:text-gray-900 dark:text-gray-500 dark:group-hover:text-white"
-          aria-hidden="true"
-        >
-          View
-          <Icon.arrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-        </span>
-      </div>
     </Card>
   );
 }

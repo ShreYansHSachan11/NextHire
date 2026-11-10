@@ -118,6 +118,34 @@ web container can reach.
 | `npm run db:migrate` | Apply migrations in development |
 | `npm run db:deploy` | Apply migrations in production |
 | `npm run db:studio` | Prisma Studio |
+| `npm run jobs:import` | Import real jobs from public job boards (needs `CRON_SECRET`; see below) |
+
+### Imported jobs
+
+Real postings, no keys needed:
+
+- **Company careers boards** for India: Paytm, Meesho, Razorpay, CRED, Zeta, Groww and
+  others, read from their public Greenhouse, Lever and Ashby APIs. The list is in
+  `lib/jobs/boards.ts`; add a company by its careers-board slug.
+- **[Arbeitnow](https://www.arbeitnow.com)** (mostly Europe) and **[Remote OK](https://remoteok.com)** (remote).
+- Optionally **[Adzuna](https://developer.adzuna.com)** for more of India (its keys need a card).
+
+Jobs stay current on their own. Opening a careers-board job re-checks it at the
+company's board (at most every 15 minutes) and closes it if the company has taken it
+down; opening the jobs list re-imports any source not refreshed in six hours, in the
+background. `JOBS_AUTO_REFRESH=0` turns both off.
+
+To import straight away, set `CRON_SECRET` in `.env`, start the app and run
+`npm run jobs:import`. Each run adds new postings, updates changed ones, closes any a
+source no longer lists, and embeds the new ones so they appear in search and
+recommendations.
+
+Imported jobs are listings only: they credit their source and link to the original
+posting, where people apply. Only English postings are kept. Remote OK's API terms
+require that credit and link, and ask that the API is not polled hard, so a few runs a
+day is plenty. On Vercel, `vercel.json` schedules `GET /api/jobs/import` daily at
+03:30 UTC. Set `CRON_SECRET` in the project's environment variables and Vercel sends it
+with each run; without it the endpoint answers 404 and nothing is imported.
 
 ## Project structure
 

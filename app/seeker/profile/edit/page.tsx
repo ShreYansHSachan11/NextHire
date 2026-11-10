@@ -224,7 +224,7 @@ export default function EditSeekerProfilePage() {
       })
       .catch((error: unknown) => {
         if (cancelled) return;
-        console.error("Could not load your matching fields:", error);
+        console.error("Couldn’t load your matching fields:", error);
         setSignalFailed(true);
       });
 
@@ -442,7 +442,7 @@ export default function EditSeekerProfilePage() {
       toast.success("Profile updated");
       router.push("/seeker/dashboard");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not update your profile";
+      const message = error instanceof Error ? error.message : "Couldn’t update your profile";
       console.error("Profile update failed:", error);
       setFormError(message);
       toast.error(message);
@@ -461,7 +461,7 @@ export default function EditSeekerProfilePage() {
   const remaining = PROFILE_MAX - form.profile.length;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen">
       <Navbar />
 
       {/* `container-responsive` rather than a bespoke `px-4 sm:px-6 lg:px-8`: it
@@ -475,17 +475,17 @@ export default function EditSeekerProfilePage() {
         </BackLink>
 
         <PageHeading
-          eyebrow="Seeker record"
+          eyebrow="Profile"
           title="Edit profile"
-          description="Employers read this alongside every application you send."
+          description="Employers see this when you apply."
           className="mb-6"
         />
 
         <Card>
           <CardHeader
-            eyebrow="Fields"
+            eyebrow="Details"
             title="Your details"
-            description="Changes take effect the moment you save."
+            description="Changes apply as soon as you save."
           />
 
           <form
@@ -581,7 +581,7 @@ export default function EditSeekerProfilePage() {
             >
               <Eyebrow className="mb-1.5 flex items-center gap-1.5" as="div">
                 <Icon.graph className="h-3.5 w-3.5" />
-                Profile signal
+                Matching
               </Eyebrow>
               <h3
                 id="signal-heading"
@@ -590,8 +590,7 @@ export default function EditSeekerProfilePage() {
                 What we match you on
               </h3>
               <p className="mt-1 max-w-prose text-sm text-gray-600 dark:text-gray-400">
-                These four fields are what job matching scores roles against — and anything the
-                resume reader filled in for you can be corrected here.
+                We use these four fields to match you with jobs. Correct anything imported from your resume here.
               </p>
 
               {/* These four controls are disabled until the stored values are in
@@ -601,15 +600,14 @@ export default function EditSeekerProfilePage() {
               <div aria-live="polite">
                 {!signalLoaded && !signalFailed && (
                   <p className="mt-3 text-sm text-gray-600 dark:text-gray-400">
-                    Loading your saved matching fields…
+                    Loading…
                   </p>
                 )}
               </div>
 
               {signalFailed && (
                 <Alert variant="warning" className="mt-4">
-                  We could not load your saved matching fields, so they are left untouched by this
-                  save. Reload the page to edit them.
+                  We couldn’t load these fields, so this save won’t change them. Reload the page to edit them.
                 </Alert>
               )}
 
@@ -747,8 +745,7 @@ export default function EditSeekerProfilePage() {
 
                   <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                     <p id="skill-hint" className="text-xs text-gray-600 dark:text-gray-400">
-                      Enter or a comma adds a skill. Backspace in an empty box removes the last
-                      one.
+                      Press Enter or add a comma after each skill.
                     </p>
                     <Readout className="text-xs font-medium">
                       {skills.length} / {MAX_SKILLS}

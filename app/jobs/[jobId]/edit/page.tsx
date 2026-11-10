@@ -168,9 +168,9 @@ async function requestAi<T>(path: string, body: Record<string, unknown>): Promis
 
 /** The three buckets the route returns, in the employer's language. */
 const FINDING_LABELS: Record<string, string> = {
-  exclusionary: "Narrows the pool",
-  requirement: "Requirement worth questioning",
-  jargon: "Insider jargon",
+  exclusionary: "May limit applicants",
+  requirement: "Consider removing",
+  jargon: "Jargon",
 };
 
 interface Finding {
@@ -364,26 +364,26 @@ const SECTIONS = [
   {
     id: "role",
     number: "01",
-    title: "The role",
-    description: "Title and description — what the match engine reads.",
+    title: "The job",
+    description: "Title and description, used for matching.",
   },
   {
     id: "particulars",
     number: "02",
-    title: "Particulars",
-    description: "Type, location, pay and skills. Saves with the role above.",
+    title: "Job details",
+    description: "Type, location, pay and skills. Saved with the job above.",
   },
   {
     id: "availability",
     number: "03",
     title: "Availability",
-    description: "Whether the posting is open to new applications.",
+    description: "Open or closed to new applications.",
   },
   {
     id: "screening",
     number: "04",
     title: "Screening questions",
-    description: "Saved separately, on their own button.",
+    description: "Saved separately.",
   },
 ] as const;
 
@@ -516,7 +516,7 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
         if (cancelled) return;
         // Non-fatal: the posting itself is still editable without this panel.
         setQuestionsError(
-          err instanceof Error ? err.message : "Could not load the screening questions"
+          err instanceof Error ? err.message : "Couldn’t load the screening questions"
         );
       } finally {
         if (!cancelled) setQuestionsLoading(false);
@@ -726,7 +726,7 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
       setSkillNotice(
         added > 0
           ? `${added} suggested ${added === 1 ? "skill" : "skills"} added. Remove any that do not fit, then save.`
-          : "No new skills to suggest — the list already covers the posting."
+          : "No new skills to suggest — the list already covers the job."
       );
       return;
     }
@@ -759,7 +759,7 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
       const count = outcome.data.findings.length;
       setReviewNotice(
         count === 0
-          ? "Wording check finished. Nothing flagged in this posting."
+          ? "Wording check finished. Nothing flagged in this job."
           : `Wording check finished. ${count} ${count === 1 ? "suggestion" : "suggestions"} to read.`
       );
       return;
@@ -908,7 +908,7 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
     setQuestionNotice(
       additions.length > 0
         ? `${additions.length} suggested ${additions.length === 1 ? "question" : "questions"} added below. They are not saved until you save the set.`
-        : "No new questions to suggest for this posting."
+        : "No new questions to suggest for this job."
     );
   };
 
@@ -934,7 +934,7 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
     if (
       removed > 0 &&
       !window.confirm(
-        `Saving removes ${removed} question${removed === 1 ? "" : "s"} from this posting. Any answers applicants already gave to ${removed === 1 ? "it" : "them"} are deleted too, and that cannot be undone.`
+        `Saving removes ${removed} question${removed === 1 ? "" : "s"} from this job. Any answers applicants already gave to ${removed === 1 ? "it" : "them"} are deleted too, and that cannot be undone.`
       )
     ) {
       return;
@@ -956,7 +956,7 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
       toast.success("Screening questions saved.");
     } catch (err) {
       const message =
-        err instanceof Error ? err.message : "Could not save the screening questions";
+        err instanceof Error ? err.message : "Couldn’t save the screening questions";
       setQuestionsError(message);
       toast.error(message);
     } finally {
@@ -1058,7 +1058,7 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
       setSaved(true);
       toast.success("Job details saved.");
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to update job";
+      const message = err instanceof Error ? err.message : "Couldn’t update the job";
       setFormError(message);
       toast.error(message);
     } finally {
@@ -1097,7 +1097,7 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
       // form was editing no longer exists to be saved.
       router.push("/company/dashboard");
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to delete job";
+      const message = err instanceof Error ? err.message : "Couldn’t delete the job";
       setFormError(message);
       toast.error(message);
       setDeleting(false);
@@ -1115,11 +1115,11 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
      * nothing jumps. Same reasoning as the sibling `loading.tsx`.
      */
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="min-h-screen">
         <Navbar />
         <main id="main-content" className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
           <p className="sr-only" role="status">
-            Loading this posting
+            Loading this job
           </p>
           <Skeleton className="h-3 w-36" />
           <Skeleton className="mt-2.5 h-8 w-40" />
@@ -1179,7 +1179,7 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
   ).length;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen">
       <Navbar />
 
       <main id="main-content" className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
@@ -1206,14 +1206,14 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
               You can only edit jobs from your company.
             </Alert>
             <Link href={`/jobs/${jobId}`} className={buttonSecondary}>
-              View the posting instead
+              View the job instead
             </Link>
           </Card>
         ) : (
           <>
             <div className="mb-6">
               <PageHeading
-                eyebrow="Company · Edit posting"
+                eyebrow="Edit job"
                 title="Edit job"
                 description={job.title}
                 action={
@@ -1222,7 +1222,7 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
                     onClick={handleDelete}
                     disabled={saving}
                     loading={deleting}
-                    loadingLabel="Deleting this posting"
+                    loadingLabel="Deleting this job"
                     icon={<Icon.trash className="h-4 w-4" />}
                     className="w-full sm:w-auto"
                   >
@@ -1259,7 +1259,7 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
               <Alert variant="success" className="mb-6">
                 Job details saved.{" "}
                 <Link href={`/jobs/${job.id}`} className="font-medium underline underline-offset-2">
-                  View the posting
+                  View the job
                 </Link>
               </Alert>
             )}
@@ -1321,7 +1321,7 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
                             {reviewing ? (
                               <>
                                 <Spinner className="h-4 w-4" />
-                                Reading the posting…
+                                Checking…
                               </>
                             ) : (
                               <>
@@ -1363,7 +1363,7 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
                             <span className="flex items-center gap-1.5 text-green-600 dark:text-green-400">
                               <Icon.spark className="h-4 w-4" />
                               <Eyebrow as="span" accent>
-                                Wording check · advisory
+                                Wording check
                               </Eyebrow>
                             </span>
                             <Readout className="text-xs text-gray-500 dark:text-gray-400">
@@ -1379,13 +1379,12 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
                           )}
 
                           <p className="mt-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                            Suggestions only — none of this blocks the posting or your save. Apply
-                            what you agree with and ignore the rest.
+                            These are only suggestions. Use what helps.
                           </p>
 
                           {review.findings.length === 0 ? (
                             <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">
-                              Nothing flagged in this posting.
+                              Nothing flagged in this job.
                             </p>
                           ) : (
                             <ul className="mt-3 space-y-3">
@@ -1480,7 +1479,7 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
                 >
                   <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                     <div>
-                      <Label htmlFor="type" required hint="Candidates filter the feed by this.">
+                      <Label htmlFor="type" required hint="Applicants can filter by this.">
                         Job type
                       </Label>
                       <select
@@ -1522,7 +1521,7 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
                     <div>
                       <Label
                         htmlFor="salary"
-                        hint="Optional, but postings that state pay get noticeably more applicants."
+                        hint="Optional. Showing pay helps applicants decide."
                       >
                         Salary range
                       </Label>
@@ -1541,7 +1540,7 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
                     <div>
                       <Label
                         htmlFor="experience"
-                        hint="Optional. Free text — write it the way candidates would read it."
+                        hint="Optional. For example, 3+ years."
                       >
                         Experience
                       </Label>
@@ -1566,7 +1565,7 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
                       <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
                         <Label
                           htmlFor="skill-input"
-                          hint="Optional. Press Enter or type a comma to add a tag."
+                          hint="Optional. Press Enter or add a comma after each skill."
                         >
                           Skills
                         </Label>
@@ -1581,7 +1580,7 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
                             {suggestingSkills ? (
                               <>
                                 <Spinner className="h-4 w-4" />
-                                Reading the posting…
+                                Checking…
                               </>
                             ) : (
                               <>
@@ -1667,8 +1666,8 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
 
                       {skillsOverCap && (
                         <p className="mt-1.5 text-xs leading-relaxed text-amber-700 dark:text-amber-400">
-                          This posting stores more than {MAX_SKILLS} tags, or a tag longer than{" "}
-                          {MAX_SKILL_LENGTH} characters — more than the posting can hold. Editing
+                          This job stores more than {MAX_SKILLS} tags, or a tag longer than{" "}
+                          {MAX_SKILL_LENGTH} characters — more than the job can hold. Editing
                           the tags is fine, but the save will ask you to trim the list first rather
                           than cut it for you.
                         </p>
@@ -1676,9 +1675,7 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
 
                       {skillsChanged && (
                         <p className="mt-1.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                          Saved with the job details, on the button below. Changing the tags
-                          re-indexes this posting for matching, so give it a moment to settle before
-                          judging the candidate list.
+                          Saved with the job details. Matches update shortly after you change skills.
                         </p>
                       )}
 
@@ -1709,8 +1706,8 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
                       className="mt-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400"
                     >
                       {formData.isActive
-                        ? "The job is listed on the public feed and candidates can apply."
-                        : "Closing the job hides it from the public feed and stops new applications. Applications you have already received are kept."}
+                        ? "Your job is public and accepting applications."
+                        : "Closing hides the job and stops new applications. You keep the ones you’ve received."}
                     </p>
                   </div>
 
@@ -1800,9 +1797,7 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
               >
                 <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
                   <p className="min-w-0 flex-1 text-sm leading-relaxed text-gray-600 dark:text-gray-400">
-                    Applicants answer these when they apply, and you see the answers on the
-                    application. Up to {MAX_QUESTIONS}. They save on their own button, separately
-                    from the job details above.
+                    Applicants answer these when they apply. Up to {MAX_QUESTIONS}. Saved separately from the job details.
                   </p>
                   {aiAvailable && (
                     <button
@@ -1860,8 +1855,7 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
                   <>
                     {questions.length === 0 ? (
                       <p className="text-sm text-gray-500 dark:text-gray-400">
-                        This posting has no screening questions. Candidates apply with a message and
-                        a résumé only.
+                        No screening questions. People apply with a cover letter and resume.
                       </p>
                     ) : (
                       <ol className="space-y-4">
@@ -1984,9 +1978,9 @@ function SectionRail({
   onJump: (id: SectionId) => void;
 }) {
   return (
-    <div className="panel p-3 sm:sticky sm:top-16 sm:z-20 sm:p-4">
+    <div className="panel panel-sticky p-3 sm:sticky sm:top-[5.25rem] sm:z-20 sm:p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <Eyebrow as="h2">Edit posting · {SECTIONS.length} sections</Eyebrow>
+        <Eyebrow as="h2">Edit job · {SECTIONS.length} sections</Eyebrow>
         <Eyebrow as="span" className={unsaved > 0 ? "text-amber-700 dark:text-amber-400" : ""}>
           {unsaved === 0
             ? "Everything saved"
@@ -2207,7 +2201,7 @@ function QuestionEditor({
 
       {question.rationale && (
         <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-          Suggested to probe: {question.rationale}
+          Why ask: {question.rationale}
         </p>
       )}
 
@@ -2234,7 +2228,7 @@ function QuestionEditor({
             which is exactly when the server will honour a knockout. */}
         {choices.length > 0 && (
           <div>
-            <Label htmlFor={expectedId} hint="Optional. Needed before this can flag anyone.">
+            <Label htmlFor={expectedId} hint="Optional. Needed to flag answers.">
               Answer you are looking for
             </Label>
             <select
@@ -2339,8 +2333,8 @@ function QuestionEditor({
             className="mt-1 pl-7 text-xs leading-relaxed text-gray-500 dark:text-gray-400"
           >
             {question.expected === null
-              ? "Choose the answer you are looking for first — there is nothing to compare against yet."
-              : `Applications that do not answer “${question.expected}” are marked for your attention. They still arrive in your queue, and nobody is filtered out on your behalf.`}
+              ? "Choose the answer you’re looking for first."
+              : `Applications that don’t answer “${question.expected}” are flagged for you. No one is filtered out.`}
           </p>
         </div>
       </div>

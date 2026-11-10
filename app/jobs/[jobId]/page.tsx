@@ -29,12 +29,14 @@ import {
   StatusBadge,
 } from "@/app/components/ui";
 import { useToast } from "@/app/components/Toast";
+import { compactLocation } from "@/app/components/JobCard";
 import { apiFetch } from "@/lib/clientAuth";
 // A bare constant object; `lib/ai/config` has no imports of its own and reads
 // only non-secret model names from the environment, so the weights shown in the
 // disclosure are the weights the scorer uses rather than a retyped copy.
 import { MATCH_WEIGHTS } from "@/lib/ai/config";
-import { MATCH_CAVEAT_SEEKER } from "@/lib/copy";
+import { MATCH_CAVEAT_SEEKER, experienceLabel } from "@/lib/copy";
+import { sourceLabel } from "@/lib/jobs/sources";
 
 /**
  * Both caps mirror `POST /api/applications`, which is the authority: it length-
@@ -122,6 +124,9 @@ interface JobDetail {
   company?: { id: string; name: string; profile?: string | null };
   createdAt: string;
   isActive: boolean;
+  /** Set for a job imported from a public job board; applied for at `sourceUrl`. */
+  source?: string | null;
+  sourceUrl?: string | null;
   /** Skill tags on the posting itself; public, and empty until it is indexed. */
   skills?: string[];
   _count?: { applications: number };
@@ -199,7 +204,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
       const data = await apiFetch<JobDetail>(`/api/jobs/${jobId}`);
       setJob(data);
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Failed to load this job");
+      setLoadError(err instanceof Error ? err.message : "Couldn’t load this job");
     } finally {
       setLoading(false);
     }
@@ -337,12 +342,18 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
       });
 
       setSubmitted(application);
+      // The count beside the facts was read before this application existed.
+      setJob((current) =>
+        current
+          ? { ...current, _count: { applications: (current._count?.applications ?? 0) + 1 } }
+          : current
+      );
       setMessage("");
       setAnswers({});
       setAnswerErrors({});
       toast.success("Application submitted");
     } catch (err) {
-      setApplyError(err instanceof Error ? err.message : "Failed to submit your application");
+      setApplyError(err instanceof Error ? err.message : "Couldn’t submit your application");
     } finally {
       setApplying(false);
     }
@@ -362,7 +373,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
             {loadError || "Job not found"}
           </h1>
           <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">
-            This role may have been removed, or the link may be wrong.
+            This job may have been removed, or the link may be wrong.
           </p>
           <Link href="/jobs" className={buttonPrimary}>
             <Icon.arrowLeft className="h-4 w-4" />
@@ -384,11 +395,12 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
   // been indexed, and Gemini switched off entirely.
   const match = job.match ?? null;
   const skills = job.skills ?? [];
+  const importedFrom = job.sourceUrl ? sourceLabel(job.source, job.company?.name) ?? "the original site" : null;
 
   return (
     <PageShell>
       <BackLink href="/jobs" className="mb-5">
-        All roles
+        All jobs
       </BackLink>
 
       {/* Header: company tile, tight role title, state code, metadata chips. */}
@@ -402,7 +414,19 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
               {job.company?.name?.charAt(0).toUpperCase() ?? "C"}
             </span>
             <div className="min-w-0">
-              <Eyebrow className="mb-1.5">{job.company?.name ?? "Company"}</Eyebrow>
+              <Eyebrow className="mb-1.5">
+                {job.company?.name ?? "Company"}
+                {importedFrom && (
+                  <>
+                    {" · via "}
+                    {/* A followed link with the source's name: Remote OK's API
+                        terms require both, and the other boards earn the same. */}
+                    <a href={job.sourceUrl ?? undefined} target="_blank" rel="noopener" className="link">
+                      {importedFrom}
+                    </a>
+                  </>
+                )}
+              </Eyebrow>
               <h1 className="text-2xl font-bold leading-tight text-gray-900 dark:text-white sm:text-3xl lg:text-4xl">
                 {job.title}
               </h1>
@@ -412,10 +436,14 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
         </div>
 
         <div className="mt-4 flex flex-wrap gap-1.5">
-          {job.location && <Chip icon={<Icon.location className="h-3.5 w-3.5" />}>{job.location}</Chip>}
+          {job.location && (
+            <Chip icon={<Icon.location className="h-3.5 w-3.5" />} className="chip-wrap">
+              {job.location}
+            </Chip>
+          )}
           {job.type && <Chip icon={<Icon.clock className="h-3.5 w-3.5" />}>{job.type}</Chip>}
           {job.experience && (
-            <Chip icon={<Icon.briefcase className="h-3.5 w-3.5" />}>{job.experience} years</Chip>
+            <Chip icon={<Icon.briefcase className="h-3.5 w-3.5" />}>{experienceLabel(job.experience)}</Chip>
           )}
           {job.salary && <Chip icon={<Icon.money className="h-3.5 w-3.5" />}>{job.salary}</Chip>}
         </div>
@@ -440,11 +468,11 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
         {/* ------------------------------------------------------------ */}
         <div className="lg:col-span-2">
           <Card>
-            <CardHeader eyebrow="Role context" title="Job description" />
+            <CardHeader eyebrow="About the job" title="Job description" />
             <div className="px-4 py-5 sm:px-6">
               {/* Capped at a comfortable reading measure; the body is free text
                   from the poster, so newlines have to survive. */}
-              <p className="max-w-[68ch] whitespace-pre-wrap text-sm leading-relaxed text-gray-600 dark:text-gray-300 sm:text-base">
+              <p className="max-w-[68ch] whitespace-pre-wrap [overflow-wrap:anywhere] text-sm leading-relaxed text-gray-600 dark:text-gray-300 sm:text-base">
                 {job.description}
               </p>
             </div>
@@ -461,7 +489,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
             /* The company that posted the role gets management, not an
                apply form it could never submit. */
             <Card className="p-4 sm:p-5">
-              <Eyebrow className="mb-3">Your posting</Eyebrow>
+              <Eyebrow className="mb-3">Your job</Eyebrow>
               <div className="mb-4 flex items-baseline gap-2">
                 <Readout className="text-2xl font-semibold leading-none">{applicants}</Readout>
                 <span className="text-sm text-gray-500 dark:text-gray-400">
@@ -471,23 +499,44 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
               <div className="space-y-2">
                 <Link href={`/jobs/${jobId}/edit`} className={`${buttonPrimary} w-full`}>
                   <Icon.edit className="h-4 w-4" />
-                  Edit this posting
+                  Edit job
                 </Link>
                 <Link href="/applications" className={`${buttonSecondary} w-full`}>
                   View applicants
                 </Link>
               </div>
             </Card>
+          ) : job.sourceUrl ? (
+            /* Imported from a public job board: there is no hiring team on
+               NextHire to receive an application, so apply where it was posted. */
+            <Card className="p-4 sm:p-5">
+              <Eyebrow className="mb-2">Apply</Eyebrow>
+              <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
+                {job.isActive
+                  ? `This job is listed on ${importedFrom}. Apply on the original posting.`
+                  : `This job is no longer listed on ${importedFrom}.`}
+              </p>
+              {job.isActive ? (
+                <a href={job.sourceUrl} target="_blank" rel="noopener" className={`${buttonPrimary} w-full`}>
+                  Apply on {importedFrom}
+                  <Icon.arrowUpRight className="h-4 w-4" />
+                </a>
+              ) : (
+                <Link href="/jobs" className={`${buttonPrimary} w-full`}>
+                  Find similar jobs
+                </Link>
+              )}
+            </Card>
           ) : alreadyApplied ? (
             /* Emerald hairline: an accepted application is the page's one
                "signal" state. */
             <Card signal className="p-4 sm:p-5">
               <Eyebrow accent className="mb-3">
-                {submitted ? "Application sent" : "Application on file"}
+                {submitted ? "Application sent" : "You’ve applied"}
               </Eyebrow>
               {submitted && (
                 <Alert variant="success" className="mb-4">
-                  Your application is on its way to {job.company?.name ?? "the company"}.
+                  Your application was sent to {job.company?.name ?? "the company"}.
                 </Alert>
               )}
               <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -497,8 +546,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
                 )}
               </div>
               <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
-                {job.company?.name ?? "The company"} will be in touch through NextHire. You can follow
-                the status from your dashboard.
+                {job.company?.name ?? "The company"} will reply through NextHire. Track it from your dashboard.
               </p>
               <Link href="/seeker/dashboard" className={`${buttonPrimary} w-full`}>
                 View my applications
@@ -511,17 +559,17 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
             <Card className="p-4 sm:p-5">
               <Eyebrow className="mb-3">Applications closed</Eyebrow>
               <Alert variant="warning" className="mb-4">
-                This role is no longer accepting applications.
+                This job is no longer accepting applications.
               </Alert>
               <Link href="/jobs" className={`${buttonPrimary} w-full`}>
-                Find similar roles
+                Find similar jobs
               </Link>
             </Card>
           ) : !mounted || !isAuthenticated ? (
             <Card className="p-4 sm:p-5">
               <Eyebrow className="mb-2">Apply</Eyebrow>
               <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
-                Sign in to your job seeker account to apply for this role.
+                Sign in to apply for this job.
               </p>
               <div className="space-y-2">
                 <Link
@@ -540,15 +588,15 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
             <Card className="p-4 sm:p-5">
               <Eyebrow className="mb-2">Apply</Eyebrow>
               <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
-                Only job seeker accounts can apply for a role.
+                Only job seeker accounts can apply.
               </p>
               <Link href="/company/dashboard" className={`${buttonSecondary} w-full`}>
-                Go to my dashboard
+                Go to dashboard
               </Link>
             </Card>
           ) : (
             <Card className="p-4 sm:p-5">
-              <Eyebrow className="mb-3">Apply for this role</Eyebrow>
+              <Eyebrow className="mb-3">Apply for this job</Eyebrow>
 
               {applyError && (
                 <Alert variant="error" className="mb-4">
@@ -561,7 +609,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
                   and some of them have to be answered. */}
               {questionsLoading ? (
                 <p className="mb-4">
-                  <Eyebrow as="span">Checking for screening questions…</Eyebrow>
+                  <Eyebrow as="span">Loading questions…</Eyebrow>
                 </p>
               ) : questions.length > 0 ? (
                 <ScreeningFields
@@ -582,7 +630,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
                    posting does screen, the API rejects the application and says
                    which question needs an answer. */
                 <Alert variant="warning" className="mb-4">
-                  <p>Couldn&rsquo;t load this role&rsquo;s screening questions.</p>
+                  <p>Couldn&rsquo;t load the screening questions.</p>
                   <button
                     type="button"
                     onClick={() => void fetchQuestions()}
@@ -630,28 +678,34 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
               empty breakdown frame would be worse than none at all. */}
           {!match && isSeeker && (
             <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-              Fit scoring is off for you until your profile is indexed.{" "}
+              {" "}
               <Link
                 href="/seeker/dashboard"
                 className="font-medium text-gray-900 underline underline-offset-2 hover:no-underline dark:text-white"
               >
-                Add a r&eacute;sum&eacute; or profile details
+                Add a resume or profile details
               </Link>{" "}
-              to see how this role lines up.
+              to see how well you match.
             </p>
           )}
 
           {/* The fact readout: mono values under mono captions, on the
               graph-paper field used for telemetry elsewhere in the app. */}
           <Card grid className="p-4 sm:p-5">
-            <Eyebrow className="mb-4">Role parameters</Eyebrow>
+            <Eyebrow className="mb-4">Job details</Eyebrow>
             <dl className="grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-3">
               <Fact label="Location" value={job.location ?? "—"} />
               <Fact label="Salary" value={job.salary ?? "—"} />
               <Fact label="Type" value={job.type ?? "—"} />
-              <Fact label="Experience" value={job.experience ? `${job.experience} yrs` : "—"} />
+              <Fact label="Experience" value={job.experience ? experienceLabel(job.experience) : "—"} />
               <Fact label="Posted" value={formatDate(job.createdAt)} />
-              <Fact label="Applicants" value={String(applicants)} />
+              {/* Applications to an imported job happen at the source, so a
+                  NextHire count would only ever say 0. */}
+              {importedFrom ? (
+                <Fact label="Listed on" value={importedFrom} />
+              ) : (
+                <Fact label="Applicants" value={String(applicants)} />
+              )}
             </dl>
           </Card>
         </aside>
@@ -947,7 +1001,7 @@ function MatchPanel({ jobId, match }: { jobId: string; match: MatchBreakdown }) 
         {/* Our own scoring revision, not a model version — inventing one would
             be a claim we cannot stand behind. */}
         <Eyebrow as="span" className="flex-shrink-0 pt-1.5">
-          Signal v1
+          Fit score
         </Eyebrow>
       </div>
 
@@ -990,11 +1044,11 @@ function MatchPanel({ jobId, match }: { jobId: string; match: MatchBreakdown }) 
        */}
       <div className="space-y-3">
         <MeterRow
-          label="Semantic fit"
+          label="Experience fit"
           value={match.facets.semantic}
           weight={MATCH_WEIGHTS.semantic}
         />
-        <MeterRow label="Skills overlap" value={match.facets.skills} weight={MATCH_WEIGHTS.skills} />
+        <MeterRow label="Skills match" value={match.facets.skills} weight={MATCH_WEIGHTS.skills} />
         <MeterRow label="Location" value={match.facets.location} weight={MATCH_WEIGHTS.location} />
         <MeterRow
           label="Seniority"
@@ -1020,7 +1074,7 @@ function MatchPanel({ jobId, match }: { jobId: string; match: MatchBreakdown }) 
 
       {match.missingSkills.length > 0 && (
         <div className="mt-4">
-          <Eyebrow className="mb-2">Not evidenced</Eyebrow>
+          <Eyebrow className="mb-2">Missing from your profile</Eyebrow>
           <div className="flex flex-wrap gap-1.5">
             {match.missingSkills.map((skill) => (
               <Chip key={skill}>{skill}</Chip>
@@ -1030,8 +1084,7 @@ function MatchPanel({ jobId, match }: { jobId: string; match: MatchBreakdown }) 
               profile does not mention them, which is a prompt to update the
               profile at least as often as it is a reason not to apply. */}
           <p className="mt-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-            The posting names these and your profile doesn&rsquo;t mention them yet. Worth adding if
-            you have them.
+            This job lists these, but your profile doesn’t. Add them if you have them.
           </p>
         </div>
       )}
@@ -1078,46 +1131,39 @@ function MatchDisclosure() {
     <details className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-700">
       {/* `list-none` plus the marker rule in globals.css: the default triangle
           sits on the text baseline and cannot be aligned with the eyebrow. */}
-      <summary className="disclosure-summary eyebrow hit-24">How this was worked out</summary>
+      <summary className="disclosure-summary eyebrow hit-24">How your fit is calculated</summary>
 
       <dl className="mt-3 space-y-3 text-xs leading-relaxed text-gray-600 dark:text-gray-400">
         <div>
-          <Eyebrow as="dt">What it read</Eyebrow>
+          <Eyebrow as="dt">What we use</Eyebrow>
           <dd className="mt-1">
-            Your headline, skills, experience and location, and the text of this posting. Nothing
-            else — not your name, your photo, your age, or anything you have not put on your
-            profile.
+            Your headline, skills, experience and location, plus this job’s details. Never your name, photo or age.
           </dd>
         </div>
 
         <div>
-          <Eyebrow as="dt">How the number is made</Eyebrow>
+          <Eyebrow as="dt">How it’s scored</Eyebrow>
           <dd className="mt-1">
-            A weighted blend of the four figures above: semantic fit {pct(MATCH_WEIGHTS.semantic)}%,
-            skills overlap {pct(MATCH_WEIGHTS.skills)}%, location {pct(MATCH_WEIGHTS.location)}%,
-            seniority {pct(MATCH_WEIGHTS.seniority)}%. Use it to compare roles against each other,
-            not as a measure of how likely you are to be hired.
+            A weighted mix: experience fit {pct(MATCH_WEIGHTS.semantic)}%, skills match {pct(MATCH_WEIGHTS.skills)}%, location {pct(MATCH_WEIGHTS.location)}%,
+            seniority {pct(MATCH_WEIGHTS.seniority)}%. Use it to compare jobs, not to predict a hire.
           </dd>
         </div>
 
         <div>
-          <Eyebrow as="dt">What it decides</Eyebrow>
+          <Eyebrow as="dt">What it affects</Eyebrow>
           <dd className="mt-1">
-            Nothing. It orders your feed. It does not filter you out of anything, it is not sent to
-            the company as a recommendation, and no application is accepted or rejected because of
-            it.
+            Only the order of your job feed. Nothing is filtered out, it isn’t sent to the company as a recommendation, and no application is accepted or rejected because of it.
           </dd>
         </div>
 
         <div>
           <Eyebrow as="dt">If it looks wrong</Eyebrow>
           <dd className="mt-1">
-            The score follows your profile, so{" "}
+            Scores follow your profile, so{" "}
             <Link href="/seeker/profile/edit" className="link">
               updating it
             </Link>{" "}
-            rescores every role. You can also apply regardless of the number — nothing here stops
-            you.
+            updates them all. You can apply whatever your score.
           </dd>
         </div>
       </dl>
@@ -1193,7 +1239,7 @@ function MatchRationale({ jobId, score }: { jobId: string; score: number }) {
           the glyph is what marks this as machine-written rather than copy. */}
       <Eyebrow accent className="mb-2 flex items-center gap-1.5">
         <Icon.spark className="h-3.5 w-3.5" aria-hidden="true" />
-        Why this matched
+        Why this job matches
       </Eyebrow>
       <p className="text-sm leading-relaxed text-gray-700 dark:text-gray-300">{text}</p>
       {/* Says exactly what the sentence was written from, because that is the
@@ -1201,8 +1247,7 @@ function MatchRationale({ jobId, score }: { jobId: string; score: number }) {
           below and nothing else, so it cannot claim an overlap the meters do
           not show. The second half is the framing used product-wide. */}
       <p className="mt-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-        Written from the breakdown below &mdash; it has not read your r&eacute;sum&eacute;. A sorting
-        aid, not an assessment of you.
+        Based on the breakdown below, not your resume. A guide, not an assessment of you.
       </p>
     </div>
   );
@@ -1247,16 +1292,15 @@ function SimilarRoles({ jobId }: { jobId: string }) {
 
   return (
     <section className="mt-10 border-t border-gray-200 pt-6 dark:border-gray-700">
-      <Eyebrow className="mb-1.5">Vector neighbours</Eyebrow>
+      <Eyebrow className="mb-1.5">You may also like</Eyebrow>
       <h2 className="text-lg font-semibold text-gray-900 dark:text-white sm:text-xl">
-        Similar roles
+        Similar jobs
       </h2>
       {/* Says where the list comes from without printing a second percentage:
           a number next to the fit panel above would be read as another fit
           score, and this one measures posting against posting. */}
       <p className="mt-1 max-w-[60ch] text-sm text-gray-500 dark:text-gray-400">
-        Open postings that read closest to this one, ordered by how near they
-        sit in the match graph.
+        Open jobs most like this one.
       </p>
 
       <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -1274,6 +1318,7 @@ function SimilarRoles({ jobId }: { jobId: string }) {
  * while the card still exposes exactly one link named by the role.
  */
 function SimilarJobCard({ job }: { job: SimilarJob }) {
+  const location = compactLocation(job.location);
   return (
     <Card interactive className="group relative flex flex-col p-4">
       <div className="flex min-w-0 items-start gap-3">
@@ -1296,7 +1341,14 @@ function SimilarJobCard({ job }: { job: SimilarJob }) {
       </div>
 
       <div className="mb-4 mt-3 flex flex-wrap gap-1.5">
-        {job.location && <Chip icon={<Icon.location className="h-3.5 w-3.5" />}>{job.location}</Chip>}
+        {location && (
+          <Chip
+            icon={<Icon.location className="h-3.5 w-3.5" />}
+            title={location.full !== location.label ? location.full : undefined}
+          >
+            {location.label}
+          </Chip>
+        )}
         {job.type && <Chip icon={<Icon.clock className="h-3.5 w-3.5" />}>{job.type}</Chip>}
         {job.salary && <Chip icon={<Icon.money className="h-3.5 w-3.5" />}>{job.salary}</Chip>}
       </div>
@@ -1319,7 +1371,7 @@ function SimilarJobCard({ job }: { job: SimilarJob }) {
 /** Page chrome shared by the job, the error state and the skeleton. */
 function PageShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen">
       <Navbar />
       <main id="main-content" className="container-responsive py-6 sm:py-8">
         {children}

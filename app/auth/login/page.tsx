@@ -9,6 +9,7 @@ import { login } from "@/store/authSlice";
 import type { AppDispatch, RootState } from "@/store/store";
 import { apiFetch, setToken } from "@/lib/clientAuth";
 import { isValidEmail } from "@/lib/validation";
+import { ShowcaseBento } from "@/app/components/Showcase";
 import { ThemeToggle } from "@/app/components/ThemeProvider";
 import {
   Alert,
@@ -17,10 +18,15 @@ import {
   Eyebrow,
   Icon,
   Label,
-  NumberedItem,
-  Spinner,
+    Spinner,
   inputClass,
 } from "@/app/components/ui";
+
+const SHOWCASE_STEPS = [
+  { title: "See your fit", body: "Jobs are ranked against your profile, with the reasons shown." },
+  { title: "Track every application", body: "Follow each one from submitted to offer." },
+  { title: "Talk to the hiring team", body: "Messages stay with your application." },
+] as const;
 
 interface AuthUser {
   id: string;
@@ -158,7 +164,7 @@ function LoginForm() {
 
       router.push(next ?? dashboardFor(data.user.role));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      setError(err instanceof Error ? err.message : "Couldn’t sign you in");
       setCredentialsRejected(true);
       // Only stop the spinner on failure: on success we are navigating away and
       // re-enabling the form would let a double-click fire a second login.
@@ -179,7 +185,7 @@ function LoginForm() {
   };
 
   return (
-    <main id="main-content" className="min-h-screen lg:grid lg:grid-cols-2">
+    <main id="main-content" className="min-h-screen lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
       {/* Form column. `min-h-screen` here rather than on the grid child keeps the
           single-column phone layout full-height too. */}
       <div className="flex min-h-screen flex-col">
@@ -201,7 +207,7 @@ function LoginForm() {
         </header>
 
         <div className="flex flex-1 items-center justify-center px-4 pb-12 pt-2 sm:px-6 lg:px-10">
-          <div className="w-full max-w-md">
+          <div className="panel w-full max-w-md p-6 sm:p-8">
             {/* The wordmark above links home too, but a logo does not read as a
                 way back. This screen carries no navbar, so someone who arrived
                 cold — a shared link, a bounce from a protected page — otherwise
@@ -211,12 +217,12 @@ function LoginForm() {
             </BackLink>
 
             <div className="mb-7">
-              <Eyebrow className="mb-2">Session · Sign in</Eyebrow>
+              <Eyebrow className="mb-2">Sign in</Eyebrow>
               <h1 className="text-3xl font-bold text-gray-900 dark:text-white sm:text-4xl">
                 Welcome back
               </h1>
               <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                Sign in to pick up your matches, applications and conversations.
+                Sign in to see your matches, applications and messages.
               </p>
             </div>
 
@@ -324,15 +330,10 @@ function LoginForm() {
 
             {/* Hairline rule with the label sitting on it. The label paints the
                 page canvas so the rule reads as passing behind it. */}
-            <div className="relative my-7">
-              <div className="absolute inset-0 flex items-center" aria-hidden="true">
-                <span className="w-full border-t border-gray-200 dark:border-gray-700" />
-              </div>
-              <div className="relative flex justify-center">
-                <Eyebrow as="span" className="bg-[var(--canvas)] px-3">
-                  Or continue with
-                </Eyebrow>
-              </div>
+            <div className="my-7 flex items-center gap-3">
+              <span className="flex-1 border-t border-gray-200 dark:border-gray-700" aria-hidden="true" />
+              <Eyebrow as="span">Or continue with</Eyebrow>
+              <span className="flex-1 border-t border-gray-200 dark:border-gray-700" aria-hidden="true" />
             </div>
 
             {/* Same primitive as the submit above, so both sign-in routes report
@@ -386,47 +387,27 @@ function LoginForm() {
           rule colour it needs, so the shared class works here and brings its
           mask with it — the graph paper fades out behind the copy instead of
           running underneath it. */}
-      <aside className="band-dark grid-field relative hidden lg:flex lg:flex-col lg:px-12 lg:py-16 xl:px-16">
-        <div className="relative my-auto max-w-md">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-gray-900">
-              <Icon.graph className="h-5 w-5" />
-            </span>
-            <span className="wordmark text-white">
-              NextHire
-            </span>
-          </div>
-
-          <Eyebrow accent className="mt-10">
-            Match engine
+      <aside className="band-dark aurora sticky top-3 m-3 hidden min-h-[calc(100vh-1.5rem)] self-start rounded-[2rem] lg:flex lg:flex-col lg:px-10 lg:py-12 xl:px-14">
+        <div className="my-auto w-full max-w-lg">
+          <Eyebrow accent>
+            Why NextHire
           </Eyebrow>
-          <h2 className="mt-3 text-3xl font-bold leading-tight text-white xl:text-4xl">
-            Hiring signal, not a stack of CVs.
+          <h2 className="mt-3 text-4xl font-semibold leading-[1.1] text-white xl:text-5xl">
+            Start with the best fit.
           </h2>
           <p className="mt-4 text-sm leading-relaxed text-gray-400">
-            NextHire reads every posting and every profile, then scores the fit between them — so
-            both sides of the table start from the shortlist rather than the pile.
+            NextHire compares every job with every profile, so job seekers and employers both see the best matches first.
           </p>
 
-          <div className="mt-10 space-y-7">
-            <NumberedItem index={1} title="Every role, scored">
-              Openings are ranked against your profile, with the reasoning shown next to the score.
-            </NumberedItem>
-            <NumberedItem index={2} title="Apply once, track everywhere">
-              One application record follows the role from submitted through to offer.
-            </NumberedItem>
-            <NumberedItem index={3} title="Talk to the hiring team">
-              Messages sit alongside the application, so context never gets lost in an inbox.
-            </NumberedItem>
-          </div>
+          <ShowcaseBento className="mt-8" steps={SHOWCASE_STEPS} />
 
-          <p className="mt-12 border-t border-white/10 pt-6 text-sm text-gray-400">
+          <p className="mt-6 text-sm text-gray-300">
             New to NextHire?{" "}
             <Link
               href="/auth/register"
-              className="rounded font-semibold text-green-400 underline-offset-2 hover:underline"
+              className="rounded font-semibold text-white underline underline-offset-2"
             >
-              Create a profile
+              Create an account
             </Link>
           </p>
         </div>
@@ -492,7 +473,7 @@ export default function LoginPage() {
       fallback={
         // A blank screen here said nothing to anyone; the same centred spinner
         // the rest of the app uses at least announces itself.
-        <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="flex min-h-screen items-center justify-center">
           <Spinner className="h-10 w-10" label="Loading sign-in" />
         </div>
       }

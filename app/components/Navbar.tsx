@@ -17,6 +17,8 @@ interface NavLink {
   label: string;
   /** Shown in the mobile sheet only; the desktop bar stays text-only. */
   icon: React.ReactNode;
+  /** Desktop bar shows it only from `lg` up, where there is room; the mobile sheet always does. */
+  wide?: boolean;
 }
 
 /** Everything a Tab press can land on inside the mobile sheet. */
@@ -30,7 +32,14 @@ const FOCUSABLE =
  * to sign out, the company side never showed the notification bell, and the
  * "Profile" link meant something different depending on where you were.
  */
-export default function Navbar({ variant = "app" }: { variant?: "app" | "marketing" }) {
+/**
+ * Every page renders its own `Navbar`, so it remounts on each navigation. This
+ * survives those remounts: only the first render after a full load has to match
+ * the server's markup, and every later one can show the session straight away.
+ */
+let hasHydrated = false;
+
+export default function Navbar() {
   const { user, isAuthenticated } = useSelector((state: RootState) => state.auth);
   const dispatch = useDispatch();
   const router = useRouter();
@@ -43,9 +52,16 @@ export default function Navbar({ variant = "app" }: { variant?: "app" | "marketi
 
   // Rendering auth-dependent links before rehydration would mismatch the server
   // markup, so hold the signed-out shape until we've mounted.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const [mounted, setMounted] = useState(hasHydrated);
+  useEffect(() => {
+    hasHydrated = true;
+    setMounted(true);
+  }, []);
   const signedIn = mounted && isAuthenticated;
+
+  // Everything that depends on the session stays hidden until it is known, so
+  // the bar appears once in its final shape instead of rearranging itself.
+  const reveal = `transition-opacity duration-200 ${mounted ? "opacity-100" : "invisible opacity-0"}`;
 
   // Close the mobile menu whenever the route changes.
   useEffect(() => setMenuOpen(false), [pathname]);
@@ -131,42 +147,46 @@ export default function Navbar({ variant = "app" }: { variant?: "app" | "marketi
   const links: NavLink[] = signedIn
     ? user?.role === "COMPANY"
       ? [
-          { href: "/company/dashboard", label: "Overview", icon: <Icon.graph className="h-5 w-5" /> },
-          { href: "/jobs/post", label: "Post a role", icon: <Icon.plus className="h-5 w-5" /> },
-          { href: "/applications", label: "Candidates", icon: <Icon.user className="h-5 w-5" /> },
+          { href: "/company/dashboard", label: "Dashboard", icon: <Icon.graph className="h-5 w-5" /> },
+          { href: "/jobs/post", label: "Post a job", icon: <Icon.plus className="h-5 w-5" /> },
+          { href: "/applications", label: "Applicants", icon: <Icon.user className="h-5 w-5" /> },
           { href: "/conversations", label: "Messages", icon: <Icon.chat className="h-5 w-5" /> },
         ]
       : [
-          { href: "/seeker/dashboard", label: "Overview", icon: <Icon.graph className="h-5 w-5" /> },
-          { href: "/jobs", label: "Explore", icon: <Icon.search className="h-5 w-5" /> },
+          { href: "/seeker/dashboard", label: "Dashboard", icon: <Icon.graph className="h-5 w-5" /> },
+          { href: "/jobs", label: "Find jobs", icon: <Icon.search className="h-5 w-5" /> },
           // Saved searches and job alerts.
-          { href: "/seeker/alerts", label: "Alerts", icon: <Icon.bookmark className="h-5 w-5" /> },
-          { href: "/seeker/coach", label: "Coach", icon: <Icon.spark className="h-5 w-5" /> },
+          { href: "/seeker/alerts", label: "Job alerts", icon: <Icon.bookmark className="h-5 w-5" /> },
+          { href: "/seeker/coach", label: "Career coach", icon: <Icon.spark className="h-5 w-5" /> },
           { href: "/seeker/conversations", label: "Messages", icon: <Icon.chat className="h-5 w-5" /> },
         ]
-    : [{ href: "/jobs", label: "Explore", icon: <Icon.search className="h-5 w-5" /> }];
+    : [
+        { href: "/jobs", label: "Find jobs", icon: <Icon.search className="h-5 w-5" /> },
+        // Sections of the homepage, reachable from any page.
+        { href: "/#features", label: "Features", icon: <Icon.spark className="h-5 w-5" />, wide: true },
+        { href: "/#how-it-works", label: "How it works", icon: <Icon.pulse className="h-5 w-5" />, wide: true },
+        { href: "/#for-employers", label: "For employers", icon: <Icon.briefcase className="h-5 w-5" />, wide: true },
+      ];
+
+  // Signed in, the bar carries up to five links, a bell and Sign out, which
+  // do not fit at tablet width: the links ran over the wordmark and Sign out
+  // broke onto two lines. So the full bar waits for `lg` there, and the menu
+  // button covers tablets. Whole class names, so Tailwind can see them.
+  const desk = signedIn
+    ? { bar: "lg:grid lg:grid-cols-[1fr_auto_1fr]", show: "lg:flex", hide: "lg:hidden" }
+    : { bar: "md:grid md:grid-cols-[1fr_auto_1fr]", show: "md:flex", hide: "md:hidden" };
 
   const isCurrent = (href: string) => pathname === href || pathname?.startsWith(`${href}/`);
 
   return (
-    // `.header-surface` rather than `bg-white/85 dark:bg-gray-900/85`: the bar
-    // used to be the *surface* tier in light and the *canvas* tier in dark, which
-    // is why it read as a floating panel on one theme and as part of the page on
-    // the other. Both are the surface tier now, from one token.
-    <header className="header-surface sticky top-0 z-40">
-      {/* Thin gradient rail — the app's signature edge. */}
-      <div className="signal-rail" aria-hidden="true" />
-
-      <nav
-        className={
-          variant === "marketing"
-            ? "border-b border-transparent"
-            : "border-b border-gray-200 dark:border-gray-700"
-        }
-        aria-label="Main"
-      >
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-2 px-4 sm:gap-4 sm:px-6 lg:px-8">
-          <div className="flex min-w-0 items-center gap-5 lg:gap-7">
+    // A floating glass bar: the `header` only holds the sticky offset and the
+    // page gutter, and `.header-surface` on the `nav` is the bar itself.
+    <header className="sticky top-0 z-40 px-3 pb-2 pt-3 sm:px-4">
+      <nav className="header-surface mx-auto max-w-7xl" aria-label="Main">
+        {/* Three columns on desktop, so the links sit in the true centre of the
+            bar whatever the widths of the mark and the actions either side. */}
+        <div className={`flex h-16 items-center justify-between gap-2 pl-4 pr-3 sm:gap-4 sm:pl-6 ${desk.bar}`}>
+          <div className="flex min-w-0 items-center">
             <Link
               href="/"
               className="flex flex-shrink-0 items-center gap-2.5 rounded-md"
@@ -179,41 +199,33 @@ export default function Navbar({ variant = "app" }: { variant?: "app" | "marketi
                 NextHire
               </span>
             </Link>
+          </div>
 
-            <ul className="hidden items-center gap-1 md:flex">
+          <ul className={`hidden items-center gap-1 ${desk.show} ${reveal}`}>
               {links.map((link) => (
-                <li key={link.href}>
+                <li key={link.href} className={link.wide ? "hidden lg:block" : undefined}>
                   <Link
                     href={link.href}
                     aria-current={isCurrent(link.href) ? "page" : undefined}
-                    className={`interactive relative rounded-md px-3 py-2 text-sm font-medium ${
+                    className={`interactive whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium ${
                       isCurrent(link.href)
                         ? "text-gray-900 dark:text-white"
                         : "text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
                     }`}
                   >
                     {link.label}
-                    {/* Underline marker rather than a filled pill: quieter, and
-                        it echoes the hairline grammar used elsewhere. */}
-                    {isCurrent(link.href) && (
-                      <span
-                        className="absolute inset-x-3 -bottom-[13px] h-0.5 rounded-full bg-green-500"
-                        aria-hidden="true"
-                      />
-                    )}
                   </Link>
                 </li>
               ))}
-            </ul>
-          </div>
+          </ul>
 
-          <div className="flex items-center gap-1 sm:gap-2">
+          <div className={`flex items-center justify-end gap-1 sm:gap-2 ${reveal}`}>
             <ThemeToggle />
             {signedIn && <NotificationBell />}
 
             {signedIn ? (
-              <div className="hidden items-center gap-3 md:flex">
-                <span className="hidden max-w-[10rem] truncate text-sm text-gray-500 dark:text-gray-400 lg:inline">
+              <div className={`hidden items-center gap-3 ${desk.show}`}>
+                <span className="hidden max-w-[10rem] truncate text-sm text-gray-500 dark:text-gray-400 xl:inline">
                   {user?.name}
                 </span>
                 <Button
@@ -221,6 +233,7 @@ export default function Navbar({ variant = "app" }: { variant?: "app" | "marketi
                   onClick={handleSignOut}
                   loading={signingOut}
                   loadingLabel="Signing out"
+                  className="whitespace-nowrap"
                   icon={<Icon.logout className="h-4 w-4" />}
                 >
                   Sign out
@@ -231,12 +244,12 @@ export default function Navbar({ variant = "app" }: { variant?: "app" | "marketi
                 <div className="hidden items-center gap-2 md:flex">
                   <Link
                     href="/auth/login"
-                    className="interactive rounded-md px-3 py-2 text-sm font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+                    className="interactive whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
                   >
                     Sign in
                   </Link>
-                  <Link href="/auth/register" className="btn-ink">
-                    Create profile
+                  <Link href="/auth/register" className="btn-ink whitespace-nowrap">
+                    Sign up
                   </Link>
                 </div>
               )
@@ -249,7 +262,7 @@ export default function Navbar({ variant = "app" }: { variant?: "app" | "marketi
               aria-expanded={menuOpen}
               aria-controls="mobile-nav"
               aria-label={menuOpen ? "Close menu" : "Open menu"}
-              className={`${iconButton} md:hidden`}
+              className={`${iconButton} ${desk.hide}`}
             >
               {menuOpen ? <Icon.x className="h-5 w-5" /> : <Icon.menu className="h-5 w-5" />}
             </button>
@@ -262,7 +275,7 @@ export default function Navbar({ variant = "app" }: { variant?: "app" | "marketi
           ref={panelRef}
           id="mobile-nav"
           hidden={!menuOpen}
-          className="max-h-[calc(100vh-4rem)] overflow-y-auto border-t border-gray-200 bg-[var(--surface)] px-4 py-3 shadow-[var(--shadow-overlay)] dark:border-gray-700 md:hidden"
+          className={`max-h-[calc(100vh-4rem)] overflow-y-auto rounded-b-[1.75rem] border-t border-gray-200 px-4 py-3 dark:border-gray-700 ${desk.hide}`}
         >
           <ul className="space-y-1">
             {links.map((link) => (
@@ -317,7 +330,7 @@ export default function Navbar({ variant = "app" }: { variant?: "app" | "marketi
                   Sign in
                 </Link>
                 <Link href="/auth/register" className="btn-ink w-full">
-                  Create profile
+                  Sign up
                 </Link>
               </>
             )}

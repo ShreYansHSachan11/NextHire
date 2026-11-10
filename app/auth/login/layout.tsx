@@ -10,7 +10,7 @@ import type { Metadata } from "next";
  */
 export const metadata: Metadata = {
   title: "Sign in",
-  description: "Sign in to NextHire to pick up your matches, applications and conversations.",
+  description: "Sign in to NextHire to see your matches, applications and messages.",
   robots: { index: false, follow: true },
 };
 

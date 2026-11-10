@@ -10,7 +10,7 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Create an account",
   description:
-    "Create a NextHire account — as a candidate to apply to open roles, or as an employer to post them.",
+    "Create a free NextHire account to apply for jobs or post them.",
 };
 
 export default function RegisterLayout({ children }: { children: React.ReactNode }) {
