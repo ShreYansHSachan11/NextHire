@@ -17,7 +17,6 @@ import {
 import {
   Alert,
   BackLink,
-  BADGE_TONES,
   Button,
   buttonGhost,
   buttonPrimary,
@@ -27,6 +26,10 @@ import {
   Eyebrow,
   formatDate,
   Icon,
+  StatusIcon,
+  StatusPill,
+  TONE_TEXT,
+  type StatusTone,
   inputClass,
   JobStateBadge,
   Label,
@@ -1213,9 +1216,11 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
           <>
             <div className="mb-6">
               <PageHeading
+                // The job is what the reader came to change, so its title is
+                // the heading. It used to read "Edit job" twice — eyebrow and
+                // heading — with the job's own name demoted to a caption.
                 eyebrow="Edit job"
-                title="Edit job"
-                description={job.title}
+                title={job.title}
                 action={
                   <Button
                     variant="danger"
@@ -1411,7 +1416,7 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
                                       {finding.why}
                                     </p>
 
-                                    <div className="mt-2.5 border-l-2 border-green-500 bg-green-50 py-1.5 pl-3 dark:bg-green-950/30">
+                                    <div className="mt-2.5 border-l-2 border-success-500 bg-success-50/70 py-1.5 pl-3 dark:border-success-400 dark:bg-success-400/5">
                                       <Eyebrow>Suggested wording</Eyebrow>
                                       <p className="mt-1 text-sm leading-relaxed text-gray-800 dark:text-gray-100">
                                         {finding.rewrite}
@@ -1941,22 +1946,18 @@ export default function EditJobPage({ params }: { params: Promise<{ jobId: strin
  * promote them.
  */
 
-/** Tone map for a section's state pill. Not colour alone — each carries a word. */
-const SECTION_PILL_STYLES: Record<SectionTone, string> = {
-  saved: BADGE_TONES.green,
-  dirty: BADGE_TONES.amber,
-  neutral: BADGE_TONES.neutral,
+/** A section's state as a status. Not colour alone — each carries a word and a glyph. */
+const SECTION_STATUS: Record<SectionTone, StatusTone> = {
+  saved: "good",
+  dirty: "warn",
+  neutral: "neutral",
 };
 
 function SectionPill({ tone, label }: { tone: SectionTone; label: string }) {
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-1 text-xs font-medium ${SECTION_PILL_STYLES[tone]}`}
-    >
-      {tone === "saved" && <Icon.check className="h-3 w-3 flex-shrink-0" />}
-      {tone === "dirty" && <Icon.warning className="h-3 w-3 flex-shrink-0" />}
+    <StatusPill tone={SECTION_STATUS[tone]} icon={tone !== "neutral"}>
       {label}
-    </span>
+    </StatusPill>
   );
 }
 
@@ -2005,15 +2006,12 @@ function SectionRail({
                 </span>
               </span>
               <span
-                className={`truncate text-[11px] font-medium ${
-                  status[section.id].tone === "dirty"
-                    ? "text-amber-700 dark:text-amber-400"
-                    : status[section.id].tone === "saved"
-                      ? "text-green-700 dark:text-green-400"
-                      : "text-gray-500 dark:text-gray-400"
-                }`}
+                className={`flex min-w-0 max-w-full items-center gap-1 text-[11px] font-medium ${TONE_TEXT[SECTION_STATUS[status[section.id].tone]]}`}
               >
-                {status[section.id].label}
+                {status[section.id].tone !== "neutral" && (
+                  <StatusIcon tone={SECTION_STATUS[status[section.id].tone]} size="sm" className="!h-3.5 !w-3.5" />
+                )}
+                <span className="truncate">{status[section.id].label}</span>
               </span>
             </button>
           </li>

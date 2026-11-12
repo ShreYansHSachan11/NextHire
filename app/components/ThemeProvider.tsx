@@ -128,7 +128,9 @@ export function ThemeToggle({ className = "" }: { className?: string }) {
       }}
       aria-label={label}
       title={label}
-      className={`${iconButton} ${className}`}
+      // Tinted by the mode it switches to: a graphite night in light mode, an
+      // amber sun in dark mode.
+      className={`${iconButton} bg-zinc-100 text-zinc-800 ring-1 ring-inset ring-zinc-200 hover:bg-zinc-200 hover:text-zinc-950 dark:bg-amber-400/10 dark:text-amber-300 dark:ring-amber-400/20 dark:hover:bg-amber-400/20 dark:hover:text-amber-200 ${className}`}
     >
       <svg className={`${iconClass} hidden dark:block`} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
         {SunGlyph}

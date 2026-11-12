@@ -5,7 +5,7 @@ import { useSelector } from "react-redux";
 import { useRouter } from "next/navigation";
 import type { RootState } from "@/store/store";
 import { apiFetch } from "@/lib/clientAuth";
-import { Icon, formatRelative, iconButton } from "./ui";
+import { Icon, IconTile, formatRelative, iconButton, type StatusTone } from "./ui";
 
 interface Notification {
   id: string;
@@ -18,6 +18,26 @@ interface Notification {
 }
 
 const POLL_INTERVAL_MS = 30_000;
+
+/**
+ * Each notification's picture, read from the words the server wrote (there is
+ * no type column). Topics stay in the accent; only a decision on an
+ * application carries status colour — an offer in green, a rejection grey.
+ */
+function notificationIcon(content: string): { icon: React.ReactNode; tone: StatusTone } {
+  const glyph = "h-4 w-4";
+  if (content.startsWith("New message")) return { icon: <Icon.chat className={glyph} />, tone: "accent" };
+  if (content.startsWith("New match")) return { icon: <Icon.bolt className={glyph} />, tone: "accent" };
+  if (content.startsWith("New application")) return { icon: <Icon.user className={glyph} />, tone: "accent" };
+  if (content.startsWith("Your application")) {
+    if (content.endsWith("Accepted")) return { icon: <Icon.trophy className={glyph} />, tone: "good" };
+    if (content.endsWith("Rejected")) return { icon: <Icon.x className={glyph} />, tone: "neutral" };
+    if (content.endsWith("Interview")) return { icon: <Icon.calendar className={glyph} />, tone: "accent" };
+    if (content.endsWith("Shortlisted")) return { icon: <Icon.star className={glyph} />, tone: "accent" };
+    return { icon: <Icon.briefcase className={glyph} />, tone: "accent" };
+  }
+  return { icon: <Icon.bell className={glyph} />, tone: "neutral" };
+}
 
 export default function NotificationBell() {
   const { user, isAuthenticated } = useSelector((state: RootState) => state.auth);
@@ -168,7 +188,7 @@ export default function NotificationBell() {
         aria-expanded={open}
         aria-controls="notification-panel"
         aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
-        className={`${iconButton} relative`}
+        className={`${iconButton} relative bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-100 hover:bg-emerald-100 hover:text-emerald-800 dark:bg-emerald-400/10 dark:text-emerald-300 dark:ring-emerald-400/20 dark:hover:bg-emerald-400/20 dark:hover:text-emerald-200`}
       >
         <Icon.bell className="h-5 w-5" />
         {unreadCount > 0 && (
@@ -177,7 +197,7 @@ export default function NotificationBell() {
           // rather than relying on the emerald fill to mean "unread".
           <span
             aria-hidden="true"
-            className="mono absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full border border-[var(--surface)] bg-[var(--accent-fill)] px-1 text-[10px] font-semibold leading-none text-[var(--ink-on-accent)]"
+            className="mono absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-[var(--surface)] bg-red-500 px-1 text-[10px] font-semibold leading-none text-white"
           >
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
@@ -225,7 +245,12 @@ export default function NotificationBell() {
               </p>
             ) : notifications.length === 0 ? (
               <div className="px-4 py-8 text-center">
-                <Icon.bell className="mx-auto mb-2 h-8 w-8 text-gray-400 dark:text-gray-500" aria-hidden="true" />
+                <IconTile
+                  icon={<Icon.check className="h-6 w-6" />}
+                  tone="good"
+                  size="lg"
+                  className="mx-auto mb-3"
+                />
                 <p className="eyebrow">You’re all caught up</p>
               </div>
             ) : (
@@ -241,12 +266,13 @@ export default function NotificationBell() {
                         notification.read ? "" : "bg-[var(--accent-soft)] row-selected"
                       }`}
                     >
-                      <span
-                        className={`mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${
-                          notification.read ? "bg-gray-300 dark:bg-gray-600" : "bg-green-500"
-                        }`}
-                        aria-hidden="true"
-                      />
+                      {/* Topic tile, with the unread dot pinned to its corner. */}
+                      <span className="relative flex-shrink-0" aria-hidden="true">
+                        <IconTile {...notificationIcon(notification.content)} size="sm" />
+                        {!notification.read && (
+                          <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-[color:var(--accent-fill)] ring-2 ring-[color:var(--surface-overlay)]" />
+                        )}
+                      </span>
                       <span className="min-w-0 flex-1">
                         {/* Weight and an explicit "(unread)" carry the state as
                             well as the dot, so it survives greyscale. */}

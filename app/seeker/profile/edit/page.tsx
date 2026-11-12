@@ -696,20 +696,18 @@ export default function EditSeekerProfilePage() {
                       <ul className="mb-2 flex list-none flex-wrap gap-1.5">
                         {skills.map((skill) => (
                           <li key={skill}>
-                            <Chip>
+                            {/* The kit's own remove control. A button passed in as
+                                part of the label landed inside `.chip-label`,
+                                which truncates, so the × wrapped under the
+                                skill name and every chip was two lines tall.
+                                `.chip-dismiss` + `.hit-24` keeps the 24px target. */}
+                            <Chip
+                              onRemove={() => {
+                                if (signalLoaded) removeSkill(skill);
+                              }}
+                              removeLabel={`Remove ${skill}`}
+                            >
                               {skill}
-                              {/* 24px square: the old p-0.5 around a 12px glyph
-                                  gave a 16px target, under the AA minimum and
-                                  genuinely hard to hit on a phone. */}
-                              <button
-                                type="button"
-                                onClick={() => removeSkill(skill)}
-                                disabled={!signalLoaded}
-                                className="interactive -my-1 -mr-1.5 ml-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-gray-500 hover:text-gray-900 disabled:cursor-not-allowed dark:text-gray-400 dark:hover:text-white"
-                              >
-                                <Icon.x className="h-3 w-3" />
-                                <span className="sr-only">Remove {skill}</span>
-                              </button>
                             </Chip>
                           </li>
                         ))}

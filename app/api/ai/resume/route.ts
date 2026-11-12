@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Type } from '@google/genai';
 import { prisma } from '@/lib/prisma';
-import { requireRole, badRequest, notFound, serverError } from '@/lib/auth';
+import { requireRole, serverError } from '@/lib/auth';
 import { cleanString, cleanText } from '@/lib/validation';
 import { isAiEnabled } from '@/lib/ai/config';
 import { generateJsonFromDocument } from '@/lib/ai/gemini';
 import { syncProfileEmbedding } from '@/lib/ai/embeddings';
 import { RATE_TIERS, checkRateLimit, rateLimited } from '@/lib/rateLimit';
-import { fetchResumeFile } from '@/lib/resumes';
+import { loadResumeDocument } from '@/lib/resumes';
 
 /**
  * Turns the seeker's uploaded resume into the structured profile the matcher
@@ -22,15 +22,6 @@ import { fetchResumeFile } from '@/lib/resumes';
 // not enough, and this route buffers bytes, so it cannot run on the edge.
 export const runtime = 'nodejs';
 export const maxDuration = 60;
-
-/** ~10 MB. Well above the 5 MB upload cap, but a remote URL is not trusted. */
-const MAX_FILE_BYTES = 10 * 1024 * 1024;
-const FETCH_TIMEOUT_MS = 20_000;
-
-const PDF = 'application/pdf';
-const DOC = 'application/msword';
-const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-const SUPPORTED_MIME_TYPES = [PDF, DOC, DOCX];
 
 /**
  * The labels the matcher's seniority ladder understands. Anything outside this
@@ -97,21 +88,6 @@ function aiUnavailable() {
   );
 }
 
-/** Cloudinary serves DOC/DOCX as `raw`, so the response header alone is not enough. */
-function resolveMimeType(contentType: string | null, ...names: string[]): string | null {
-  const header = contentType?.split(';')[0]?.trim().toLowerCase() ?? '';
-  if (SUPPORTED_MIME_TYPES.includes(header)) return header;
-
-  for (const name of names) {
-    const extension = name.toLowerCase().match(/\.(pdf|docx|doc)(?:$|\?)/)?.[1];
-    if (extension === 'pdf') return PDF;
-    if (extension === 'docx') return DOCX;
-    if (extension === 'doc') return DOC;
-  }
-
-  return null;
-}
-
 /** Model output is untrusted input: everything stored goes through here. */
 function cleanTagList(value: unknown, max: number): string[] {
   if (!Array.isArray(value)) return [];
@@ -144,11 +120,21 @@ function cleanYears(value: unknown): number | null {
   return Math.min(60, Math.max(0, Math.trunc(years)));
 }
 
-/** POST /api/ai/resume - read the caller's latest resume into their profile. */
+/**
+ * POST /api/ai/resume - read the caller's latest resume into their profile.
+ *
+ * `?mode=fill` is the automatic run the dashboard makes when a resume is on
+ * file but there is nothing to match on yet: it fills only the profile fields
+ * that are empty, so it never overwrites what the seeker typed. The summary is
+ * always refreshed - it is ours, not theirs - and it is what the job matches
+ * are built from. Without the flag (the "Analyze resume" button) every field is
+ * replaced, as the seeker asked.
+ */
 export async function POST(req: NextRequest) {
   const guard = requireRole(req, 'SEEKER');
   if (guard.response) return guard.response;
   const { session } = guard;
+  const fillOnly = new URL(req.url).searchParams.get('mode') === 'fill';
 
   if (!isAiEnabled()) return aiUnavailable();
 
@@ -162,68 +148,11 @@ export async function POST(req: NextRequest) {
   if (!limit.ok) return rateLimited(limit);
 
   try {
-    const [resume] = await prisma.resume.findMany({
-      where: { userId: session.id },
-      orderBy: { createdAt: 'desc' },
-      take: 1,
-      select: { url: true, publicId: true, fileName: true },
-    });
-
-    if (!resume) {
-      return notFound('Upload a resume first and we will read it into your profile.');
+    const loaded = await loadResumeDocument(session.id);
+    if (!loaded.ok) {
+      return NextResponse.json({ error: loaded.error }, { status: loaded.status });
     }
-
-    // Through the signed download API, not `resume.url`: Cloudinary answers
-    // 401 to public PDF URLs on accounts that block PDF delivery.
-    let file: Response;
-    try {
-      file = await fetchResumeFile(resume, FETCH_TIMEOUT_MS);
-    } catch (error) {
-      console.error('POST /api/ai/resume download failed:', error);
-      return NextResponse.json(
-        { error: 'We could not download your resume file. Please try again in a moment.' },
-        { status: 502 }
-      );
-    }
-
-    if (!file.ok) {
-      console.error('POST /api/ai/resume download status:', file.status);
-      // A 404 means the file really is gone; anything else is on our side, and
-      // re-uploading would not help.
-      const missing = file.status === 404;
-      return NextResponse.json(
-        {
-          error: missing
-            ? 'We could not find your resume file. Please upload it again.'
-            : 'We could not open your resume file right now. Please try again in a moment.',
-        },
-        { status: 502 }
-      );
-    }
-
-    // Check the advertised size before buffering, so an oversized file never
-    // makes it into memory in the first place.
-    const declaredSize = Number(file.headers.get('content-length'));
-    if (Number.isFinite(declaredSize) && declaredSize > MAX_FILE_BYTES) {
-      return badRequest('That resume file is too large for us to read. Please upload a smaller one.');
-    }
-
-    const mimeType = resolveMimeType(
-      file.headers.get('content-type'),
-      resume.fileName ?? '',
-      resume.url
-    );
-    if (!mimeType) {
-      return badRequest('We can only read PDF, DOC and DOCX resumes.');
-    }
-
-    const data = new Uint8Array(await file.arrayBuffer());
-    if (data.byteLength === 0) {
-      return badRequest('That resume file appears to be empty. Please upload it again.');
-    }
-    if (data.byteLength > MAX_FILE_BYTES) {
-      return badRequest('That resume file is too large for us to read. Please upload a smaller one.');
-    }
+    const { data, mimeType } = loaded;
 
     const insights = await generateJsonFromDocument<ResumeInsights>({
       data,
@@ -261,9 +190,34 @@ export async function POST(req: NextRequest) {
 
     const aiUpdatedAt = new Date();
 
-    await prisma.user.update({
+    let update: {
+      headline?: string | null;
+      skills?: string[];
+      seniority?: string | null;
+      yearsOfExp?: number | null;
+      aiSummary: string | null;
+      aiUpdatedAt: Date;
+    } = { headline, skills, seniority, yearsOfExp, aiSummary: summary, aiUpdatedAt };
+
+    if (fillOnly) {
+      const current = await prisma.user.findUnique({
+        where: { id: session.id },
+        select: { headline: true, skills: true, seniority: true, yearsOfExp: true },
+      });
+      update = {
+        aiSummary: summary,
+        aiUpdatedAt,
+        ...(current?.headline?.trim() ? {} : { headline }),
+        ...(current?.skills?.length ? {} : { skills }),
+        ...(current?.seniority ? {} : { seniority }),
+        ...(current?.yearsOfExp != null ? {} : { yearsOfExp }),
+      };
+    }
+
+    const saved = await prisma.user.update({
       where: { id: session.id },
-      data: { headline, skills, seniority, yearsOfExp, aiSummary: summary, aiUpdatedAt },
+      data: update,
+      select: { headline: true, skills: true, seniority: true, yearsOfExp: true },
     });
 
     // Awaited rather than queued: the client renders the new profile straight
@@ -271,11 +225,13 @@ export async function POST(req: NextRequest) {
     // inconsistency that makes a match score look broken.
     await syncProfileEmbedding(session.id);
 
+    // What the profile now holds, which in fill mode may be the seeker's own
+    // values rather than the ones just read.
     return NextResponse.json({
-      headline,
-      seniority,
-      yearsOfExp,
-      skills,
+      headline: saved.headline,
+      seniority: saved.seniority,
+      yearsOfExp: saved.yearsOfExp,
+      skills: saved.skills,
       summary,
       strengths,
       updatedAt: aiUpdatedAt.toISOString(),

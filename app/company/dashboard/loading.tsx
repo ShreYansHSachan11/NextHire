@@ -36,58 +36,52 @@ export default function Loading() {
           <Skeleton className="h-11 w-full rounded-lg sm:w-36" />
         </div>
 
-        {/* SignalPanel. */}
-        <div className="panel mt-6 flex items-center gap-4 p-3 sm:p-4">
-          <Skeleton className="h-10 w-10 rounded-lg" />
-          <div className="min-w-0 flex-1">
-            <Skeleton className="h-4 w-40 max-w-full" />
-            <Skeleton className="mt-2 h-3 w-56 max-w-full" />
-          </div>
-          <Skeleton className="hidden h-8 w-24 sm:block" />
-        </div>
-
         {/* Four stat tiles. */}
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
           {Array.from({ length: 4 }, (_, index) => (
-            <div key={index} className="panel p-4">
+            <div key={index} className="panel p-5">
               <Skeleton className="h-3 w-20" />
-              <Skeleton className="mt-3 h-7 w-12" />
-              <Skeleton className="mt-2 h-3 w-24" />
+              <Skeleton className="mt-4 h-9 w-12" />
+              <Skeleton className="mt-3 h-3 w-24" />
             </div>
           ))}
         </div>
 
-        {/* Three quick actions. */}
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
-          {Array.from({ length: 3 }, (_, index) => (
-            <div key={index} className="panel flex items-center gap-3 p-4">
+        {/* Jobs list on the left, company card on the right. */}
+        <div className="mt-6 grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
+          <div className="panel lg:col-span-2">
+            <div className="border-b border-gray-200 px-4 py-4 dark:border-gray-700 sm:px-6">
+              <Skeleton className="h-3 w-20" />
+              <Skeleton className="mt-2 h-5 w-44" />
+            </div>
+            <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+              {Array.from({ length: 3 }, (_, index) => (
+                <li key={index} className="px-4 py-5 sm:px-6">
+                  <Skeleton className="h-5 w-2/3 max-w-sm" />
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    <Skeleton className="h-6 w-24 rounded-lg" />
+                    <Skeleton className="h-6 w-20 rounded-lg" />
+                  </div>
+                  <Skeleton className="mt-3 h-3 w-40" />
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="panel">
+            <div className="flex items-center gap-3 px-4 py-4 sm:px-6">
               <Skeleton className="h-10 w-10 rounded-lg" />
               <div className="min-w-0 flex-1">
-                <Skeleton className="h-4 w-28" />
-                <Skeleton className="mt-2 h-3 w-20" />
+                <Skeleton className="h-3 w-24" />
+                <Skeleton className="mt-2 h-4 w-36" />
               </div>
             </div>
-          ))}
-        </div>
-
-        {/* Postings list. */}
-        <div className="panel mt-6">
-          <div className="border-b border-gray-200 px-4 py-4 dark:border-gray-700 sm:px-6">
-            <Skeleton className="h-3 w-20" />
-            <Skeleton className="mt-2 h-5 w-44" />
+            <div className="border-t border-gray-200 px-4 py-4 dark:border-gray-700 sm:px-6">
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="mt-2 h-3 w-4/5" />
+              <Skeleton className="mt-4 h-11 w-full rounded-lg" />
+            </div>
           </div>
-          <ul className="divide-y divide-gray-200 dark:divide-gray-700">
-            {Array.from({ length: 3 }, (_, index) => (
-              <li key={index} className="px-4 py-5 sm:px-6">
-                <Skeleton className="h-5 w-2/3 max-w-sm" />
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  <Skeleton className="h-6 w-24 rounded-lg" />
-                  <Skeleton className="h-6 w-20 rounded-lg" />
-                </div>
-                <Skeleton className="mt-3 h-3 w-40" />
-              </li>
-            ))}
-          </ul>
         </div>
       </main>
     </div>

@@ -15,6 +15,7 @@ import Link from "next/link";
 
 import Navbar from "@/app/components/Navbar";
 import { useToast } from "@/app/components/Toast";
+import { ResumeInsightsHero } from "@/app/components/ResumeInsights";
 import { useAuthGuard } from "@/app/hooks/useAuthGuard";
 import { apiFetch, authHeaders } from "@/lib/clientAuth";
 import {
@@ -27,12 +28,12 @@ import {
 } from "@/lib/validation";
 import {
   Alert,
+  Avatar,
   Button,
   buttonGhost,
   buttonPrimary,
   buttonSecondary,
   Card,
-  CardHeader,
   Chip,
   coarseFit,
   EmptyState,
@@ -41,15 +42,15 @@ import {
   formatDate,
   formatRelative,
   Icon,
+  IconTile,
   Label,
   MatchScore,
   Meter,
   PageHeading,
   Readout,
-  SignalPanel,
   Skeleton,
-  StatCard,
   StatusBadge,
+  type StatusTone,
 } from "@/app/components/ui";
 import { ApplicationRowSkeleton, MatchCardSkeleton } from "@/app/components/skeletons";
 
@@ -161,11 +162,14 @@ interface ProfileSignal {
  * "loading" and "hidden" are both silent: a recommendation strip is a bonus,
  * and a bonus that failed has nothing to say to the person reading the page.
  */
-type RecommendState = "loading" | "ready" | "no-profile" | "hidden";
+/** `matching`: a resume is on file and is being read to build the matches. */
+type RecommendState = "loading" | "matching" | "ready" | "no-profile" | "hidden";
 
 /** One row of the "Needs attention" rail — see `attentionItems`. */
 interface AttentionItem {
   key: string;
+  /** The to-do's picture, shown in a tile beside it. */
+  icon: React.ReactNode;
   title: string;
   detail: string;
   action: React.ReactNode;
@@ -244,15 +248,6 @@ function readErrorMessage(payload: unknown): string | null {
 /* Presentation constants                                                      */
 /* -------------------------------------------------------------------------- */
 
-/** The order the sparkline reads left-to-right: the funnel, then the drop-outs. */
-const PIPELINE_ORDER: readonly ApplicationStatus[] = [
-  "PENDING",
-  "SHORTLISTED",
-  "INTERVIEW",
-  "ACCEPTED",
-  "REJECTED",
-];
-
 /**
  * The four live stages, in order. A rejection is a *closed file* rather than a
  * partial one, so it sits outside the track entirely.
@@ -270,11 +265,13 @@ const PIPELINE_STAGES: readonly ApplicationStatus[] = [
   "ACCEPTED",
 ];
 
+/** The badge beside the track already names the status, so the caption only
+ *  says how far along it is. */
 const STAGE_CAPTION: Record<ApplicationStatus, string> = {
-  PENDING: "Stage 1 / 4 · Submitted",
-  SHORTLISTED: "Stage 2 / 4 · Shortlisted",
-  INTERVIEW: "Stage 3 / 4 · Interview",
-  ACCEPTED: "Stage 4 / 4 · Offer",
+  PENDING: "Step 1 of 4",
+  SHORTLISTED: "Step 2 of 4",
+  INTERVIEW: "Step 3 of 4",
+  ACCEPTED: "Step 4 of 4",
   REJECTED: "Closed",
 };
 
@@ -340,7 +337,7 @@ export default function SeekerDashboardPage() {
    *
    * The action is already behind a `window.confirm`, and the response carries
    * nothing the page does not have — so the round trip was pure waiting, and
-   * every count, filter and sparkline on the page waited with it. Layered rather than spliced: `loadApplications` can
+   * every count and filter on the page waited with it. Layered rather than spliced: `loadApplications` can
    * land mid-flight, and the removal re-applies to whatever the newer list is
    * instead of being lost in it.
    */
@@ -369,6 +366,9 @@ export default function SeekerDashboardPage() {
 
   const resumeSectionRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  /** Bumped to reload the resume insights hero, or to reload and run the check. */
+  const [insightsRefresh, setInsightsRefresh] = useState(0);
+  const [insightsCheck, setInsightsCheck] = useState(0);
 
   const loadApplications = useCallback(async () => {
     setApplicationsLoading(true);
@@ -438,6 +438,67 @@ export default function SeekerDashboardPage() {
     }
   }, []);
 
+  /**
+   * Builds the matches from the resume on file, without a click.
+   *
+   * Recommendations are scored against the profile, and a seeker who has only
+   * uploaded a resume has no profile yet — so the "Jobs for you" section never
+   * appeared for them. This reads the resume in fill mode (only empty profile
+   * fields are written, nothing the seeker typed is replaced) and then loads
+   * the matches. Quiet on failure: the "Get your job matches" prompt and the
+   * Analyze button are still there to try by hand.
+   */
+  const autoMatchTried = useRef(false);
+  const matchFromResume = useCallback(async (options: { check?: boolean } = {}) => {
+    autoMatchTried.current = true;
+    setRecommendState("matching");
+    try {
+      const response = await fetch("/api/ai/resume?mode=fill", {
+        method: "POST",
+        headers: authHeaders(),
+      });
+      if (response.status === 503) {
+        setAiEnabled(false);
+        setRecommendState("hidden");
+        return;
+      }
+      if (!response.ok) {
+        console.error("Automatic resume read failed:", response.status);
+        setRecommendState("no-profile");
+        return;
+      }
+      const extracted = readAnalysis(await response.json().catch(() => null));
+      if (extracted) setSignal(extracted);
+      // The insights are counted over the jobs nearest the profile that was
+      // just written, so they reload now; after a new upload the resume check
+      // runs as well.
+      if (options.check) setInsightsCheck((key) => key + 1);
+      else setInsightsRefresh((key) => key + 1);
+      await loadRecommended();
+    } catch (error) {
+      console.error("Automatic resume read failed:", error);
+      setRecommendState("no-profile");
+    }
+  }, [loadRecommended]);
+
+  // A resume on file but nothing to match on: read it once, automatically.
+  useEffect(() => {
+    if (recommendState === "no-profile" && resume && !autoMatchTried.current) {
+      void matchFromResume({ check: true });
+    }
+  }, [recommendState, resume, matchFromResume]);
+
+  // "Replace" on the resume insights page links here with `#my-resume`. The
+  // anchor only exists once the page has rendered, so the browser's own jump
+  // misses it: open the upload form and scroll to it once the resume is known.
+  useEffect(() => {
+    if (!resumeChecked || window.location.hash !== "#my-resume") return;
+    setUploadOpen(true);
+    requestAnimationFrame(() =>
+      resumeSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    );
+  }, [resumeChecked]);
+
   useEffect(() => {
     if (!allowed) return;
     void loadApplications();
@@ -478,7 +539,7 @@ export default function SeekerDashboardPage() {
 
   const stats = useMemo(() => {
     // One pass rather than five `filter` sweeps; the per-status breakdown feeds
-    // the summary panel's sparkline as well as the tiles and the filter chips.
+    // the summary figures and the filter chips.
     const byStatus: Record<ApplicationStatus, number> = {
       PENDING: 0,
       SHORTLISTED: 0,
@@ -500,16 +561,8 @@ export default function SeekerDashboardPage() {
     };
   }, [optimisticApplications]);
 
-  /** Sparkline heights, normalised against the tallest bucket. */
-  const pipelineBars = useMemo(() => {
-    if (optimisticApplications.length === 0) return undefined;
-    const counts = PIPELINE_ORDER.map((status) => stats.byStatus[status]);
-    const peak = Math.max(...counts, 1);
-    return counts.map((count) => count / peak);
-  }, [optimisticApplications.length, stats.byStatus]);
-
   // Everything downstream reads the optimistic list, so a withdrawal takes the
-  // tiles, the chip counts, the sparkline and the live "Showing N of M" line
+  // summary figures, the chip counts and the live "Showing N of M" line
   // with it in the same frame — and brings them all back together if it fails.
   const visibleApplications = useMemo(
     () =>
@@ -526,6 +579,18 @@ export default function SeekerDashboardPage() {
   /* ---------------------------------------------------------------------- */
   /* Actions                                                                 */
   /* ---------------------------------------------------------------------- */
+
+  /** Straight to the file picker, from the hero or the Replace button. */
+  const pickResumeFile = useCallback(() => {
+    setUploadOpen(true);
+    resumeSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    // Deferred a frame: the input only exists once the form has opened.
+    requestAnimationFrame(() => fileInputRef.current?.click());
+  }, []);
+
+  const onInsightsReady = useCallback(() => {
+    toast.success("Your resume insights are ready");
+  }, [toast]);
 
   const openUpload = useCallback(() => {
     setUploadOpen(true);
@@ -641,6 +706,9 @@ export default function SeekerDashboardPage() {
       // The record above now says everything the open form was there to say.
       setUploadOpen(false);
       toast.success(resume ? "Resume replaced" : "Resume uploaded");
+      // A new resume means new matches: read it and rescore, in the background.
+      if (aiEnabled !== false) void matchFromResume({ check: true });
+      else setInsightsRefresh((key) => key + 1);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Upload failed";
       console.error("Resume upload failed:", error);
@@ -703,6 +771,7 @@ export default function SeekerDashboardPage() {
       // The profile vector was just rewritten, so anything already on screen is
       // scored against a profile that no longer exists.
       void loadRecommended();
+      setInsightsRefresh((key) => key + 1);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "We could not read your resume";
@@ -729,23 +798,14 @@ export default function SeekerDashboardPage() {
   const attentionItems = useMemo<AttentionItem[]>(() => {
     const items: AttentionItem[] = [];
 
-    if (!resumeLoading && !resumeError && !resume) {
-      items.push({
-        key: "resume",
-        title: "No resume on file",
-        detail: "Add a resume to send it with every application.",
-        action: (
-          <button type="button" onClick={openUpload} className={buttonPrimary}>
-            <Icon.upload className="h-4 w-4" />
-            Upload resume
-          </button>
-        ),
-      });
-    }
+    // No "upload a resume" item: the resume insights hero at the top of the
+    // page already leads with that, and two upload buttons stacked one above
+    // the other read as two different things to do.
 
     if (recommendState === "no-profile") {
       items.push({
         key: "profile",
+        icon: <Icon.idCard className="h-5 w-5" />,
         title: "Get your job matches",
         detail:
           "Add your headline, skills and experience, and we’ll score open jobs for you.",
@@ -762,6 +822,7 @@ export default function SeekerDashboardPage() {
     if (resume && !resumeLoading && !resumeError && !signal && aiEnabled !== false) {
       items.push({
         key: "analyse",
+        icon: <Icon.scan className="h-5 w-5" />,
         title: "Fill your profile from your resume",
         detail:
           "We’ll pull your headline, seniority and skills from your resume. You can edit everything.",
@@ -773,7 +834,7 @@ export default function SeekerDashboardPage() {
             icon={<Icon.spark className="h-4 w-4" />}
             onClick={() => void analyseResume()}
           >
-            {analysing ? "Reading…" : "Import from resume"}
+            {analysing ? "Reading…" : "Fill my profile"}
           </Button>
         ),
       });
@@ -830,6 +891,17 @@ export default function SeekerDashboardPage() {
             the first render, text-only, and it never wraps a control. */}
         <LiveStatus message={resumeStatus} />
 
+        {/* The headline feature for a seeker: what their resume is worth
+            against the jobs they would apply to. */}
+        <ResumeInsightsHero
+          resumeId={resume?.id ?? null}
+          reading={recommendState === "matching"}
+          refreshKey={insightsRefresh}
+          checkKey={insightsCheck}
+          onUpload={pickResumeFile}
+          onChecked={onInsightsReady}
+        />
+
         {/* ---------------------------------------------------------------- */}
         {/* 1 — Needs attention                                              */}
         {/* ---------------------------------------------------------------- */}
@@ -848,13 +920,16 @@ export default function SeekerDashboardPage() {
                   key={item.key}
                   className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-5"
                 >
-                  <div className="min-w-0">
-                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
-                      {item.title}
-                    </h3>
-                    <p className="mt-1 max-w-prose text-sm text-gray-600 dark:text-gray-400">
-                      {item.detail}
-                    </p>
+                  <div className="flex min-w-0 items-start gap-3">
+                    <IconTile icon={item.icon} tone="warn" />
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+                        {item.title}
+                      </h3>
+                      <p className="mt-1 max-w-prose text-sm text-gray-600 dark:text-gray-400">
+                        {item.detail}
+                      </p>
+                    </div>
                   </div>
                   <div className="flex flex-shrink-0 sm:justify-end">{item.action}</div>
                 </div>
@@ -862,64 +937,6 @@ export default function SeekerDashboardPage() {
             </Card>
           </section>
         )}
-
-        {/* ---------------------------------------------------------------- */}
-        {/* 2 — In flight                                                    */}
-        {/* ---------------------------------------------------------------- */}
-        <section aria-labelledby="pipeline-heading" className="mt-6 sm:mt-8">
-          <h2 id="pipeline-heading" className="sr-only">
-            Your applications at a glance
-          </h2>
-
-          {/* Telemetry strip, derived entirely from the applications already in
-              state — the bars are the per-status counts, normalised. */}
-          <SignalPanel
-            headingLevel={3}
-            title="Applications"
-            live={stats.inFlight > 0}
-            detail={
-              applicationsLoading
-                ? "Loading your applications…"
-                : applicationsError
-                  ? "Couldn’t load your applications."
-                  : stats.total === 0
-                    ? "No active applications yet. Apply to a job to get started."
-                    : `${stats.inFlight} of ${stats.total} still open with an employer`
-            }
-            value={applicationsLoading ? "—" : formatCount(stats.total)}
-            valueLabel="Applications"
-            bars={pipelineBars}
-          />
-
-          {/* Three tiles, not four. "Total" is the readout in the strip above
-              and "Pending" is a subset of "In flight" — both were printing the
-              same numbers twice within 200px of each other, which is most of
-              what made the top of this page read as a wall. */}
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
-            <StatCard
-              highlight
-              label="Active"
-              value={applicationsLoading ? "—" : formatCount(stats.inFlight)}
-              icon={<Icon.clock className="h-5 w-5" />}
-              tone="blue"
-              hint="Waiting on employers"
-            />
-            <StatCard
-              label="At interview"
-              value={applicationsLoading ? "—" : formatCount(stats.interviews)}
-              icon={<Icon.badge className="h-5 w-5" />}
-              tone="purple"
-              hint="Scheduled or in progress"
-            />
-            <StatCard
-              label="Offers"
-              value={applicationsLoading ? "—" : formatCount(stats.accepted)}
-              icon={<Icon.checkCircle className="h-5 w-5" />}
-              tone="green"
-              hint="Accepted"
-            />
-          </div>
-        </section>
 
         {/* ---------------------------------------------------------------- */}
         {/* 3 — Recommended                                                  */}
@@ -933,7 +950,11 @@ export default function SeekerDashboardPage() {
               eyebrow="Recommended"
               icon={<Icon.spark className="h-3.5 w-3.5" />}
               title="Jobs for you"
-              description="Ranked by how well they fit your profile."
+              description={
+                recommendState === "matching"
+                  ? "Reading your resume to find jobs that match it…"
+                  : "Ranked by how well they fit your resume and profile."
+              }
               meta={
                 recommendState === "ready" ? (
                   <Eyebrow>{recommendations.length} jobs scored</Eyebrow>
@@ -945,8 +966,11 @@ export default function SeekerDashboardPage() {
                 card, so `aria-live` had a screen reader re-read the whole grid
                 on any change — and the cards contain links, which a live region
                 must never wrap. */}
-            <div className="mt-3" aria-busy={recommendState === "loading"}>
-              {recommendState === "loading" ? (
+            <div
+              className="mt-3"
+              aria-busy={recommendState === "loading" || recommendState === "matching"}
+            >
+              {recommendState === "loading" || recommendState === "matching" ? (
                 <ul className="grid list-none gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
                   {Array.from({ length: RECOMMENDED_PREVIEW }, (_, index) => (
                     <li key={index}>
@@ -1003,31 +1027,61 @@ export default function SeekerDashboardPage() {
         {/* ---------------------------------------------------------------- */}
         <section aria-labelledby="applications-heading" className="mt-6 sm:mt-8">
           <Card>
-            <div className="flex flex-col gap-4 border-b border-gray-200 px-4 py-4 dark:border-gray-700 sm:px-6 lg:flex-row lg:items-end lg:justify-between">
-              <div className="min-w-0">
-                <Eyebrow className="mb-1.5">Applications</Eyebrow>
-                <h2
-                  id="applications-heading"
-                  className="text-lg font-semibold text-gray-900 dark:text-white sm:text-xl"
-                >
-                  Your applications
-                </h2>
-                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                  Track where each application stands.
-                </p>
+            {/* The counts live here, beside the list they summarise. They used
+                to be a telemetry strip plus three stat tiles above this card,
+                which printed the same totals as the filter chips below — three
+                readouts of one number, and on a phone 400px of tiles before the
+                first job. */}
+            <div className="border-b border-gray-200 px-4 py-4 dark:border-gray-700 sm:px-6 sm:py-5">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0">
+                  <Eyebrow className="mb-1.5">Applications</Eyebrow>
+                  <h2
+                    id="applications-heading"
+                    className="text-lg font-semibold text-gray-900 dark:text-white sm:text-xl"
+                  >
+                    Your applications
+                  </h2>
+                  <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                    {stats.total > 0
+                      ? `${stats.inFlight} of ${stats.total} still open with an employer.`
+                      : "Track where each application stands."}
+                  </p>
+                </div>
+
+                {(applicationsLoading || stats.total > 0) && (
+                  <dl className="grid grid-cols-3 divide-x divide-gray-200 rounded-lg border border-gray-200 dark:divide-gray-700 dark:border-gray-700 lg:w-[22rem] lg:flex-shrink-0">
+                    <SummaryFigure
+                      label="Active"
+                      icon={<Icon.briefcase className="h-4 w-4" />}
+                      tone="accent"
+                      value={applicationsLoading ? "—" : formatCount(stats.inFlight)}
+                    />
+                    <SummaryFigure
+                      label="Interviews"
+                      icon={<Icon.chat className="h-4 w-4" />}
+                      tone="accent"
+                      value={applicationsLoading ? "—" : formatCount(stats.interviews)}
+                    />
+                    {/* Status green only once there is an offer to celebrate. */}
+                    <SummaryFigure
+                      label="Offers"
+                      icon={<Icon.trophy className="h-4 w-4" />}
+                      tone={stats.accepted > 0 ? "good" : "neutral"}
+                      value={applicationsLoading ? "—" : formatCount(stats.accepted)}
+                    />
+                  </dl>
+                )}
               </div>
 
               {/* A segmented control rather than a select: the counts are visible
-                  without opening anything, and it wraps instead of scrolling. */}
-              <div className="min-w-0">
-                <Eyebrow className="mb-1.5 flex items-center gap-1.5" as="div">
-                  <Icon.filter className="h-3.5 w-3.5" />
-                  Filter by status
-                </Eyebrow>
+                  without opening anything, and it wraps instead of scrolling.
+                  Absent with nothing to filter — six zeros are not a control. */}
+              {(applicationsLoading || stats.total > 0) && (
                 <div
                   role="group"
                   aria-label="Filter applications by status"
-                  className="segmented"
+                  className="segmented mt-4 w-fit max-w-full"
                 >
                   {FILTERS.map((filter) => {
                     const active = statusFilter === filter;
@@ -1046,7 +1100,7 @@ export default function SeekerDashboardPage() {
                     );
                   })}
                 </div>
-              </div>
+              )}
             </div>
 
             {/* `aria-busy` rather than a live region around the list itself:
@@ -1092,17 +1146,19 @@ export default function SeekerDashboardPage() {
                   </Alert>
                 </div>
               ) : optimisticApplications.length === 0 ? (
-                <EmptyState
-                  icon={<Icon.briefcase className="h-7 w-7" />}
-                  title="No applications yet"
-                  description="Find a job that fits and apply."
-                  action={
-                    <Link href="/jobs" className={buttonPrimary}>
-                      <Icon.search className="h-4 w-4" />
-                      Browse jobs
+                // One line, not a 400px empty state with a second Browse jobs
+                // button: the page header already carries that action, and
+                // for a new seeker this card should not outweigh the hero.
+                <div className="flex items-center gap-3 px-4 py-5 sm:px-6">
+                  <IconTile icon={<Icon.briefcase className="h-5 w-5" />} />
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    <span className="font-medium text-gray-900 dark:text-white">No applications yet.</span>{" "}
+                    When you apply to a job, you can follow it here.{" "}
+                    <Link href="/jobs" className="link">
+                      Find jobs
                     </Link>
-                  }
-                />
+                  </p>
+                </div>
               ) : visibleApplications.length === 0 ? (
                 <EmptyState
                   icon={<Icon.filter className="h-7 w-7" />}
@@ -1140,246 +1196,319 @@ export default function SeekerDashboardPage() {
         </section>
 
         {/* ---------------------------------------------------------------- */}
-        {/* 5 — The record: identity and documents                           */}
+        {/* 5 — The record: what employers see, and the file behind it       */}
         {/* ---------------------------------------------------------------- */}
-        {/* Two columns from `lg`, where these used to be two full-width cards
-            stacked at the bottom of an already long page. Everything that is a
-            *form* rather than a *record* is behind a disclosure, so the default
-            state of this section is short. */}
+        {/* One card in two panes rather than two cards side by side. As two
+            cards, a three-field "Your details" sat beside a resume card three
+            times its height, leaving a hole under it; and the resume card
+            stacked four separate blocks (file, a "Replace" disclosure that
+            the Replace button already opened, an import panel, and a second
+            disclosure with the imported fields). Now the left pane is the
+            profile itself — who you are and what we read from your resume —
+            and the right pane is the file, with every action on one row. */}
         <section aria-labelledby="record-heading" className="mt-6 sm:mt-8">
           <SectionHeading
             id="record-heading"
             eyebrow="Profile"
             title="Profile and resume"
             description="What employers see when you apply."
-            meta={
-              <Link href="/seeker/profile/edit" className={buttonSecondary}>
-                <Icon.edit className="h-4 w-4" />
-                Edit profile
-              </Link>
-            }
           />
 
-          <div className="mt-3 grid gap-3 sm:gap-4 lg:grid-cols-2 lg:items-start">
-            <Card>
-              <CardHeader
-                headingLevel={3}
-                eyebrow="Personal"
-                title="Your details"
-                description="Shared with employers when you apply."
-              />
-              <dl className="grid gap-3 p-4 sm:grid-cols-2 sm:p-5">
-                <ReadOnlyField label="Full name" value={user?.name} />
-                <ReadOnlyField label="Email address" value={user?.email} mono />
-                <ReadOnlyField label="Account type" value="Job seeker" />
-              </dl>
-            </Card>
+          <Card className="mt-3 grid overflow-hidden lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
+            {/* Left pane — the profile */}
+            <div className="min-w-0 p-4 sm:p-6">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <Avatar name={user?.name ?? ""} size="lg" />
+                  <div className="min-w-0">
+                    <h3 className="truncate text-lg font-semibold text-gray-900 dark:text-white">
+                      {user?.name || "Your name"}
+                    </h3>
+                    <p className="mono truncate text-sm text-gray-600 dark:text-gray-400">
+                      {user?.email}
+                    </p>
+                  </div>
+                </div>
+                <Link href="/seeker/profile/edit" className={`${buttonSecondary} btn-sm`}>
+                  <Icon.edit className="h-4 w-4" />
+                  Edit profile
+                </Link>
+              </div>
 
-            {/* Resume — a telemetry panel. Flat accent tint rather than the
-                graph-paper field: this card carries prose, and a pattern behind
-                body text costs contrast exactly where letterforms are thinnest. */}
-            <Card signal>
-              <span id="my-resume" className="block scroll-mt-24" aria-hidden="true" />
+              {signal ? (
+                <div className="mt-5 border-t border-gray-200 pt-5 dark:border-gray-700">
+                  {signal.headline && (
+                    <p className="text-base font-semibold text-gray-900 dark:text-white">
+                      {signal.headline}
+                    </p>
+                  )}
 
-              <div ref={resumeSectionRef} className="scroll-mt-24">
-                <CardHeader
-                  headingLevel={3}
-                  eyebrow="Documents"
-                  title="Resume"
-                  description="Sent with every application."
-                />
-
-                <div className="p-4 sm:p-5">
-                  {/* No `aria-live` here: this block contains a link and a
-                      retry button, and a live region must not wrap controls.
-                      The page announcer above carries the same sentence. */}
-                  {resumeLoading ? (
-                    <div className="space-y-2.5">
-                      <Skeleton className="h-3 w-24" />
-                      <Skeleton className="h-4 w-3/4" />
-                      <Skeleton className="h-9 w-28" />
-                    </div>
-                  ) : resumeError ? (
-                    <Alert variant="error">
-                      <p>{resumeError}</p>
-                      <button
-                        type="button"
-                        onClick={() => void loadResume()}
-                        className={`${buttonSecondary} mt-3`}
-                      >
-                        Try again
-                      </button>
-                    </Alert>
-                  ) : resume ? (
-                    // The record itself sits on a slightly opaque surface so the
-                    // graph-paper rules stay visible around, but not through, it.
-                    <div className="rounded-lg border border-gray-200 bg-white/75 p-3 dark:border-gray-700 dark:bg-gray-800/70 sm:p-4">
-                      <dl className="grid min-w-0 gap-3 sm:grid-cols-2">
-                        <div className="min-w-0">
+                  {(signal.seniority || signal.yearsOfExp !== null) && (
+                    <dl className="mt-3 flex flex-wrap gap-x-8 gap-y-3">
+                      {signal.seniority && (
+                        <div>
                           <dt>
-                            <Eyebrow>File</Eyebrow>
-                          </dt>
-                          <dd className="mono mt-1 truncate text-sm text-gray-900 dark:text-white">
-                            {resumeFileName}
-                          </dd>
-                        </div>
-                        <div className="min-w-0">
-                          <dt>
-                            <Eyebrow>Uploaded</Eyebrow>
+                            <Eyebrow>Seniority</Eyebrow>
                           </dt>
                           <dd className="mt-1">
-                            <Readout className="text-sm">{formatDate(resume.createdAt)}</Readout>
+                            <Readout className="text-sm font-semibold">{signal.seniority}</Readout>
                           </dd>
                         </div>
-                      </dl>
-                      <a
-                        href={`/api/resumes/${resume.id}/file`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={`${buttonSecondary} mt-3`}
-                      >
-                        <Icon.external className="h-4 w-4" />
-                        View
-                        <span className="sr-only"> resume (opens in a new tab)</span>
-                      </a>
-                    </div>
-                  ) : (
-                    <Alert variant="warning">
-                      <p className="font-medium">No resume uploaded yet</p>
-                      <p className="mt-0.5">
-                        Add a resume to send it with your applications.
-                      </p>
-                    </Alert>
+                      )}
+                      {signal.yearsOfExp !== null && (
+                        <div>
+                          <dt>
+                            <Eyebrow>Years of experience</Eyebrow>
+                          </dt>
+                          <dd className="mt-1">
+                            <Readout className="text-sm font-semibold">{signal.yearsOfExp}</Readout>
+                          </dd>
+                        </div>
+                      )}
+                    </dl>
                   )}
 
-                  {/* Layer two: the upload form. Collapsed by default because
-                      the common case is "there is already a file on record and
-                      I am not changing it today". */}
-                  {!resumeLoading && (
-                    <Disclosure
-                      className="mt-4"
-                      open={uploadOpen}
-                      onToggle={setUploadOpen}
-                      label={resume ? "Replace this resume" : "Upload a resume"}
-                    >
-                      <form onSubmit={handleResumeUpload} aria-busy={uploading} className="space-y-4">
-                        <div>
-                          {/* The constraint line stays a separate element rather
-                              than moving into `<Label hint>`: `aria-describedby`
-                              points at `#resume-hint`, and the hint slot renders
-                              no id. */}
-                          <Label htmlFor="resume-file">
-                            {resume ? "Replace your resume" : "Upload your resume"}
-                          </Label>
-                          <input
-                            ref={fileInputRef}
-                            id="resume-file"
-                            name="resume"
-                            type="file"
-                            accept={RESUME_ACCEPT}
-                            onChange={handleFileChange}
-                            disabled={uploading}
-                            // A rejected file (wrong type, too large) put its
-                            // reason in a banner the input never pointed at.
-                            aria-invalid={Boolean(uploadError) || undefined}
-                            aria-describedby={
-                              uploadError ? "resume-upload-error resume-hint" : "resume-hint"
-                            }
-                            className="field-file block"
-                          />
-                          <p
-                            id="resume-hint"
-                            className="mt-1.5 text-xs text-gray-600 dark:text-gray-400"
-                          >
-                            PDF, DOC or DOCX, up to 5 MB.
-                            {resume && " Uploading a new file replaces the one on file."}
-                          </p>
-                          {resumeFile && (
-                            <p className="mono mt-2 truncate text-xs text-gray-700 dark:text-gray-200">
-                              Selected: {resumeFile.name} (
-                              {Math.max(1, Math.round(resumeFile.size / 1024))} KB)
-                            </p>
-                          )}
-                        </div>
+                  {signal.skills.length > 0 && (
+                    <div className="mt-4">
+                      <Eyebrow className="mb-1.5">Skills · {signal.skills.length}</Eyebrow>
+                      <div className="flex flex-wrap gap-1.5">
+                        {signal.skills.map((skill) => (
+                          <Chip key={skill} accent>{skill}</Chip>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
-                        {uploadError && (
-                          <Alert variant="error">
-                            <span id="resume-upload-error">{uploadError}</span>
-                          </Alert>
-                        )}
-
-                        <Button
-                          type="submit"
-                          disabled={!resumeFile}
-                          loading={uploading}
-                          loadingLabel={resume ? "Replacing your resume" : "Uploading your resume"}
-                          icon={<Icon.upload className="h-4 w-4" />}
-                        >
-                          {uploading
-                            ? resume
-                              ? "Replacing…"
-                              : "Uploading…"
-                            : resume
-                              ? "Replace resume"
-                              : "Upload resume"}
-                        </Button>
-                      </form>
+                  {(signal.summary || signal.strengths.length > 0) && (
+                    <Disclosure className="mt-4" label="Summary and strengths">
+                      <ExtractedDetail signal={signal} />
                     </Disclosure>
                   )}
 
-                  {/* Resume intelligence. Gated on a file being on record and on
-                      the deployment actually having a model — `aiEnabled ===
-                      false` is latched for the session, so the button never
-                      comes back. */}
-                  {resume && !resumeLoading && !resumeError && aiEnabled !== false && (
-                    <div className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-700">
-                      <Eyebrow className="mb-1.5 flex items-center gap-1.5" as="div">
-                        <Icon.spark className="h-3.5 w-3.5" />
-                        Import from resume
-                      </Eyebrow>
-                      <p className="max-w-prose text-sm text-gray-600 dark:text-gray-400">
-                        Turn your resume into a profile draft with your headline, seniority and skills. We use it to match you with jobs, and you can edit everything.
-                      </p>
-                      <Button
-                        variant="secondary"
-                        className="mt-3"
-                        loading={analysing}
-                        loadingLabel="Reading your resume"
-                        icon={<Icon.spark className="h-4 w-4" />}
-                        onClick={() => void analyseResume()}
-                      >
-                        {analysing
-                          ? "Reading your resume…"
-                          : signal
-                            ? "Run again"
-                            : "Analyze resume"}
-                      </Button>
+                  {/* Labelled as read from the resume and paired with the
+                      editor: the model is a fast first draft of these fields,
+                      never a finding about the person. */}
+                  <p className="mt-4 flex items-start gap-1.5 text-xs text-gray-600 dark:text-gray-400">
+                    <Icon.spark className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+                    <span>
+                      Filled in from your resume
+                      {signal.updatedAt ? ` ${formatRelative(signal.updatedAt).toLowerCase()}` : ""}.
+                      Edit your profile to correct anything.
+                    </span>
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-5 border-t border-gray-200 pt-5 dark:border-gray-700">
+                  <p className="max-w-prose text-sm text-gray-600 dark:text-gray-400">
+                    Add a headline and your skills so employers can see what you do at a glance.
+                  </p>
+                </div>
+              )}
+            </div>
 
-                      {analyseNotice && (
-                        <Alert variant="warning" className="mt-3">
-                          {analyseNotice}
-                        </Alert>
+            {/* Right pane — the resume file. Flat accent tint rather than the
+                graph-paper field: this pane carries prose, and a pattern behind
+                body text costs contrast exactly where letterforms are thinnest. */}
+            <div
+              ref={resumeSectionRef}
+              className="panel-signal min-w-0 scroll-mt-24 border-t border-gray-200 p-4 dark:border-gray-700 sm:p-6 lg:border-l lg:border-t-0"
+            >
+              <span id="my-resume" className="block scroll-mt-24" aria-hidden="true" />
+              <Eyebrow className="mb-1">Sent with every application</Eyebrow>
+              <h3 className="text-base font-semibold text-gray-900 dark:text-white">Resume</h3>
+
+              {/* No `aria-live` here: this block contains a link and a retry
+                  button, and a live region must not wrap controls. The page
+                  announcer above carries the same sentence. */}
+              <div className="mt-3">
+                {resumeLoading ? (
+                  <div className="space-y-2.5">
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-3 w-24" />
+                    <Skeleton className="h-9 w-40" />
+                  </div>
+                ) : resumeError ? (
+                  <Alert variant="error">
+                    <p>{resumeError}</p>
+                    <button
+                      type="button"
+                      onClick={() => void loadResume()}
+                      className={`${buttonSecondary} mt-3`}
+                    >
+                      Try again
+                    </button>
+                  </Alert>
+                ) : resume ? (
+                  <>
+                    <div className="flex min-w-0 items-center gap-3 rounded-lg border border-gray-200 bg-white/75 p-3 dark:border-gray-700 dark:bg-gray-800/70">
+                      <IconTile icon={<Icon.document className="h-5 w-5" />} />
+                      <div className="min-w-0">
+                        <p className="mono truncate text-sm font-medium text-gray-900 dark:text-white">
+                          {resumeFileName}
+                        </p>
+                        <p className="mt-0.5 text-xs text-gray-600 dark:text-gray-400">
+                          Uploaded {formatDate(resume.createdAt)}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Every resume action on one row. Replace goes straight to
+                        the file picker; there is no separate "Replace this
+                        resume" disclosure any more, since it did the same. */}
+                    {!uploadOpen && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <a
+                          href={`/api/resumes/${resume.id}/file`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`${buttonSecondary} btn-sm`}
+                        >
+                          <Icon.external className="h-4 w-4" />
+                          View
+                          <span className="sr-only"> resume (opens in a new tab)</span>
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUploadOpen(true);
+                            // Straight to the file picker. Deferred a frame: the
+                            // input only exists once the form has opened.
+                            requestAnimationFrame(() => fileInputRef.current?.click());
+                          }}
+                          className={`${buttonSecondary} btn-sm`}
+                        >
+                          <Icon.upload className="h-4 w-4" />
+                          Replace
+                          <span className="sr-only"> resume</span>
+                        </button>
+                      </div>
+                    )}
+                  </>
+                ) : null}
+
+                {/* The upload form: open when there is no file yet, or after
+                    Replace (or the hero's Upload button) opened it. */}
+                {!resumeLoading && !resumeError && (uploadOpen || !resume) && (
+                  <form
+                    onSubmit={handleResumeUpload}
+                    aria-busy={uploading}
+                    className={`space-y-3 ${resume ? "mt-3 rounded-lg border border-gray-200 bg-white/75 p-3 dark:border-gray-700 dark:bg-gray-800/70" : ""}`}
+                  >
+                    <div>
+                      {/* The constraint line stays a separate element rather
+                          than moving into `<Label hint>`: `aria-describedby`
+                          points at `#resume-hint`, and the hint slot renders
+                          no id. */}
+                      <Label htmlFor="resume-file">
+                        {resume ? "Replace your resume" : "Upload your resume"}
+                      </Label>
+                      <input
+                        ref={fileInputRef}
+                        id="resume-file"
+                        name="resume"
+                        type="file"
+                        accept={RESUME_ACCEPT}
+                        onChange={handleFileChange}
+                        disabled={uploading}
+                        // A rejected file (wrong type, too large) put its
+                        // reason in a banner the input never pointed at.
+                        aria-invalid={Boolean(uploadError) || undefined}
+                        aria-describedby={
+                          uploadError ? "resume-upload-error resume-hint" : "resume-hint"
+                        }
+                        className="field-file block"
+                      />
+                      <p
+                        id="resume-hint"
+                        className="mt-1.5 text-xs text-gray-600 dark:text-gray-400"
+                      >
+                        PDF, DOC or DOCX, up to 5 MB.
+                        {resume && " The new file replaces the one on file."}
+                      </p>
+                      {resumeFile && (
+                        <p className="mono mt-2 truncate text-xs text-gray-700 dark:text-gray-200">
+                          Selected: {resumeFile.name} (
+                          {Math.max(1, Math.round(resumeFile.size / 1024))} KB)
+                        </p>
                       )}
                     </div>
-                  )}
 
-                  {/* Shown whether or not the model is still switched on: this is
-                      the user's own profile data, not a live AI feature. Layer
-                      two again — the fields are already on the profile page, so
-                      this is a receipt rather than a destination. */}
-                  {signal && (
-                    <Disclosure
-                      className="mt-4"
-                      label="From your resume"
-                      meta={signal.updatedAt ? formatRelative(signal.updatedAt) : undefined}
-                    >
-                      <ExtractedProfile signal={signal} />
-                    </Disclosure>
+                    {uploadError && (
+                      <Alert variant="error">
+                        <span id="resume-upload-error">{uploadError}</span>
+                      </Alert>
+                    )}
+
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="submit"
+                        size="sm"
+                        disabled={!resumeFile}
+                        loading={uploading}
+                        loadingLabel={resume ? "Replacing your resume" : "Uploading your resume"}
+                        icon={<Icon.upload className="h-4 w-4" />}
+                      >
+                        {uploading
+                          ? resume
+                            ? "Replacing…"
+                            : "Uploading…"
+                          : resume
+                            ? "Replace resume"
+                            : "Upload resume"}
+                      </Button>
+                      {resume && !uploading && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setUploadOpen(false);
+                            setResumeFile(null);
+                            setUploadError("");
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      )}
+                    </div>
+                  </form>
+                )}
+              </div>
+
+              {/* Re-reading the file into the profile. A quiet footer action
+                  rather than its own titled panel: the first read happens on
+                  its own after every upload, so this is the "do it again"
+                  case. Gated on a model being available — `aiEnabled ===
+                  false` is latched for the session, so it never comes back. */}
+              {resume && !resumeLoading && !resumeError && aiEnabled !== false && (
+                <div className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-700">
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                    Your headline, seniority and skills are filled in from this file.
+                  </p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="-ml-2 mt-1"
+                    loading={analysing}
+                    loadingLabel="Reading your resume"
+                    icon={<Icon.refresh className="h-4 w-4" />}
+                    onClick={() => void analyseResume()}
+                  >
+                    {analysing
+                      ? "Reading your resume…"
+                      : signal
+                        ? "Read my resume again"
+                        : "Fill my profile from it"}
+                  </Button>
+
+                  {analyseNotice && (
+                    <Alert variant="warning" className="mt-3">
+                      {analyseNotice}
+                    </Alert>
                   )}
                 </div>
-              </div>
-            </Card>
-          </div>
+              )}
+            </div>
+          </Card>
         </section>
       </main>
     </div>
@@ -1402,6 +1531,31 @@ function LiveStatus({ message }: { message: string }) {
     <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">
       {message}
     </p>
+  );
+}
+
+/** One count in the applications summary: a big number over a short label. */
+function SummaryFigure({
+  label,
+  value,
+  icon,
+  tone,
+}: {
+  label: string;
+  value: string;
+  icon: React.ReactNode;
+  tone: StatusTone;
+}) {
+  return (
+    <div className="flex min-w-0 flex-col-reverse px-3 py-2.5 sm:px-4">
+      <dt className="mt-1 truncate text-xs text-gray-600 dark:text-gray-400">{label}</dt>
+      <dd className="flex items-center justify-between gap-2">
+        <Readout className="block font-sans text-2xl font-semibold leading-none text-gray-900 dark:text-white">
+          {value}
+        </Readout>
+        <IconTile icon={icon} tone={tone} size="sm" />
+      </dd>
+    </div>
   );
 }
 
@@ -1541,7 +1695,9 @@ function PipelineTrack({ status, title }: { status: ApplicationStatus | null; ti
               rejected
                 ? "bg-gray-200 dark:bg-gray-700"
                 : index <= at
-                  ? "bg-green-500"
+                  ? status === "ACCEPTED"
+                    ? "bg-success-500 dark:bg-success-400"
+                    : "bg-green-500"
                   : "bg-gray-200 dark:bg-gray-700"
             }`}
           />
@@ -1627,7 +1783,7 @@ function ApplicationRow({
           </p>
 
           {application.message && (
-            <p className="panel-sunken mt-3 whitespace-pre-wrap p-3 text-sm text-gray-700 dark:text-gray-300">
+            <p className="panel-sunken mt-3 max-w-2xl whitespace-pre-wrap p-3 text-sm text-gray-700 dark:text-gray-300">
               {application.message}
             </p>
           )}
@@ -1661,21 +1817,26 @@ function ApplicationRow({
           )}
         </div>
 
-        {/* A single right rail on desktop: state, then how far it travelled,
-            then the two actions. Below `lg` it stacks under the detail. */}
-        <div className="flex flex-col gap-3 lg:w-56 lg:flex-shrink-0">
-          <div className="flex items-center gap-2">
+        {/* A single right rail on desktop: state and how far it travelled on
+            one line, then the actions. Below `lg` it stacks under the detail.
+            Withdraw is a quiet text button rather than a red block the same
+            size as Message: it is the rare, final action, and a filled danger
+            button on every row made the list read as a column of warnings. */}
+        <div className="flex flex-col gap-3 lg:w-60 lg:flex-shrink-0">
+          <div className="flex items-start gap-3">
             <StatusBadge status={application.status} />
+            <div className="min-w-0 flex-1 pt-1.5">
+              <PipelineTrack status={status} title={application.job.title} />
+            </div>
           </div>
 
-          <PipelineTrack status={status} title={application.job.title} />
-
-          <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
+          <div className="flex flex-wrap items-center gap-2">
             {/* Every row repeats this pair, so each one names its role: read
                 out of context, "Withdraw" alone says nothing about which. */}
             <Button
               variant="secondary"
-              className="sm:flex-1 lg:w-full"
+              size="sm"
+              className="flex-1 lg:flex-none"
               loading={messaging}
               loadingLabel="Opening the conversation"
               icon={<Icon.chat className="h-4 w-4" />}
@@ -1689,8 +1850,9 @@ function ApplicationRow({
                 be seen on the way out. The confirm dialog is the deliberation;
                 the disappearance is the confirmation. */}
             <Button
-              variant="danger"
-              className="sm:flex-1 lg:w-full"
+              variant="ghost"
+              size="sm"
+              className="text-red-700 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
               icon={<Icon.trash className="h-4 w-4" />}
               onClick={onWithdraw}
             >
@@ -1781,7 +1943,7 @@ function MatchedJobCard({
           <Eyebrow className="mb-1.5">Skills in common</Eyebrow>
           <div className="flex flex-wrap gap-1.5">
             {shared.map((skill) => (
-              <Chip key={skill} accent>
+              <Chip key={skill} tone="good" size="sm">
                 {skill}
               </Chip>
             ))}
@@ -1801,87 +1963,25 @@ function MatchedJobCard({
 }
 
 /**
- * The profile the model read out of the résumé.
- *
- * Labelled as extracted and paired with the editor on every render: the model
- * is a fast first draft of the fields, never a finding about the person, and
- * the page should never imply otherwise.
+ * The longer half of what the model read out of the résumé: the summary, and
+ * the strengths (present straight after a read, never stored). Behind a
+ * disclosure under the profile — the fields are already on the edit page, so
+ * this is a receipt rather than a destination.
  */
-function ExtractedProfile({ signal }: { signal: ProfileSignal }) {
+function ExtractedDetail({ signal }: { signal: ProfileSignal }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white/75 p-3 dark:border-gray-700 dark:bg-gray-800/70 sm:p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 max-w-prose">
-          <Eyebrow accent className="mb-1.5 flex items-center gap-1.5" as="div">
-            <Icon.spark className="h-3.5 w-3.5" />
-            Extracted by AI
-            {/* No colour override: the accent eyebrow's own colour already
-                reads, whereas gray-400 on this surface sat at 2.6:1. */}
-            {signal.updatedAt && <span>· {formatRelative(signal.updatedAt)}</span>}
-          </Eyebrow>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Drafted by AI from your resume. Correct anything that’s wrong.
-          </p>
-        </div>
-        <Link href="/seeker/profile/edit" className={buttonSecondary}>
-          <Icon.edit className="h-4 w-4" />
-          Edit these fields
-        </Link>
-      </div>
-
-      {signal.headline && (
-        <p className="mt-4 text-base font-semibold text-gray-900 dark:text-white">
-          {signal.headline}
-        </p>
-      )}
-
-      {(signal.seniority || signal.yearsOfExp !== null) && (
-        <dl className="mt-3 grid gap-3 sm:grid-cols-2">
-          {signal.seniority && (
-            <div>
-              <dt>
-                <Eyebrow>Seniority</Eyebrow>
-              </dt>
-              <dd className="mt-1">
-                <Readout className="text-sm font-semibold">{signal.seniority}</Readout>
-              </dd>
-            </div>
-          )}
-          {signal.yearsOfExp !== null && (
-            <div>
-              <dt>
-                <Eyebrow>Years of experience</Eyebrow>
-              </dt>
-              <dd className="mt-1">
-                <Readout className="text-sm font-semibold">{signal.yearsOfExp}</Readout>
-              </dd>
-            </div>
-          )}
-        </dl>
-      )}
-
-      {signal.skills.length > 0 && (
-        <div className="mt-4">
-          <Eyebrow className="mb-1.5">Skills · {signal.skills.length}</Eyebrow>
-          <div className="flex flex-wrap gap-1.5">
-            {signal.skills.map((skill) => (
-              <Chip key={skill}>{skill}</Chip>
-            ))}
-          </div>
-        </div>
-      )}
-
+    <div className="space-y-4">
       {signal.summary && (
-        <div className="mt-4">
+        <div>
           <Eyebrow className="mb-1.5">Summary</Eyebrow>
-          <p className="whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">
+          <p className="max-w-prose whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">
             {signal.summary}
           </p>
         </div>
       )}
 
       {signal.strengths.length > 0 && (
-        <div className="mt-4">
+        <div>
           <Eyebrow className="mb-1.5">Strengths</Eyebrow>
           <ul className="space-y-1.5">
             {signal.strengths.map((strength) => (
@@ -1896,31 +1996,6 @@ function ExtractedProfile({ signal }: { signal: ProfileSignal }) {
           </ul>
         </div>
       )}
-    </div>
-  );
-}
-
-function ReadOnlyField({
-  label,
-  value,
-  mono = false,
-}: {
-  label: string;
-  value?: string | null;
-  mono?: boolean;
-}) {
-  return (
-    <div className="min-w-0 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
-      <dt>
-        <Eyebrow>{label}</Eyebrow>
-      </dt>
-      <dd
-        className={`mt-1.5 break-words text-sm font-semibold text-gray-900 dark:text-white ${
-          mono ? "mono font-medium" : ""
-        }`}
-      >
-        {value || "—"}
-      </dd>
     </div>
   );
 }

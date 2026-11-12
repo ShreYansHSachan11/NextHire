@@ -4,7 +4,8 @@ import { useId } from "react";
 import Link from "next/link";
 import { experienceLabel } from "@/lib/copy";
 import { sourceLabel } from "@/lib/jobs/sources";
-import { Avatar, Card, Chip, Eyebrow, formatCount, formatDate, Icon, MatchScore, Meter } from "./ui";
+import { Avatar, Card, Chip, Eyebrow, formatCount, formatDate, Icon, MatchScore } from "./ui";
+import { companyLogoSrc } from "@/lib/companyLogo";
 
 /**
  * The fields a job card reads. A structural subset of a `GET /api/jobs` row, so
@@ -17,7 +18,7 @@ export interface JobCardJob {
   experience?: string | null;
   location?: string | null;
   type?: string | null;
-  company?: { name: string } | null;
+  company?: { name: string; website?: string | null; logoUrl?: string | null } | null;
   createdAt: string;
   _count?: { applications: number };
   /** Set for a job imported from another job board. */
@@ -91,11 +92,13 @@ export function postedAgo(value: string | Date): string {
  * (`aria-labelledby`), so a screen reader does not read the entire card out as
  * the link text, and a tooltip on a chip inside it still shows on hover.
  *
- * `scored` is a fact about the whole list, not this card: in a list where any
- * job has a fit score, every card holds the score's space open so a two-column
- * grid stays level.
+ * The fit score sits in the top-right corner with its bar under it, as one
+ * unit. The bar used to be a separate full-width rule in the middle of the
+ * card, a second reading of the same number a long way from the first, and it
+ * landed at a different height on every card. The footer is pinned to the
+ * bottom, so cards in a row line up without holding space open.
  */
-export default function JobCard({ job, scored = false }: { job: JobCardJob; scored?: boolean }) {
+export default function JobCard({ job }: { job: JobCardJob }) {
   const titleId = useId();
   const company = job.company?.name ?? "Company";
   const location = compactLocation(job.location);
@@ -117,33 +120,26 @@ export default function JobCard({ job, scored = false }: { job: JobCardJob; scor
         className="group flex min-w-0 flex-1 flex-col rounded-[inherit] p-4 @lg:p-5"
       >
         <div className="flex items-start gap-3">
-          <Avatar name={company} />
+          <Avatar name={company} logo={companyLogoSrc(job.company)} />
           <div className="min-w-0 flex-1">
             <h2
               id={titleId}
               title={job.title.length > 60 ? job.title : undefined}
-              className="line-clamp-2 text-pretty text-base font-semibold leading-snug text-gray-900 dark:text-white"
+              className="line-clamp-2 text-pretty text-[1.0625rem] font-semibold leading-6 text-gray-900 dark:text-white"
             >
               {job.title}
             </h2>
-            <p className="mt-0.5 truncate text-sm text-gray-600 dark:text-gray-400">{company}</p>
+            <p className="truncate text-[0.9375rem] leading-6 text-gray-600 dark:text-gray-400">{company}</p>
           </div>
 
-          {(isNew || match) && (
-            <div className="flex flex-shrink-0 flex-col items-end gap-1.5">
-              {isNew && (
-                <span className="rounded-md border border-green-300 bg-green-50 px-1.5 py-0.5 text-[11px] font-medium text-green-700 dark:border-green-700 dark:bg-green-950/40 dark:text-green-300">
-                  New
-                </span>
-              )}
-              {match && <MatchScore value={match.score} caption="Profile fit" />}
-            </div>
+          {match && (
+            <MatchScore value={match.score} caption="Profile fit" showBar className="flex-shrink-0" />
           )}
         </div>
 
         {/* The facts a reader filters on, pay first when it is known. */}
         {(job.salary || location || job.type || job.experience) && (
-          <div className="mt-3.5 flex flex-wrap gap-1.5">
+          <div className="mt-4 flex flex-wrap gap-1.5">
             {job.salary && (
               <Chip icon={<Icon.money className={iconClass} />} className="font-medium">
                 {job.salary}
@@ -167,12 +163,10 @@ export default function JobCard({ job, scored = false }: { job: JobCardJob; scor
         {/* What a fit score is made of: the skills this job and the profile share. */}
         {sharedSkills.length > 0 && (
           <div className="mt-3">
-            <Eyebrow accent className="mb-1.5">
-              Matched skills
-            </Eyebrow>
+            <Eyebrow className="mb-1.5">Matched skills</Eyebrow>
             <div className="flex flex-wrap items-center gap-1.5">
               {sharedSkills.map((skill) => (
-                <Chip key={skill} accent size="sm">
+                <Chip key={skill} tone="good" size="sm">
                   {skill}
                 </Chip>
               ))}
@@ -181,19 +175,16 @@ export default function JobCard({ job, scored = false }: { job: JobCardJob; scor
           </div>
         )}
 
-        {/* Held open only where cards sit side by side; a single column has no
-            neighbour to line up with. */}
-        {scored && (
-          <div className={`mt-3 min-h-[0.375rem] ${match ? "" : "hidden lg:block"}`}>
-            {match && <Meter value={match.score} label={`Profile fit: ${match.score} out of 100`} />}
-          </div>
-        )}
-
         {/* Takes up the slack so footers line up across a row. */}
         <div className="mt-4 flex-1" aria-hidden="true" />
 
         <div className="flex items-center justify-between gap-3 border-t border-[var(--line)] pt-3">
           <p className="eyebrow flex min-w-0 items-center gap-1.5">
+            {/* In the footer beside the date it qualifies, rather than stacked
+                over the fit score, where it competed with the title. */}
+            {isNew && (
+              <span className="chip chip-sm chip-accent flex-shrink-0 font-medium">New</span>
+            )}
             <time dateTime={job.createdAt} title={formatDate(job.createdAt)} className="flex-shrink-0">
               Posted {postedAgo(job.createdAt)}
             </time>

@@ -184,7 +184,169 @@ export const Icon = {
   link: make(<path {...stroke} d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7L12.2 19" />),
   /** Saved / starred, distinct from the bookmark used for alerts. */
   star: make(<path {...stroke} d="m12 3.8 2.6 5.2 5.8.8-4.2 4.1 1 5.7-5.2-2.7-5.2 2.7 1-5.7L3.6 9.8l5.8-.8L12 3.8Z" />),
+
+  /* Topic glyphs, so a section reads by its picture as well as its label. */
+  idCard: make(
+    <>
+      <rect {...stroke} x="3" y="5" width="18" height="14" rx="2" />
+      <circle {...stroke} cx="9" cy="11" r="2" />
+      <path {...stroke} d="M6.5 16a3 3 0 0 1 5 0M14.5 10h3.5M14.5 14h2.5" />
+    </>
+  ),
+  alignLeft: make(<path {...stroke} d="M4 6h16M4 10h10M4 14h16M4 18h8" />),
+  layers: make(<path {...stroke} d="m12 3 9 4.5-9 4.5-9-4.5L12 3ZM3 12l9 4.5 9-4.5M3 16.5 12 21l9-4.5" />),
+  graduationCap: make(<path {...stroke} d="M22 9.5 12 5 2 9.5 12 14l10-4.5ZM6 11.5V16c3.5 2.5 8.5 2.5 12 0v-4.5M22 9.5V15" />),
+  trendingUp: make(<path {...stroke} d="m3 17 6-6 4 4 8-8M15 7h6v6" />),
+  bolt: make(<path {...stroke} d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" />),
+  pages: make(
+    <>
+      <rect {...stroke} x="8" y="3" width="12" height="15" rx="2" />
+      <path {...stroke} d="M16 21H6a2 2 0 0 1-2-2V7M11 8h6M11 12h6" />
+    </>
+  ),
+  scan: make(<path {...stroke} d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M7 12h10" />),
+  target: make(
+    <>
+      <circle {...stroke} cx="12" cy="12" r="9" />
+      <circle {...stroke} cx="12" cy="12" r="5" />
+      <circle {...stroke} cx="12" cy="12" r="1" />
+    </>
+  ),
+  flame: make(<path {...stroke} d="M12 3c.8 3 5 5.2 5 10a5 5 0 0 1-10 0c0-2.2 1-3.8 2.2-4.8 0 2 .9 3.3 2.3 3.3 0-3.2-1.2-5.2.5-8.5Z" />),
+  trophy: make(<path {...stroke} d="M8 4h8v5a4 4 0 0 1-8 0V4ZM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 21h8M10 17h4v4h-4z" />),
+  lightbulb: make(<path {...stroke} d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.7.5 1.1 1.3 1.1 2.2h5c0-.9.4-1.7 1.1-2.2A6 6 0 0 0 12 3Z" />),
+  rocket: make(<path {...stroke} d="M5 15c-1.5 1-2 4-2 6 2 0 5-.5 6-2M14 4c3-1 6-1 6-1s0 3-1 6l-6 6-5-5 6-6ZM9 10H5l2.5-3H11M14 15v4l3-2.5V13M15 9h.01" />),
 };
+
+/* -------------------------------------------------------------------------- */
+/* Status: good / needs work / missing                                         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The status palette: real green, amber and red, kept apart from the navy (or
+ * teal) accent so "this passed" never looks like "this is a link". Every use
+ * pairs the colour with a glyph and a word, so it survives greyscale and
+ * colour-blindness.
+ */
+export type StatusTone = "good" | "warn" | "bad" | "neutral" | "accent";
+
+const TONE_SOLID: Record<StatusTone, string> = {
+  good: "bg-success-600 text-white dark:bg-success-400 dark:text-success-950",
+  warn: "bg-amber-500 text-white dark:bg-amber-400 dark:text-amber-950",
+  bad: "bg-red-600 text-white dark:bg-red-400 dark:text-red-950",
+  neutral: "bg-gray-400 text-white dark:bg-gray-600 dark:text-gray-100",
+  accent: "bg-[color:var(--accent-fill)] text-[color:var(--ink-on-accent)]",
+};
+
+export const TONE_SOFT: Record<StatusTone, string> = {
+  good: "bg-success-50 text-success-700 ring-success-200 dark:bg-success-400/10 dark:text-success-300 dark:ring-success-400/25",
+  warn: "bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-400/10 dark:text-amber-300 dark:ring-amber-400/25",
+  bad: "bg-red-50 text-red-700 ring-red-200 dark:bg-red-400/10 dark:text-red-300 dark:ring-red-400/25",
+  neutral: "bg-gray-100 text-gray-700 ring-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700",
+  accent:
+    "bg-[color:var(--accent-soft)] text-[color:var(--accent-text)] ring-[color:var(--accent-line)]",
+};
+
+export const TONE_TEXT: Record<StatusTone, string> = {
+  good: "text-success-700 dark:text-success-400",
+  warn: "text-amber-700 dark:text-amber-400",
+  bad: "text-red-700 dark:text-red-400",
+  neutral: "text-gray-600 dark:text-gray-400",
+  accent: "text-[color:var(--accent-text)]",
+};
+
+const GLYPH_BOLD = { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 3 } as const;
+
+/**
+ * A solid status dot with a bold glyph: tick, exclamation or cross. Reads at
+ * a glance from across the page, where an outline icon in muted ink does not.
+ * Decorative by default — pass `label` where the word is not printed beside it.
+ */
+export function StatusIcon({
+  tone,
+  size = "md",
+  label,
+  className = "",
+}: {
+  tone: StatusTone;
+  size?: "sm" | "md" | "lg";
+  label?: string;
+  className?: string;
+}) {
+  const box = { sm: "h-4 w-4", md: "h-5 w-5", lg: "h-8 w-8" }[size];
+  const glyph = { sm: "h-2.5 w-2.5", md: "h-3 w-3", lg: "h-4.5 w-4.5" }[size];
+  const path =
+    tone === "good" ? (
+      <path {...GLYPH_BOLD} d="m5 12.5 4.5 4.5L19 7.5" />
+    ) : tone === "bad" ? (
+      <path {...GLYPH_BOLD} d="M7 7l10 10M17 7 7 17" />
+    ) : tone === "warn" ? (
+      <path {...GLYPH_BOLD} d="M12 6.5v7M12 17.5h.01" />
+    ) : (
+      <path {...GLYPH_BOLD} d="M7 12h10" />
+    );
+
+  return (
+    <span
+      className={`inline-flex flex-shrink-0 items-center justify-center rounded-full ${box} ${TONE_SOLID[tone]} ${className}`}
+      {...(label ? { role: "img", "aria-label": label } : { "aria-hidden": true })}
+    >
+      <svg className={glyph} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        {path}
+      </svg>
+    </span>
+  );
+}
+
+/** A tinted pill with a status dot: "Good", "Could be better", "Missing". */
+export function StatusPill({
+  tone,
+  children,
+  icon = true,
+  className = "",
+}: {
+  tone: StatusTone;
+  children: React.ReactNode;
+  icon?: boolean;
+  className?: string;
+}) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${TONE_SOFT[tone]} ${className}`}
+    >
+      {icon && <StatusIcon tone={tone} size="sm" />}
+      {children}
+    </span>
+  );
+}
+
+/**
+ * A topic glyph in a tinted square — the picture a section is known by. The
+ * tone follows the section's status where it has one, so the tile and the pill
+ * beside it agree.
+ */
+export function IconTile({
+  icon,
+  tone = "accent",
+  size = "md",
+  className = "",
+}: {
+  icon: React.ReactNode;
+  tone?: StatusTone;
+  size?: "sm" | "md" | "lg";
+  className?: string;
+}) {
+  // Explicit radii: the theme's rounded-lg/xl (1rem/1.25rem) would turn these small squares into circles.
+  const box = { sm: "h-8 w-8 rounded-[9px]", md: "h-10 w-10 rounded-[11px]", lg: "h-12 w-12 rounded-[14px]" }[size];
+  return (
+    <span
+      className={`inline-flex flex-shrink-0 items-center justify-center ring-1 ring-inset ${box} ${TONE_SOFT[tone]} ${className}`}
+      aria-hidden="true"
+    >
+      {icon}
+    </span>
+  );
+}
 
 /* -------------------------------------------------------------------------- */
 /* Typographic primitives                                                      */
@@ -323,16 +485,18 @@ export function CardHeader({
 
   return (
     <div
-      className={`flex flex-wrap items-start justify-between gap-3 border-b border-gray-200 dark:border-gray-700 ${
-        compact ? "px-4 py-2.5" : "px-4 py-4 sm:px-6"
+      className={`flex flex-wrap items-start justify-between gap-3 border-b border-[var(--line-subtle)] ${
+        compact ? "px-4 py-2.5" : "px-4 py-4 sm:px-6 sm:py-5"
       } ${className}`}
     >
       <div className="min-w-0">
-        {eyebrow && <Eyebrow className="mb-1.5">{eyebrow}</Eyebrow>}
-        <Heading className="text-base font-semibold text-gray-900 dark:text-white sm:text-lg">
+        {eyebrow && <Eyebrow className="mb-1">{eyebrow}</Eyebrow>}
+        <Heading className="text-base font-semibold leading-snug tracking-tight text-gray-900 dark:text-white sm:text-[1.0625rem]">
           {title}
         </Heading>
-        {description && <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{description}</p>}
+        {description && (
+          <p className="mt-1 text-pretty text-sm leading-relaxed text-gray-600 dark:text-gray-400">{description}</p>
+        )}
       </div>
       {action && <div className="flex-shrink-0">{action}</div>}
     </div>
@@ -690,17 +854,19 @@ export function Alert({
     error:
       "border-l-red-500 bg-red-50 text-red-900 dark:bg-red-950/40 dark:text-red-100 dark:border-l-red-400",
     success:
-      "border-l-green-500 bg-green-50 text-green-900 dark:bg-green-950/40 dark:text-green-100 dark:border-l-green-400",
+      "border-l-success-500 bg-success-50 text-success-900 dark:bg-success-950/40 dark:text-success-100 dark:border-l-success-400",
     info: "border-l-blue-500 bg-blue-50 text-blue-900 dark:bg-blue-950/40 dark:text-blue-100 dark:border-l-blue-400",
     warning:
       "border-l-amber-500 bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100 dark:border-l-amber-400",
   }[variant];
 
+  // Solid status dots for the three statuses; info is not a status, so it
+  // keeps the outline glyph in the alert's own ink.
   const icons = {
-    error: <Icon.warning className="h-4 w-4" />,
-    success: <Icon.checkCircle className="h-4 w-4" />,
-    info: <Icon.spark className="h-4 w-4" />,
-    warning: <Icon.warning className="h-4 w-4" />,
+    error: <StatusIcon tone="bad" />,
+    success: <StatusIcon tone="good" />,
+    info: <Icon.info className="h-5 w-5 text-blue-600 dark:text-blue-400" />,
+    warning: <StatusIcon tone="warn" />,
   }[variant];
 
   return (
@@ -710,8 +876,8 @@ export function Alert({
       // hairline grammar used everywhere else.
       className={`flex items-start gap-3 rounded-r-lg border border-l-2 border-gray-200 p-3 text-sm dark:border-gray-700 sm:p-4 ${styles} ${className}`}
     >
-      <span className="mt-0.5 flex-shrink-0">{icons}</span>
-      <div className="min-w-0 flex-1">{children}</div>
+      <span className="flex-shrink-0">{icons}</span>
+      <div className="min-w-0 flex-1 pt-px">{children}</div>
     </div>
   );
 }
@@ -742,8 +908,12 @@ export function EmptyState({
   /** Mono kicker above the title, for surfaces that already use one. */
   eyebrow,
   className = "",
+  tone,
+  art,
 }: {
   icon?: React.ReactNode;
+  /** A full illustration (e.g. `ChatArt`) in place of the icon tile. */
+  art?: React.ReactNode;
   title: string;
   description?: string;
   /**
@@ -755,37 +925,121 @@ export function EmptyState({
   variant?: "empty" | "no-results" | "error";
   eyebrow?: string;
   className?: string;
+  /**
+   * Tile tint. Defaults to accent for a first run (a topic, inviting), neutral
+   * for a dead end, and red for a failed load. Pass `good` only when the empty
+   * state is itself good news ("All caught up").
+   */
+  tone?: StatusTone;
 }) {
   const defaultIcon = {
-    empty: <Icon.document className="h-6 w-6" />,
-    "no-results": <Icon.search className="h-6 w-6" />,
-    error: <Icon.warning className="h-6 w-6" />,
+    empty: <Icon.document className="h-7 w-7" />,
+    "no-results": <Icon.search className="h-7 w-7" />,
+    error: <Icon.warning className="h-7 w-7" />,
   }[variant];
+  const tileTone: StatusTone = tone ?? { empty: "accent", "no-results": "neutral", error: "bad" }[variant] as StatusTone;
 
   return (
     <div
-      className={`grid-field text-center ${
+      className={`text-center ${
         variant === "empty" ? "px-6 py-14" : "px-6 py-10"
       } ${className}`}
     >
+      {/* A large tinted tile with a soft halo: the picture this state is
+          known by. Callers' icons are sized up to fill it. */}
+      {art ? (
+        <div aria-hidden="true" className="mx-auto mb-5 w-fit">
+          {art}
+        </div>
+      ) : (
       <div
-        className={`tile mx-auto mb-4 h-12 w-12 ${
-          variant === "error"
-            ? "border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
-            : ""
-        }`}
+        aria-hidden="true"
+        className={`empty-state-tile mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl ring-1 ring-inset [&>svg]:h-7 [&>svg]:w-7 ${TONE_SOFT[tileTone]}`}
       >
         {icon ?? defaultIcon}
       </div>
-      {eyebrow && <Eyebrow className="mb-2">{eyebrow}</Eyebrow>}
-      <h3 className="mb-2 text-base font-semibold text-gray-900 dark:text-white">{title}</h3>
+      )}
+      {eyebrow && <Eyebrow accent className="mb-2">{eyebrow}</Eyebrow>}
+      <h3 className="mb-1.5 text-base font-semibold tracking-tight text-gray-900 dark:text-white">{title}</h3>
       {description && (
-        <p className="mx-auto mb-5 max-w-sm text-pretty text-sm text-gray-600 dark:text-gray-400">
+        <p className="mx-auto mb-5 max-w-sm text-pretty text-sm leading-relaxed text-gray-600 dark:text-gray-400">
           {description}
         </p>
       )}
       {action}
     </div>
+  );
+}
+
+/**
+ * Small spot illustrations for the inbox, so each empty pane has its own
+ * picture instead of the same chat glyph twice. Decorative: the heading beside
+ * them says what the state is.
+ */
+export function ChatArt({ kind }: { kind: "inbox" | "conversation" | "select" }) {
+  const card = "fill-white stroke-gray-200 dark:fill-gray-900 dark:stroke-gray-700";
+  const line = "fill-gray-200 dark:fill-gray-700";
+  const accent = "fill-[var(--accent-fill)]";
+  const soft = "fill-[var(--accent-soft)]";
+  return (
+    <svg viewBox="0 0 160 120" className="h-28 w-36" fill="none" aria-hidden="true">
+      <circle cx="80" cy="62" r="52" className={soft} />
+      {kind === "conversation" && (
+        <>
+          <rect x="16" y="22" width="80" height="40" rx="14" strokeWidth="1.5" className={card} />
+          <path d="M28 61l-6 11 16-10" strokeWidth="1.5" strokeLinejoin="round" className={card} />
+          <rect x="29" y="34" width="48" height="5" rx="2.5" className={line} />
+          <rect x="29" y="46" width="30" height="5" rx="2.5" className={line} />
+          <rect x="62" y="60" width="82" height="38" rx="14" className={accent} />
+          <path d="M132 97l8 10-16-9" className={accent} />
+          <rect x="75" y="71" width="54" height="5" rx="2.5" className="fill-white/85 dark:fill-gray-950/70" />
+          <rect x="75" y="83" width="34" height="5" rx="2.5" className="fill-white/60 dark:fill-gray-950/50" />
+          <path d="M108 107l3 3 6-6M114 107l3 3 6-6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="stroke-success-600 dark:stroke-success-400" />
+          <circle cx="146" cy="30" r="4" className="fill-amber-400" />
+          <circle cx="14" cy="96" r="3" className="fill-emerald-400" />
+        </>
+      )}
+      {kind === "inbox" && (
+        <>
+          <rect x="44" y="20" width="72" height="46" rx="10" strokeWidth="1.5" transform="rotate(-7 80 43)" className={card} />
+          <rect x="48" y="30" width="68" height="44" rx="10" strokeWidth="1.5" transform="rotate(5 82 52)" className={card} />
+          <rect x="60" y="42" width="36" height="5" rx="2.5" transform="rotate(5 82 52)" className={line} />
+          <rect x="60" y="53" width="24" height="5" rx="2.5" transform="rotate(5 82 52)" className={line} />
+          <path d="M26 70a8 8 0 0 1 8-8h22l6 10h36l6-10h22a8 8 0 0 1 8 8v24a10 10 0 0 1-10 10H36a10 10 0 0 1-10-10Z" className={accent} />
+          <rect x="66" y="82" width="28" height="5" rx="2.5" className="fill-white/70 dark:fill-gray-950/60" />
+          <circle cx="122" cy="26" r="9" className="fill-amber-400" />
+          <path d="M122 22v8M118 26h8" strokeWidth="2" strokeLinecap="round" className="stroke-white dark:stroke-amber-950" />
+        </>
+      )}
+      {kind === "select" && (
+        <>
+          <rect x="18" y="18" width="70" height="86" rx="12" strokeWidth="1.5" className={card} />
+          <rect x="24" y="26" width="58" height="22" rx="7" className={soft} />
+          <circle cx="35" cy="37" r="6" className={accent} />
+          <rect x="45" y="34" width="30" height="5" rx="2.5" className={accent} />
+          <circle cx="35" cy="62" r="6" className="fill-emerald-200 dark:fill-emerald-500/40" />
+          <rect x="45" y="59" width="26" height="5" rx="2.5" className={line} />
+          <circle cx="35" cy="86" r="6" className="fill-amber-200 dark:fill-amber-500/40" />
+          <rect x="45" y="83" width="30" height="5" rx="2.5" className={line} />
+          <rect x="96" y="18" width="48" height="86" rx="12" strokeWidth="1.5" strokeDasharray="4 4" className="stroke-gray-300 dark:stroke-gray-600" />
+          <path d="M120 44c-14 0-26 2-34-4" strokeWidth="2" strokeLinecap="round" strokeDasharray="1 5" className="stroke-[var(--accent-fill)]" />
+          <path d="M74 44l9 26 4-11 11-4Z" strokeWidth="1.5" strokeLinejoin="round" className="fill-white stroke-gray-900 dark:fill-gray-900 dark:stroke-white" />
+        </>
+      )}
+    </svg>
+  );
+}
+
+/** "Live" for a connected socket: a status, so it wears the status green. */
+export function LiveBadge({ label = "Live" }: { label?: string }) {
+  return (
+    <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset ${TONE_SOFT.good}`}>
+      <span className="relative flex h-2 w-2" aria-hidden="true">
+        <span className="absolute inline-flex h-full w-full rounded-full bg-success-500 opacity-60 motion-safe:animate-ping" />
+        <span className="relative inline-flex h-2 w-2 rounded-full bg-success-500" />
+      </span>
+      {label}
+    </span>
   );
 }
 
@@ -916,7 +1170,10 @@ export function MeterRow({
   hint,
   describedBy,
   className = "",
+  /** Small topic glyph before the label, so four rows read apart at a glance. */
+  icon,
 }: {
+  icon?: React.ReactNode;
   label: string;
   value: number;
   max?: number;
@@ -930,6 +1187,11 @@ export function MeterRow({
     <div className={className}>
       <div className="mb-1.5 flex items-baseline justify-between gap-3">
         <span className="min-w-0 text-sm text-gray-700 dark:text-gray-300">
+          {icon && (
+            <span className="mr-2 inline-flex translate-y-[3px] text-gray-400 dark:text-gray-500" aria-hidden="true">
+              {icon}
+            </span>
+          )}
           {label}
           {weight !== undefined && (
             <Eyebrow as="span" className="ml-2 whitespace-nowrap">
@@ -1002,9 +1264,7 @@ export function MatchScore({
   return (
     <div className={`${alignment} ${className}`} id={id} aria-describedby={describedBy}>
       <span className={`flex items-center gap-1.5 ${justify}`}>
-        <Icon.pulse
-          className={`${size === "lg" ? "h-5 w-5" : "h-4 w-4"} flex-shrink-0 text-green-600 dark:text-green-400`}
-        />
+        <FitBars value={value} size={size} />
         <span
           className={`font-semibold text-gray-900 dark:text-white ${
             size === "lg" ? "text-lg" : "text-sm"
@@ -1028,6 +1288,31 @@ export function MatchScore({
       {/* Decorative: the band and the readout above already say it in words. */}
       {showBar && <Meter value={value} className="mt-2" decorative />}
     </div>
+  );
+}
+
+/**
+ * The fit band as a picture: four ascending bars, lit up to the band. "Strong"
+ * lights three, "Exploratory" one — so a list of cards can be scanned by shape
+ * before anyone reads a word. Accent, not green: fit is a match score, not a
+ * pass/fail status. Decorative; the band is printed beside it.
+ */
+export function FitBars({ value, size = "md", className = "" }: { value: number; size?: "md" | "lg"; className?: string }) {
+  const lit = FIT_BANDS.length - FIT_BANDS.indexOf(fitBand(value));
+  const box = size === "lg" ? "h-5 gap-[3px]" : "h-4 gap-[2.5px]";
+  const bar = size === "lg" ? "w-[4px]" : "w-[3px]";
+  return (
+    <span className={`inline-flex flex-shrink-0 items-end ${box} ${className}`} aria-hidden="true">
+      {FIT_BANDS.map((_, index) => (
+        <span
+          key={index}
+          className={`${bar} rounded-full ${
+            index < lit ? "bg-[color:var(--accent-fill)]" : "bg-gray-300 dark:bg-gray-600"
+          }`}
+          style={{ height: `${40 + index * 20}%` }}
+        />
+      ))}
+    </span>
   );
 }
 
@@ -1075,6 +1360,7 @@ export function Chip({
   /** `sm` for chips inside a dense row. */
   size = "md",
   title,
+  tone,
 }: {
   children: React.ReactNode;
   icon?: React.ReactNode;
@@ -1086,8 +1372,16 @@ export function Chip({
   selected?: boolean;
   size?: "sm" | "md";
   title?: string;
+  /**
+   * A status chip: a matched skill (`good`), one to add (`warn`), one that is
+   * missing (`bad`). Tints the chip and leads it with the solid status dot, so
+   * the meaning survives greyscale. Only for things that are a status.
+   */
+  tone?: StatusTone;
 }) {
-  const base = `chip ${size === "sm" ? "chip-sm" : ""} ${accent || selected ? "chip-accent" : ""} ${className}`;
+  const toned = tone ? `border-transparent ring-1 ring-inset font-medium ${TONE_SOFT[tone]}` : "";
+  const base = `chip ${size === "sm" ? "chip-sm" : ""} ${accent || selected ? "chip-accent" : ""} ${toned} ${className}`;
+  const lead = icon ?? (tone ? <StatusIcon tone={tone} size="sm" /> : null);
   // A label can be cut short with an ellipsis (a job listed in eleven cities),
   // so a long one carries its full text as a tooltip too.
   const fullText = title ?? (typeof children === "string" && children.length > 32 ? children : undefined);
@@ -1102,7 +1396,7 @@ export function Chip({
         title={fullText}
         className={`${base} chip-interactive interactive hit-24`}
       >
-        {icon}
+        {lead}
         {label}
       </button>
     );
@@ -1111,7 +1405,7 @@ export function Chip({
   if (!onRemove) {
     return (
       <span className={base} title={fullText}>
-        {icon}
+        {lead}
         {label}
       </span>
     );
@@ -1119,7 +1413,7 @@ export function Chip({
 
   return (
     <span className={base} title={fullText}>
-      {icon}
+      {lead}
       {label}
       <button
         type="button"
@@ -1158,16 +1452,16 @@ export const BADGE_TONES = {
   amber:
     "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200",
   blue: "border-blue-300 bg-blue-50 text-blue-800 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-200",
-  violet:
-    "border-violet-300 bg-violet-50 text-violet-800 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-200",
+  cyan:
+    "border-cyan-300 bg-cyan-50 text-cyan-800 dark:border-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-200",
   green:
-    "border-green-300 bg-green-50 text-green-800 dark:border-green-700 dark:bg-green-950/40 dark:text-green-200",
+    "border-success-300 bg-success-50 text-success-800 dark:border-success-700 dark:bg-success-950/40 dark:text-success-200",
 } as const;
 
 const STATUS_STYLES: Record<string, string> = {
   PENDING: BADGE_TONES.amber,
   SHORTLISTED: BADGE_TONES.blue,
-  INTERVIEW: BADGE_TONES.violet,
+  INTERVIEW: BADGE_TONES.cyan,
   ACCEPTED: BADGE_TONES.green,
   REJECTED: BADGE_TONES.neutral,
 };
@@ -1179,13 +1473,55 @@ const STATUS_STYLES: Record<string, string> = {
 const BADGE_BASE =
   "inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-1 text-xs font-medium";
 
-const STATUS_ICONS: Record<string, React.ReactNode> = {
-  PENDING: <Icon.clock className="h-3 w-3" />,
-  SHORTLISTED: <Icon.checkCircle className="h-3 w-3" />,
-  INTERVIEW: <Icon.badge className="h-3 w-3" />,
-  ACCEPTED: <Icon.check className="h-3 w-3" />,
-  REJECTED: <Icon.x className="h-3 w-3" />,
+/**
+ * Each stage gets its own solid dot and glyph — a clock while it waits, a star
+ * once shortlisted, a speech bubble for the interview, a tick for an offer, a
+ * cross when closed — so a list of applications reads by shape, not by
+ * squinting at a 12px outline in the badge's own ink.
+ */
+const STATUS_DOT: Record<string, { fill: string; glyph: React.ReactNode }> = {
+  PENDING: {
+    fill: "bg-amber-500 text-white dark:bg-amber-400 dark:text-amber-950",
+    glyph: <path {...GLYPH_BOLD} d="M12 7v5.5l3.5 2" />,
+  },
+  SHORTLISTED: {
+    fill: "bg-blue-600 text-white dark:bg-blue-400 dark:text-blue-950",
+    glyph: (
+      <path
+        fill="currentColor"
+        stroke="none"
+        d="m12 4.5 2.3 4.7 5.2.8-3.8 3.6.9 5.1L12 16.3l-4.6 2.4.9-5.1-3.8-3.6 5.2-.8L12 4.5Z"
+      />
+    ),
+  },
+  INTERVIEW: {
+    fill: "bg-cyan-700 text-white dark:bg-cyan-400 dark:text-cyan-950",
+    glyph: <path strokeLinecap="round" strokeWidth={4} d="M7 12h.01M12 12h.01M17 12h.01" />,
+  },
+  ACCEPTED: {
+    fill: "bg-success-600 text-white dark:bg-success-400 dark:text-success-950",
+    glyph: <path {...GLYPH_BOLD} d="m5 12.5 4.5 4.5L19 7.5" />,
+  },
+  REJECTED: {
+    fill: "bg-gray-400 text-white dark:bg-gray-500 dark:text-gray-950",
+    glyph: <path {...GLYPH_BOLD} d="M7 7l10 10M17 7 7 17" />,
+  },
 };
+
+function StatusDot({ status }: { status: string }) {
+  const dot = STATUS_DOT[status];
+  if (!dot) return null;
+  return (
+    <span
+      className={`inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full ${dot.fill}`}
+      aria-hidden="true"
+    >
+      <svg className="h-2.5 w-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        {dot.glyph}
+      </svg>
+    </span>
+  );
+}
 
 /**
  * Status pill, set in mono so it reads as a state code. Colour alone used to
@@ -1207,7 +1543,7 @@ export function StatusBadge({
 
   return (
     <span className={`${BADGE_BASE} ${styles} ${className}`}>
-      {showIcon ? STATUS_ICONS[status] ?? null : null}
+      {showIcon ? <StatusDot status={status} /> : null}
       <span>{label}</span>
     </span>
   );
@@ -1256,7 +1592,9 @@ export function PipelineTrack({
         {PIPELINE_STAGES.map((stage, index) => (
           <span
             key={stage}
-            className={`track-seg ${closed ? "track-seg-void" : index <= at ? "track-seg-done" : ""}`}
+            className={`track-seg ${closed ? "track-seg-void" : index <= at ? "track-seg-done" : ""} ${
+              status === "ACCEPTED" ? "!bg-success-500 dark:!bg-success-400" : ""
+            }`}
           />
         ))}
       </span>
@@ -1273,7 +1611,7 @@ export function JobStateBadge({ isActive }: { isActive: boolean }) {
       className={`${BADGE_BASE} ${isActive ? BADGE_TONES.green : BADGE_TONES.neutral}`}
     >
       <span
-        className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-green-500" : "bg-gray-400"}`}
+        className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-success-500" : "bg-gray-400"}`}
         aria-hidden="true"
       />
       {isActive ? "Open" : "Closed"}
@@ -1303,32 +1641,30 @@ export function StatCard({
   icon: React.ReactNode;
   tone?: "blue" | "green" | "purple" | "amber" | "red";
   hint?: string;
-  /** The solid accent card. One per row: the number that row exists to show. */
+  /** The emphasised tile: accent edge and a lit corner. One per row: the number that row exists to show. */
   highlight?: boolean;
   className?: string;
 }) {
-  const tones = {
-    blue: "text-blue-600 dark:text-blue-400",
-    green: "text-green-600 dark:text-green-400",
-    purple: "text-gray-500 dark:text-gray-400",
-    amber: "text-amber-600 dark:text-amber-400",
-    red: "text-red-600 dark:text-red-400",
-  }[tone];
+  // `green` is the status green (accepted, done), not the remapped accent;
+  // `blue` is the brand accent for a plain topic.
+  const tileTone: StatusTone = (
+    { blue: "accent", green: "good", purple: "neutral", amber: "warn", red: "bad" } as const
+  )[tone];
 
   return (
     // `.panel-interactive` is the shared hover treatment. This tile previously
     // had its own (`hover:border-gray-300 dark:hover:border-gray-600`), whose
     // dark value came from the wrong end of the ramp and read lighter than the
     // border it was meant to strengthen.
-    <div className={`panel panel-interactive p-5 ${highlight ? "surface-accent" : ""} ${className}`}>
-      <div className="flex items-start justify-between gap-2">
+    <div className={`panel panel-interactive p-5 ${highlight ? "stat-highlight" : ""} ${className}`}>
+      <div className="flex items-center justify-between gap-2">
         <Eyebrow className="min-w-0 truncate">{label}</Eyebrow>
-        <span className={`flex-shrink-0 ${tones}`} aria-hidden="true">
-          {icon}
-        </span>
+        <IconTile icon={icon} tone={highlight ? "accent" : tileTone} />
       </div>
-      <Readout className="mt-4 block font-sans text-4xl font-semibold leading-none">{value}</Readout>
-      {hint && <p className="mt-1.5 text-xs text-gray-600 dark:text-gray-400">{hint}</p>}
+      <Readout className="mt-3 block font-sans text-[2.5rem] font-semibold leading-none tracking-tight">
+        {value}
+      </Readout>
+      {hint && <p className="mt-2 text-xs text-gray-600 dark:text-gray-400">{hint}</p>}
     </div>
   );
 }
@@ -1350,28 +1686,158 @@ export function StatCard({
  * `aria-hidden`, always: a single letter read aloud tells a screen-reader user
  * nothing, and the name it was taken from is invariably in the text beside it.
  */
+/** Light and deep stop of each monogram tile. Fixed order, picked by a hash of
+ *  the name; both stops keep white text readable. No purples. */
+const AVATAR_TONES: [string, string][] = [
+  ["#3f3f46", "#09090b"], // graphite
+  ["#10b981", "#065f46"], // emerald
+  ["#0ea5e9", "#0c4a6e"], // sapphire
+  ["#f97316", "#9a3412"], // copper
+  ["#d4a85a", "#7a5c2e"], // champagne gold
+  ["#f43f5e", "#881337"], // ruby
+  ["#14b8a6", "#134e4a"], // teal
+  ["#3b82f6", "#1e3a8a"], // cobalt
+];
+
+/** Up to two initials: "Lumen Labs" → "LL", "teampicnic" → "T". */
+function initialsOf(name: string) {
+  const words = name.trim().split(/[\s._-]+/).filter((w) => /[\p{L}\p{N}]/u.test(w));
+  const letters = words.slice(0, 2).map((w) => (w.match(/[\p{L}\p{N}]/u)?.[0] ?? "").toUpperCase());
+  return letters.join("") || "?";
+}
+
 export function Avatar({
   name,
   size = "md",
   className = "",
+  logo,
 }: {
   name: string;
   /** `sm` inside a dense row, `lg` beside a page title. */
   size?: "sm" | "md" | "lg";
   className?: string;
+  /** A real logo (see `companyLogoSrc`); the initial shows if it is missing or fails. */
+  logo?: string | null;
 }) {
-  const dimensions = {
-    sm: "h-9 w-9 text-sm",
-    md: "h-10 w-10 text-sm",
-    lg: "h-12 w-12 text-lg sm:h-14 sm:w-14 sm:text-xl",
-  }[size];
+  // Keyed by URL, so a new logo gets a fresh attempt rather than inheriting a
+  // previous failure.
+  if (logo) return <LogoAvatar key={logo} name={name} size={size} className={className} logo={logo} />;
+  return <InitialAvatar name={name} size={size} className={className} />;
+}
+
+/** One size map for logos and initials, so a card looks the same either way.
+ *  The md tile is 48px: the height of a two-line title and company name. */
+const AVATAR_SIZES = {
+  sm: "h-10 w-10 text-base",
+  md: "h-12 w-12 text-lg",
+  lg: "h-14 w-14 text-xl sm:h-16 sm:w-16 sm:text-2xl",
+} as const;
+
+function LogoAvatar({
+  name,
+  size,
+  className,
+  logo,
+}: {
+  name: string;
+  size: "sm" | "md" | "lg";
+  className: string;
+  logo: string;
+}) {
+  const [failed, setFailed] = React.useState(false);
+  // "bleed" logos are full squares (an app icon); "inset" logos are a mark on a
+  // clear or white ground that would be clipped by the rounded corners.
+  const [fit, setFit] = React.useState<"bleed" | "inset" | null>(null);
+  if (failed) return <InitialAvatar name={name} size={size} className={className} />;
+  return (
+    <span
+      className={`inline-flex flex-shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-control)] bg-white ${AVATAR_SIZES[size]} ${className}`}
+      aria-hidden="true"
+    >
+      {/* A plain img: logos come from a third-party CDN at their own sizes,
+          and the next/image optimiser would only add a hop. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={logo}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        crossOrigin="anonymous"
+        referrerPolicy="no-referrer"
+        onLoad={(e) => setFit(logoFit(e.currentTarget))}
+        onError={() => setFailed(true)}
+        className={`object-contain transition-opacity duration-200 ${
+          fit === "bleed" ? "h-full w-full" : "h-[78%] w-[78%]"
+        } ${fit ? "opacity-100" : "opacity-0"}`}
+      />
+    </span>
+  );
+}
+
+/**
+ * Reads the logo's outer edge: if it is solid colour all round, the logo is a
+ * full square and can fill the tile; otherwise it gets an inset so the tile's
+ * rounded corners never cut into the mark.
+ */
+function logoFit(img: HTMLImageElement): "bleed" | "inset" {
+  try {
+    const n = 16;
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = n;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return "inset";
+    ctx.drawImage(img, 0, 0, n, n);
+    const data = ctx.getImageData(0, 0, n, n).data;
+    let edge = 0;
+    let solid = 0;
+    for (let y = 0; y < n; y++) {
+      for (let x = 0; x < n; x++) {
+        if (x !== 0 && y !== 0 && x !== n - 1 && y !== n - 1) continue;
+        edge++;
+        const i = (y * n + x) * 4;
+        const [r, g, b, a] = [data[i], data[i + 1], data[i + 2], data[i + 3]];
+        const white = r > 235 && g > 235 && b > 235;
+        if (a > 220 && !white) solid++;
+      }
+    }
+    return solid / edge > 0.9 ? "bleed" : "inset";
+  } catch {
+    // A tainted canvas (no CORS) can't be read; the inset is the safe choice.
+    return "inset";
+  }
+}
+
+function InitialAvatar({
+  name,
+  size = "md",
+  className = "",
+}: {
+  name: string;
+  size?: "sm" | "md" | "lg";
+  className?: string;
+}) {
+  const dimensions = AVATAR_SIZES[size];
+
+  // Each name keeps its own colour, so a person or company is recognisable at
+  // a glance across lists.
+  let hash = 0;
+  for (const ch of name.trim().toLowerCase()) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  const [light, deep] = AVATAR_TONES[hash % AVATAR_TONES.length];
+  const initials = initialsOf(name);
 
   return (
     <span
-      className={`mono tile tile-ink flex-shrink-0 font-semibold ${dimensions} ${className}`}
+      className={`relative inline-flex flex-shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-control)] font-semibold tracking-[-0.02em] text-white ${dimensions} ${className}`}
+      style={{
+        // A soft light from the top left over a diagonal fill, with a faint
+        // ring of the light colour in the far corner for depth.
+        backgroundImage: `radial-gradient(120% 90% at 18% 0%, rgb(255 255 255 / 0.32), transparent 55%), radial-gradient(70% 70% at 100% 100%, ${light}66, transparent 70%), linear-gradient(140deg, ${light}, ${deep})`,
+        boxShadow: `inset 0 0 0 1px rgb(255 255 255 / 0.14), inset 0 1px 0 rgb(255 255 255 / 0.3), 0 6px 14px -8px ${deep}`,
+        textShadow: "0 1px 2px rgb(0 0 0 / 0.25)",
+      }}
       aria-hidden="true"
     >
-      {name.trim().charAt(0).toUpperCase() || "?"}
+      <span className={initials.length > 1 ? "text-[0.8em]" : undefined}>{initials}</span>
     </span>
   );
 }
@@ -1391,9 +1857,9 @@ export function PageHeading({
   className?: string;
 }) {
   return (
-    <div className={`flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between ${className}`}>
+    <div className={`flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between ${className}`}>
       <div className="min-w-0">
-        {eyebrow && <Eyebrow className="mb-2">{eyebrow}</Eyebrow>}
+        {eyebrow && <Eyebrow accent className="mb-2">{eyebrow}</Eyebrow>}
         <h1 className="text-balance text-3xl font-semibold text-gray-900 dark:text-white sm:text-4xl">
           {title}
         </h1>

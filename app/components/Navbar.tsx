@@ -156,6 +156,7 @@ export default function Navbar() {
           { href: "/seeker/dashboard", label: "Dashboard", icon: <Icon.graph className="h-5 w-5" /> },
           { href: "/jobs", label: "Find jobs", icon: <Icon.search className="h-5 w-5" /> },
           // Saved searches and job alerts.
+          { href: "/seeker/resume", label: "Resume", icon: <Icon.document className="h-5 w-5" /> },
           { href: "/seeker/alerts", label: "Job alerts", icon: <Icon.bookmark className="h-5 w-5" /> },
           { href: "/seeker/coach", label: "Career coach", icon: <Icon.spark className="h-5 w-5" /> },
           { href: "/seeker/conversations", label: "Messages", icon: <Icon.chat className="h-5 w-5" /> },
@@ -172,16 +173,22 @@ export default function Navbar() {
   // do not fit at tablet width: the links ran over the wordmark and Sign out
   // broke onto two lines. So the full bar waits for `lg` there, and the menu
   // button covers tablets. Whole class names, so Tailwind can see them.
+  // A seeker has six links, which only fit beside the wordmark and the actions
+  // from `xl`; a company's four fit from `lg`.
   const desk = signedIn
-    ? { bar: "lg:grid lg:grid-cols-[1fr_auto_1fr]", show: "lg:flex", hide: "lg:hidden" }
+    ? user?.role === "COMPANY"
+      ? { bar: "lg:grid lg:grid-cols-[1fr_auto_1fr]", show: "lg:flex", hide: "lg:hidden" }
+      : { bar: "xl:grid xl:grid-cols-[1fr_auto_1fr]", show: "xl:flex", hide: "xl:hidden" }
     : { bar: "md:grid md:grid-cols-[1fr_auto_1fr]", show: "md:flex", hide: "md:hidden" };
 
   const isCurrent = (href: string) => pathname === href || pathname?.startsWith(`${href}/`);
 
   return (
-    // A floating glass bar: the `header` only holds the sticky offset and the
-    // page gutter, and `.header-surface` on the `nav` is the bar itself.
-    <header className="sticky top-0 z-40 px-3 pb-2 pt-3 sm:px-4">
+    // A floating glass bar: the `header` holds the sticky offset and the page
+    // gutter, and `.header-surface` on the `nav` is the bar itself.
+    // The bar is liquid glass: content scrolls under it and is blurred, with
+    // no band painted around it.
+    <header className="header-shell sticky top-0 z-40 px-3 pb-2 pt-3 sm:px-4">
       <nav className="header-surface mx-auto max-w-7xl" aria-label="Main">
         {/* Three columns on desktop, so the links sit in the true centre of the
             bar whatever the widths of the mark and the actions either side. */}
@@ -210,7 +217,7 @@ export default function Navbar() {
                     className={`interactive whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium ${
                       isCurrent(link.href)
                         ? "text-gray-900 dark:text-white"
-                        : "text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+                        : "text-gray-700 hover:text-gray-950 dark:text-gray-300 dark:hover:text-white"
                     }`}
                   >
                     {link.label}
@@ -225,11 +232,21 @@ export default function Navbar() {
 
             {signedIn ? (
               <div className={`hidden items-center gap-3 ${desk.show}`}>
-                <span className="hidden max-w-[10rem] truncate text-sm text-gray-500 dark:text-gray-400 xl:inline">
-                  {user?.name}
+                <span className="flex items-center gap-2">
+                  <span
+                    aria-hidden="true"
+                    className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-zinc-700 to-zinc-900 text-xs dark:from-emerald-500 dark:to-teal-700 font-semibold text-white ring-2 ring-[var(--surface)]"
+                  >
+                    {(user?.name ?? "?").trim().charAt(0).toUpperCase()}
+                  </span>
+                  <span className="hidden max-w-[10rem] truncate text-sm font-medium text-gray-700 dark:text-gray-200 xl:inline">
+                    {user?.name}
+                  </span>
                 </span>
+                {/* Quiet: signing out is the least frequent thing in the bar,
+                    and an outlined pill made it the loudest. */}
                 <Button
-                  variant="secondary"
+                  variant="ghost"
                   onClick={handleSignOut}
                   loading={signingOut}
                   loadingLabel="Signing out"
@@ -244,7 +261,7 @@ export default function Navbar() {
                 <div className="hidden items-center gap-2 md:flex">
                   <Link
                     href="/auth/login"
-                    className="interactive whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+                    className="interactive whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-950 dark:text-gray-300 dark:hover:text-white"
                   >
                     Sign in
                   </Link>

@@ -24,10 +24,19 @@ const params = new URLSearchParams();
 if (sources) params.set('sources', sources);
 if (pages) params.set('pages', pages);
 
-const res = await fetch(`${base}/api/jobs/import?${params}`, {
-  method: 'POST',
-  headers: { Authorization: `Bearer ${secret}` },
-});
+let res;
+try {
+  res = await fetch(`${base}/api/jobs/import?${params}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${secret}` },
+  });
+} catch (error) {
+  if (error?.cause?.code === 'ECONNREFUSED' || error?.cause?.errors?.some?.((e) => e.code === 'ECONNREFUSED')) {
+    console.error(`Nothing is running at ${base}. Start the app first (npm run dev), then run this again.`);
+    process.exit(1);
+  }
+  throw error;
+}
 const body = await res.json().catch(() => ({}));
 
 if (!res.ok) {
@@ -42,3 +51,7 @@ for (const s of body.sources) {
   console.log(`${s.source.padEnd(10)} ${s.status.padEnd(8)} ${detail}`);
 }
 console.log(`embedded   ${body.embedded} jobs`);
+if (body.logos) {
+  const { looked, found, error } = body.logos;
+  console.log(`logos      ${found} of ${looked} companies matched${error ? ` (${error})` : ''}`);
+}

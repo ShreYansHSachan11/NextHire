@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState, createContext } from "react";
-import { Icon } from "./ui";
+import { Icon, StatusIcon } from "./ui";
 
 type ToastVariant = "success" | "error" | "info" | "warning";
 
@@ -149,9 +149,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 dismiss(toast.id);
               }
             }}
-            className={`pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-xl border px-4 py-3 shadow-[var(--shadow-overlay)] motion-safe:animate-fade-in-up ${variantClasses[toast.variant]}`}
+            className="panel-overlay pointer-events-auto flex w-full max-w-sm items-start gap-3 px-4 py-3 text-[var(--ink)] motion-safe:animate-fade-in-up"
           >
-            <span className="mt-0.5 flex-shrink-0" aria-hidden="true">
+            <span className="flex-shrink-0" aria-hidden="true">
               {icons[toast.variant]}
             </span>
             <p className="flex-1 text-sm leading-snug">{toast.message}</p>
@@ -171,24 +171,15 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * Kept in step with `<Alert>` in ui.tsx — the two used different tints for the
- * same meanings, so a failure looked like one colour inline and another in the
- * corner. The dark fills are near-opaque where Alert's are translucent: a toast
- * floats over arbitrary page content and has to stay readable on top of it.
+ * The tone lives in the icon; the toast itself is the overlay surface. A toast
+ * floats over arbitrary content, so the card has to be the calmest thing that
+ * reads on top of anything — a tinted fill per variant made a routine "Saved"
+ * look like an alert. The icon is the same solid status dot `<Alert>` uses, so
+ * a failure is the same red tick-or-cross inline and in the corner.
  */
-const variantClasses: Record<ToastVariant, string> = {
-  success:
-    "border-green-200 bg-green-50 text-green-900 dark:border-green-700 dark:bg-green-950/90 dark:text-green-100",
-  error:
-    "border-red-200 bg-red-50 text-red-900 dark:border-red-700 dark:bg-red-950/90 dark:text-red-100",
-  warning:
-    "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950/90 dark:text-amber-100",
-  info: "border-gray-200 bg-[var(--surface-overlay)] text-gray-900 dark:border-gray-700 dark:text-gray-100",
-};
-
 const icons: Record<ToastVariant, React.ReactNode> = {
-  success: <Icon.checkCircle className="h-5 w-5" />,
-  error: <Icon.warning className="h-5 w-5" />,
-  warning: <Icon.warning className="h-5 w-5" />,
-  info: <Icon.spark className="h-5 w-5" />,
+  success: <StatusIcon tone="good" />,
+  error: <StatusIcon tone="bad" />,
+  warning: <StatusIcon tone="warn" />,
+  info: <Icon.info className="h-5 w-5 text-gray-500 dark:text-gray-400" />,
 };

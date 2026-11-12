@@ -16,7 +16,6 @@ import {
 import {
   Alert,
   BackLink,
-  BADGE_TONES,
   Button,
   buttonGhost,
   buttonPrimary,
@@ -25,6 +24,10 @@ import {
   Chip,
   Eyebrow,
   Icon,
+  StatusIcon,
+  StatusPill,
+  TONE_TEXT,
+  type StatusTone,
   inputClass,
   Label,
   Meter,
@@ -1110,19 +1113,20 @@ export default function PostJobPage() {
                       </div>
                     )}
                   </div>
-                  {aiAvailable && !titleFilled && (
-                    <p id="ai-draft-hint" className="eyebrow mb-2">
-                      Add a job title to draft from
-                    </p>
-                  )}
-                  {/* Not gated on `titleFilled` as well: the button above is
-                      `aria-describedby` this, and with both conditions the hint
-                      was absent in the empty state — exactly where a disabled
-                      control most needs to say why. Each hint now renders on
-                      precisely the condition that disables its own button. */}
-                  {aiAvailable && !descriptionFilled && (
-                    <p id="ai-review-hint" className="eyebrow mb-2">
-                      Write a description to check it
+                  {/* Each hint renders on precisely the condition that
+                      disables its own button, and the button is
+                      `aria-describedby` it. Not gated on `titleFilled` as well:
+                      with both conditions the hint was absent in the empty
+                      state — exactly where a disabled control most needs to say
+                      why. One line, under the buttons they explain: stacked
+                      down the left they read as two unrelated captions. */}
+                  {aiAvailable && (!titleFilled || !descriptionFilled) && (
+                    <p className="eyebrow mb-2 sm:text-right">
+                      {!titleFilled && <span id="ai-draft-hint">Add a job title to draft from</span>}
+                      {!titleFilled && !descriptionFilled && <span aria-hidden="true"> · </span>}
+                      {!descriptionFilled && (
+                        <span id="ai-review-hint">Write a description to check it</span>
+                      )}
                     </p>
                   )}
                   <textarea
@@ -1320,7 +1324,7 @@ export default function PostJobPage() {
                                   {finding.why}
                                 </p>
 
-                                <div className="mt-2.5 border-l-2 border-green-500 bg-green-50 py-1.5 pl-3 dark:bg-green-950/30">
+                                <div className="mt-2.5 border-l-2 border-success-500 bg-success-50/70 py-1.5 pl-3 dark:border-success-400 dark:bg-success-400/5">
                                   <Eyebrow>Suggested wording</Eyebrow>
                                   <p className="mt-1 text-sm leading-relaxed text-gray-800 dark:text-gray-100">
                                     {finding.rewrite}
@@ -1673,17 +1677,21 @@ export default function PostJobPage() {
               open={openSteps.review}
               onToggle={() => toggleStep("review")}
             >
+              {/* A checklist, not an alarm: on a blank form every item is
+                  outstanding, and a full-width amber box shouting three
+                  warnings before anything has been typed read as an error. The
+                  step badges above already carry the amber "needed" state. */}
               {blockers.length > 0 ? (
-                <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/40 sm:p-4">
-                  <Eyebrow as="h3">Before this can be posted</Eyebrow>
+                <div className="panel-sunken p-3 sm:p-4">
+                  <Eyebrow as="h3">Still to do before you can post</Eyebrow>
                   <ul className="mt-2 space-y-2">
                     {blockers.map((blocker) => (
                       <li
                         key={blocker.label}
-                        className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-amber-900 dark:text-amber-100"
+                        className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-800 dark:text-gray-100"
                       >
                         <span className="flex min-w-0 items-center gap-2">
-                          <Icon.warning className="h-4 w-4 flex-shrink-0" />
+                          <StatusIcon tone="warn" size="sm" />
                           {blocker.label}
                         </span>
                         <button
@@ -1700,7 +1708,7 @@ export default function PostJobPage() {
                 </div>
               ) : (
                 <p className="flex items-start gap-2 text-sm leading-relaxed text-gray-700 dark:text-gray-200">
-                  <Icon.checkCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-600 dark:text-green-400" />
+                  <StatusIcon tone="good" />
                   You’re ready. Check the details below. Your job goes live as soon as you post it.
                 </p>
               )}
@@ -1834,22 +1842,18 @@ export default function PostJobPage() {
  * needs them, that is the moment to promote them.
  */
 
-/** Tone map for a step's state pill. Not colour alone — each carries a word. */
-const STEP_PILL_STYLES: Record<StepTone, string> = {
-  done: BADGE_TONES.green,
-  todo: BADGE_TONES.amber,
-  optional: BADGE_TONES.neutral,
+/** A step's state as a status. Not colour alone — each carries a word and a glyph. */
+const STEP_STATUS: Record<StepTone, StatusTone> = {
+  done: "good",
+  todo: "warn",
+  optional: "neutral",
 };
 
 function StepPill({ tone, label }: { tone: StepTone; label: string }) {
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-1 text-xs font-medium ${STEP_PILL_STYLES[tone]}`}
-    >
-      {tone === "done" && <Icon.check className="h-3 w-3 flex-shrink-0" />}
-      {tone === "todo" && <Icon.warning className="h-3 w-3 flex-shrink-0" />}
+    <StatusPill tone={STEP_STATUS[tone]} icon={tone !== "optional"}>
       {label}
-    </span>
+    </StatusPill>
   );
 }
 
@@ -1907,15 +1911,12 @@ function StepRail({
               {/* Repeats the panel's own pill so the state is legible from the
                   rail without opening anything. */}
               <span
-                className={`truncate text-[11px] font-medium ${
-                  status[step.id].tone === "todo"
-                    ? "text-amber-700 dark:text-amber-400"
-                    : status[step.id].tone === "done"
-                      ? "text-green-700 dark:text-green-400"
-                      : "text-gray-500 dark:text-gray-400"
-                }`}
+                className={`flex min-w-0 max-w-full items-center gap-1 text-[11px] font-medium ${TONE_TEXT[STEP_STATUS[status[step.id].tone]]}`}
               >
-                {status[step.id].label}
+                {status[step.id].tone !== "optional" && (
+                  <StatusIcon tone={STEP_STATUS[status[step.id].tone]} size="sm" className="!h-3.5 !w-3.5" />
+                )}
+                <span className="truncate">{status[step.id].label}</span>
               </span>
             </button>
           </li>

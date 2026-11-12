@@ -23,7 +23,7 @@ const REFRESH_WAIT_MS = 2500;
 
 /** Columns the detail page needs. `skills` rides along as a Job scalar. */
 const DETAIL_INCLUDE = {
-  company: { select: { id: true, name: true, profile: true } },
+  company: { select: { id: true, name: true, profile: true, website: true, logoUrl: true } },
   _count: { select: { applications: true } },
 } as const;
 
@@ -205,7 +205,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ jobI
         skills: 'skills' in body ? cleanTagList(body.skills) : undefined,
         isActive: typeof body.isActive === 'boolean' ? body.isActive : undefined,
       },
-      include: { company: { select: { id: true, name: true, profile: true } } },
+      include: { company: { select: { id: true, name: true, profile: true, website: true, logoUrl: true } } },
     });
 
     // The posting text just changed, so its vector is stale. Fire-and-forget:

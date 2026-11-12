@@ -40,28 +40,16 @@ export default function DashboardLoading() {
           <Skeleton className="h-11 w-36 rounded-lg" />
         </div>
 
-        {/* Telemetry strip */}
-        <Card grid className="mt-6 flex flex-wrap items-center gap-4 p-3 sm:mt-8 sm:p-4">
-          <Skeleton className="h-10 w-10 flex-shrink-0 rounded-lg" />
-          <div className="min-w-[12rem] flex-1 space-y-2">
-            <Skeleton className="h-4 w-40" />
-            <Skeleton className="h-3 w-56 max-w-full" />
+        {/* Resume insights hero — the first thing on the page */}
+        <Card className="mt-6 flex items-center gap-8 p-5 sm:mt-8 sm:p-7">
+          <Skeleton className="hidden h-[120px] w-[120px] flex-shrink-0 sm:block" rounded="rounded-full" />
+          <div className="min-w-0 flex-1 space-y-3">
+            <Skeleton className="h-3 w-28" />
+            <Skeleton className="h-7 w-72 max-w-full" />
+            <Skeleton className="h-4 w-full max-w-lg" />
           </div>
-          <Skeleton className="h-8 w-24" />
+          <Skeleton className="hidden h-11 w-40 rounded-lg lg:block" />
         </Card>
-
-        {/* Three stat tiles */}
-        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
-          {Array.from({ length: 3 }, (_, index) => (
-            <Card key={index} className="space-y-3 p-4">
-              <Skeleton className="h-3 w-24" />
-              <span className="flex h-7 items-center">
-                <Skeleton className="h-5 w-14" rounded="rounded-full" />
-              </span>
-              <Skeleton className="h-3 w-32" />
-            </Card>
-          ))}
-        </div>
 
         {/* Matched roles */}
         <div className="mt-6 space-y-3 sm:mt-8">
@@ -77,9 +65,17 @@ export default function DashboardLoading() {
 
         {/* Application list */}
         <Card className="mt-6 sm:mt-8">
-          <div className="space-y-2 border-b border-gray-200 px-4 py-4 dark:border-gray-700 sm:px-6">
-            <Skeleton className="h-3 w-20" />
-            <Skeleton className="h-6 w-48" />
+          {/* Heading, the three counts and the status filter, as on the page */}
+          <div className="border-b border-gray-200 px-4 py-4 dark:border-gray-700 sm:px-6 sm:py-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:justify-between">
+              <div className="space-y-2">
+                <Skeleton className="h-3 w-20" />
+                <Skeleton className="h-6 w-48" />
+                <Skeleton className="h-4 w-56" />
+              </div>
+              <Skeleton className="h-16 w-full lg:w-[22rem]" />
+            </div>
+            <Skeleton className="mt-4 h-11 w-full max-w-xl" />
           </div>
           <ul className="divide-y divide-gray-200 dark:divide-gray-700">
             {Array.from({ length: 3 }, (_, index) => (

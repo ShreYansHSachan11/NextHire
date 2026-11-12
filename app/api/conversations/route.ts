@@ -13,7 +13,7 @@ import { RATE_TIERS, checkRateLimit, rateLimited } from '@/lib/rateLimit';
 /** Both sides of a thread, for the response body. */
 const CONVERSATION_INCLUDE = {
   user: { select: { id: true, name: true, email: true } },
-  company: { select: { id: true, name: true } },
+  company: { select: { id: true, name: true, website: true, logoUrl: true } },
 } as const;
 
 /**
@@ -134,7 +134,7 @@ export async function GET(req: NextRequest) {
     const conversations = await prisma.conversation.findMany({
       where: { userId: session.id },
       include: {
-        company: { select: { id: true, name: true } },
+        company: { select: { id: true, name: true, website: true, logoUrl: true } },
         messages: { orderBy: { createdAt: 'desc' }, take: 1 },
       },
       orderBy: { createdAt: 'desc' },

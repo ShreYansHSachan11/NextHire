@@ -22,6 +22,8 @@ import {
   Chip,
   dayLabel,
   EmptyState,
+  ChatArt,
+  LiveBadge,
   Eyebrow,
   formatRelative,
   formatTime,
@@ -201,6 +203,25 @@ function ConversationsView() {
     }
   }, [conversationIdParam, items, openConversation]);
 
+  /**
+   * Live threads first, most recent message on top; then everyone not yet
+   * contacted, in the server's order. Interleaved, the one reply waiting for
+   * an answer could sit below a run of "Start" buttons.
+   */
+  const { threads, notContacted } = useMemo(() => {
+    const latestAt = (item: ConversationItem) => {
+      const list = item.conversation?.messages ?? [];
+      const last = list[list.length - 1];
+      return last ? new Date(last.createdAt).getTime() : 0;
+    };
+    return {
+      threads: items
+        .filter((item) => item.conversation)
+        .sort((a, b) => latestAt(b) - latestAt(a)),
+      notContacted: items.filter((item) => !item.conversation),
+    };
+  }, [items]);
+
   const selectedId = selected?.id;
 
   // Loading the history is keyed only on the selection, so a socket reconnect
@@ -331,14 +352,29 @@ function ConversationsView() {
           description="Chat with people who applied to your jobs."
           action={
             isConnected ? (
-              <Eyebrow as="span" accent className="inline-flex items-center gap-2">
-                <span className="dot-live" aria-hidden="true" />
-                Live
-              </Eyebrow>
+              <LiveBadge />
             ) : undefined
           }
         />
 
+        {/* No one to message yet: one empty state, not two side by side — the
+            thread pane's "pick an applicant from the list" pointed at a list
+            that had nobody in it. */}
+        {!loading && !loadError && items.length === 0 ? (
+          <Card className="mt-6">
+            <EmptyState
+              art={<ChatArt kind="conversation" />}
+              title="No applicants to message yet"
+              description="When someone applies to one of your jobs, you can message them here."
+              action={
+                <Link href="/jobs/post" className={buttonPrimary}>
+                  Post a job
+                  <Icon.arrowUpRight className="h-4 w-4" />
+                </Link>
+              }
+            />
+          </Card>
+        ) : (
         <div className="mt-6 grid gap-4 lg:grid-cols-5 lg:gap-6">
           {/* Applicant list */}
           <section
@@ -373,7 +409,7 @@ function ConversationsView() {
                   </div>
                 ) : items.length === 0 ? (
                   <EmptyState
-                    icon={<Icon.chat className="h-6 w-6" />}
+                    art={<ChatArt kind="inbox" />}
                     title="No applicants yet"
                     description="When someone applies, you can message them here."
                     action={
@@ -384,18 +420,45 @@ function ConversationsView() {
                     }
                   />
                 ) : (
-                  <ul className="divide-y divide-gray-200 dark:divide-gray-700">
-                    {items.map((item) => (
-                      <ConversationRow
-                        key={item.application.userId}
-                        item={item}
-                        active={item.conversation?.id === selectedId}
-                        starting={startingFor === item.application.userId}
-                        onOpen={openConversation}
-                        onStart={startConversation}
-                      />
-                    ))}
-                  </ul>
+                  <>
+                    {threads.length > 0 && (
+                      <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+                        {threads.map((item) => (
+                          <ConversationRow
+                            key={item.application.userId}
+                            item={item}
+                            active={item.conversation?.id === selectedId}
+                            starting={startingFor === item.application.userId}
+                            onOpen={openConversation}
+                            onStart={startConversation}
+                          />
+                        ))}
+                      </ul>
+                    )}
+                    {notContacted.length > 0 && (
+                      <>
+                        {/* Only labelled when it follows live threads; on its own
+                            the list needs no heading beyond "Applicants". */}
+                        {threads.length > 0 && (
+                          <h3 className="band-sunken border-y border-gray-200 px-4 py-2 dark:border-gray-700 sm:px-5">
+                            <Eyebrow as="span">Not contacted yet</Eyebrow>
+                          </h3>
+                        )}
+                        <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+                          {notContacted.map((item) => (
+                          <ConversationRow
+                            key={item.application.userId}
+                            item={item}
+                            active={item.conversation?.id === selectedId}
+                            starting={startingFor === item.application.userId}
+                            onOpen={openConversation}
+                            onStart={startConversation}
+                          />
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                  </>
                 )}
               </div>
             </Card>
@@ -458,7 +521,7 @@ function ConversationsView() {
               ) : (
                 <div className="band-sunken flex flex-1 items-center justify-center">
                   <EmptyState
-                    icon={<Icon.chat className="h-6 w-6" />}
+                    art={<ChatArt kind="select" />}
                     title="No conversation selected"
                     description="Pick an applicant from the list to start chatting."
                   />
@@ -467,6 +530,7 @@ function ConversationsView() {
             </Card>
           </section>
         </div>
+        )}
       </main>
     </div>
   );
@@ -524,7 +588,7 @@ function ConversationRow({
             {latest ? latest.content : application.user.email}
           </span>
           {unread > 0 && (
-            <span className="mono inline-flex min-w-[1.25rem] flex-shrink-0 items-center justify-center rounded-full border border-green-300 bg-green-50 px-1.5 py-0.5 text-[11px] font-semibold text-green-700 dark:border-green-700 dark:bg-green-950/50 dark:text-green-300">
+            <span className="mono inline-flex min-w-[1.25rem] flex-shrink-0 items-center justify-center rounded-full bg-[color:var(--accent-fill)] px-1.5 py-0.5 text-[11px] font-semibold text-[color:var(--ink-on-accent)]">
               {unread}
               <span className="sr-only"> unread messages</span>
             </span>

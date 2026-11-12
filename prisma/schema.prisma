@@ -54,6 +54,13 @@ model Company {
   /// matched only against these rows, so a real employer account can never end
   /// up owning a job someone else posted.
   isExternal    Boolean        @default(false)
+  /// The company's own site. Its domain is what the logo is looked up by.
+  website       String?
+  /// A logo the source gave us directly (an importer, or an upload).
+  logoUrl       String?
+  /// When the logo search last looked this company up by name, so each
+  /// company is searched once rather than on every import.
+  logoCheckedAt DateTime?
   conversations Conversation[]
   jobs          Job[]
   users         User[]

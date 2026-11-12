@@ -6,7 +6,9 @@ import { useEffect, useState } from "react";
 import { useSelector } from "react-redux";
 import type { RootState } from "@/store/store";
 import Navbar from "@/app/components/Navbar";
-import { ResumeScanCard } from "@/app/components/Showcase";
+import MatchFieldArt from "@/app/components/art/MatchFieldArt";
+import ResumeLensArt from "@/app/components/art/ResumeLensArt";
+import HiringTrackArt from "@/app/components/art/HiringTrackArt";
 import { compactLocation } from "@/app/components/JobCard";
 import {
   Avatar,
@@ -15,8 +17,8 @@ import {
   coarseFit,
   Eyebrow,
   Icon,
+  IconTile,
   NumberedItem,
-  SignalPanel,
   Skeleton,
   StatCard,
   buttonLarge,
@@ -24,6 +26,7 @@ import {
   buttonSecondary,
   formatCount,
 } from "@/app/components/ui";
+import { companyLogoSrc } from "@/lib/companyLogo";
 import { apiFetch } from "@/lib/clientAuth";
 
 /** Shape of `GET /api/stats` — four live counters, no invented numbers. */
@@ -149,7 +152,10 @@ export default function Home() {
               Upload your resume once. AI reads your experience and ranks every open job by how well it fits.
             </p>
 
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
+            {/* Side by side even on phones: stacked full-width, these and the
+                search button below made three full-width buttons in one screen,
+                two of them the same filled primary. */}
+            <div className="mt-8 flex flex-wrap items-center gap-3 [&>*]:flex-1 sm:[&>*]:flex-none">
               <Link href={primaryCta.href} className={`${buttonPrimary} ${buttonLarge}`}>
                 {primaryCta.label}
                 <Icon.arrowUpRight className="h-4 w-4" />
@@ -212,40 +218,10 @@ export default function Home() {
               </button>
             </form>
 
-            {/* -------------------------------------------------------------- */}
-            {/* Live signal strip — every figure comes from /api/stats          */}
-            {/* -------------------------------------------------------------- */}
-            {stats.status === "loading" && (
-              <SignalPanel
-                className="mt-4 max-w-3xl"
-                live
-                // An h3 here would skip a level: the nearest heading above is the
-                // page h1 and the first h2 is further down the page.
-                headingLevel={2}
-                title="Hiring now"
-                detail="Loading open jobs…"
-              />
-            )}
-
-            {ready && ready.jobs > 0 && (
-              <SignalPanel
-                className="mt-4 max-w-3xl"
-                live
-                headingLevel={2}
-                title="Hiring now"
-                // `formatCount` on both halves: the sentence and the readout
-                // beside it are the same figure, and they used to disagree
-                // above a thousand ("1,200 open roles" next to "1.2k").
-                // `toLocaleString()` with no locale also follows the visitor's
-                // runtime, while the readout is hard-coded English either way.
-                detail={`${formatCount(ready.jobs)} open jobs at ${formatCount(
-                  ready.companies
-                )} companies.`}
-                value={formatCount(ready.jobs)}
-                valueLabel="Open jobs"
-              />
-            )}
-
+            {/* The live "Hiring now" strip that sat here repeated the open-job
+                and company counts the stats band shows directly below, so the
+                same figure appeared twice within one screen. Only the zero-jobs
+                case keeps a note here, because then the band is hidden. */}
             {ready && ready.jobs === 0 && (
               <div className="panel mt-4 flex max-w-3xl flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -259,7 +235,7 @@ export default function Home() {
             )}
             </div>
 
-            <ResumeScanCard className="hidden lg:block" />
+            <MatchFieldArt className="animate-fade-in-up" />
           </div>
         </section>
 
@@ -280,38 +256,27 @@ export default function Home() {
                   highlight
                   label="Open jobs"
                   value={<StatValue value={ready?.jobs} label="Open jobs" />}
-                  icon={
-                    <StatIcon accent>
-                      <Icon.briefcase className="h-4 w-4" />
-                    </StatIcon>
-                  }
+                  icon={<Icon.briefcase className="h-4 w-4" />}
                 />
+                {/* Short visible labels: the two-up phone grid truncated
+                    "Companies hiring" and "Applications sent" mid-word. */}
                 <StatCard
-                  label="Companies hiring"
+                  tone="purple"
+                  label="Companies"
                   value={<StatValue value={ready?.companies} label="Companies hiring" />}
-                  icon={
-                    <StatIcon>
-                      <Icon.badge className="h-4 w-4" />
-                    </StatIcon>
-                  }
+                  icon={<Icon.building className="h-4 w-4" />}
                 />
                 <StatCard
+                  tone="purple"
                   label="Job seekers"
                   value={<StatValue value={ready?.seekers} label="Job seekers" />}
-                  icon={
-                    <StatIcon>
-                      <Icon.user className="h-4 w-4" />
-                    </StatIcon>
-                  }
+                  icon={<Icon.user className="h-4 w-4" />}
                 />
                 <StatCard
-                  label="Applications sent"
+                  tone="purple"
+                  label="Applications"
                   value={<StatValue value={ready?.applications} label="Applications sent" />}
-                  icon={
-                    <StatIcon>
-                      <Icon.document className="h-4 w-4" />
-                    </StatIcon>
-                  }
+                  icon={<Icon.document className="h-4 w-4" />}
                 />
               </div>
             </div>
@@ -336,25 +301,25 @@ export default function Home() {
             <div className="mt-10 grid grid-cols-1 gap-4 sm:mt-12 md:grid-cols-2 lg:grid-cols-4">
               <Feature
                 index={1}
-                icon={<Icon.document className="h-5 w-5" />}
+                icon={<Icon.scan className="h-6 w-6" />}
                 title="Reads your resume"
                 description="Upload a PDF and your skills, seniority and experience fill in automatically."
               />
               <Feature
                 index={2}
-                icon={<Icon.search className="h-5 w-5" />}
+                icon={<Icon.search className="h-6 w-6" />}
                 title="Search in plain words"
                 description="Try “remote React jobs”. Results match on meaning, not just keywords."
               />
               <Feature
                 index={3}
-                icon={<Icon.pulse className="h-5 w-5" />}
+                icon={<Icon.target className="h-6 w-6" />}
                 title="Fit you can see"
                 description="Every job shows how well it fits you, which skills match and what’s missing."
               />
               <Feature
                 index={4}
-                icon={<Icon.spark className="h-5 w-5" />}
+                icon={<Icon.lightbulb className="h-6 w-6" />}
                 title="A career coach on call"
                 description="Find skill gaps, draft a cover letter and practice for interviews for any job."
               />
@@ -369,7 +334,9 @@ export default function Home() {
         {/* ---------------------------------------------------------------- */}
         <section id="how-it-works" className="band-dark aurora py-16 sm:py-24">
           <div className="container-responsive">
-            <div className="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:gap-16">
+            {/* Heading on its own row, then the picture and the steps side by
+                side at the same height, so neither column leaves a hole. */}
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-end lg:gap-16">
               <div className="max-w-lg">
                 <Eyebrow accent className="mb-4">
                   How it works
@@ -377,12 +344,17 @@ export default function Home() {
                 <h2 className="text-2xl font-bold leading-tight text-white sm:text-3xl lg:text-4xl">
                   From sign-up to offer in four steps.
                 </h2>
-                <p className="mt-5 text-base leading-relaxed text-gray-400">
-                  The same simple steps for job seekers and employers.
-                </p>
               </div>
+              <p className="max-w-md text-base leading-relaxed text-gray-400 lg:justify-self-end lg:pb-1">
+                The same simple steps for job seekers and employers. Your resume is read once, then every job is
+                measured against it.
+              </p>
+            </div>
 
-              <ol className="space-y-8">
+            <div className="mt-10 grid grid-cols-1 gap-10 sm:mt-14 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:items-stretch lg:gap-16">
+              <ResumeLensArt />
+
+              <ol className="space-y-8 lg:flex lg:flex-col lg:justify-between lg:space-y-0 lg:py-6">
                 <li>
                   <NumberedItem index={1} title="Create an account">
                     Join as a job seeker or an employer.
@@ -420,10 +392,12 @@ export default function Home() {
               </h2>
             </div>
 
+            <HiringTrackArt className="mt-10" />
+
             <div className="mt-10 grid grid-cols-1 gap-4 lg:grid-cols-2">
               <AudiencePanel
                 eyebrow="For job seekers"
-                icon={<Icon.user className="h-5 w-5" />}
+                icon={<Icon.rocket className="h-6 w-6" />}
                 title="Find your next job"
                 points={[
                   "Browse every open job, no account needed",
@@ -439,7 +413,7 @@ export default function Home() {
               />
               <AudiencePanel
                 eyebrow="For employers"
-                icon={<Icon.briefcase className="h-5 w-5" />}
+                icon={<Icon.building className="h-6 w-6" />}
                 title="Review applicants in one place"
                 points={[
                   "Post a job in minutes, and edit or close it any time",
@@ -569,19 +543,6 @@ export default function Home() {
 /* Page-local building blocks                                                  */
 /* -------------------------------------------------------------------------- */
 
-/**
- * `StatCard` tints its icon slot by `tone`, but accent discipline says emerald
- * belongs to live/match signal only. A nested colour wins over the inherited
- * one, so the row stays neutral apart from the single live metric.
- */
-function StatIcon({ children, accent = false }: { children: React.ReactNode; accent?: boolean }) {
-  return (
-    <span className={accent ? "text-green-600 dark:text-green-400" : "text-gray-500 dark:text-gray-400"}>
-      {children}
-    </span>
-  );
-}
-
 /** A live counter, or a skeleton while `/api/stats` is still in flight. */
 function StatValue({ value, label }: { value?: number; label: string }) {
   if (value === undefined) {
@@ -616,9 +577,7 @@ function Feature({
         <span className="mono text-sm font-medium text-blue-600 dark:text-blue-400">
           {String(index).padStart(2, "0")}
         </span>
-        <span className="tile tile-accent h-10 w-10" aria-hidden="true">
-          {icon}
-        </span>
+        <IconTile icon={icon} size="lg" />
       </div>
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
       <p className="mt-2 text-sm leading-relaxed text-gray-600 dark:text-gray-400">{description}</p>
@@ -633,7 +592,7 @@ interface ShowcaseJob {
   salary?: string | null;
   type?: string | null;
   skills?: string[];
-  company?: { name: string } | null;
+  company?: { name: string; website?: string | null; logoUrl?: string | null } | null;
   match?: { score: number } | null;
 }
 
@@ -742,7 +701,7 @@ function ShowcaseJobCard({ job, lead }: { job: ShowcaseJob; lead: boolean }) {
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
-          <Avatar name={company} />
+          <Avatar name={company} logo={companyLogoSrc(job.company)} />
           <div className="min-w-0">
             <h3 className="truncate text-base font-semibold text-gray-900 dark:text-white">{job.title}</h3>
             <p className="truncate text-sm text-gray-600 dark:text-gray-400">{meta}</p>
@@ -791,12 +750,7 @@ function AudiencePanel({
   return (
     <Card className="flex h-full flex-col p-6 sm:p-8">
       <div className="mb-5 flex items-start gap-3">
-        <span
-          className="tile h-10 w-10 flex-shrink-0"
-          aria-hidden="true"
-        >
-          {icon}
-        </span>
+        <IconTile icon={icon} size="lg" />
         <div className="min-w-0">
           <Eyebrow className="mb-1.5">{eyebrow}</Eyebrow>
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white sm:text-xl">{title}</h3>

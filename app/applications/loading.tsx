@@ -26,9 +26,9 @@ export default function Loading() {
         </div>
 
         {/* Five status tiles. */}
-        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5">
+        <div className="-mx-4 mt-6 flex gap-3 overflow-hidden px-4 sm:mx-0 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-0 lg:grid-cols-5">
           {Array.from({ length: 5 }, (_, index) => (
-            <div key={index} className="panel p-4">
+            <div key={index} className="panel min-w-[9.5rem] p-5 sm:min-w-0">
               <Skeleton className="h-3 w-20" />
               <Skeleton className="mt-3 h-7 w-10" />
               <Skeleton className="mt-2 h-3 w-24" />
@@ -40,9 +40,12 @@ export default function Loading() {
         <div className="panel mt-4 p-3 sm:p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:gap-4">
             <Skeleton className="h-11 w-full rounded-lg lg:flex-1" />
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:flex">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:flex">
               {Array.from({ length: 3 }, (_, index) => (
-                <Skeleton key={index} className="h-11 w-full rounded-lg lg:w-40" />
+                <Skeleton
+                  key={index}
+                  className={`h-11 w-full rounded-lg lg:w-40 ${index === 1 ? "col-span-2 sm:col-span-1" : ""}`}
+                />
               ))}
             </div>
           </div>
@@ -62,14 +65,12 @@ export default function Loading() {
                     <div className="min-w-0 flex-1">
                       <Skeleton className="h-5 w-40 max-w-full" />
                       <Skeleton className="mt-2 h-3 w-56 max-w-full" />
-                      <Skeleton className="mt-2.5 h-4 w-48 max-w-full" />
-                      <Skeleton className="mt-2 h-3 w-32" />
+                      <Skeleton className="mt-2.5 h-4 w-64 max-w-full" />
+                      <Skeleton className="mt-3 h-7 w-48 max-w-full rounded-md" />
                     </div>
                   </div>
-                  <div className="space-y-2.5 sm:w-60 sm:flex-shrink-0">
-                    <Skeleton className="h-4 w-24 sm:ml-auto" />
-                    <Skeleton className="h-6 w-28 rounded-md" />
-                    <Skeleton className="h-11 w-full rounded-lg" />
+                  <div className="space-y-2 sm:w-48 sm:flex-shrink-0">
+                    <Skeleton className="h-3 w-12" />
                     <Skeleton className="h-11 w-full rounded-lg" />
                   </div>
                 </div>

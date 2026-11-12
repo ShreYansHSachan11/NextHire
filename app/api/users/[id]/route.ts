@@ -177,7 +177,11 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
     // `User.name` in sync left every job card showing the old employer name.
     const updated = await prisma.$transaction(async (tx) => {
       if (existing.role === 'COMPANY' && existing.companyId) {
-        await tx.company.update({ where: { id: existing.companyId }, data: { name } });
+        // The website rides along so the company's jobs show its logo.
+        await tx.company.update({
+          where: { id: existing.companyId },
+          data: { name, ...('website' in data ? { website: data.website as string | null } : {}) },
+        });
       }
       return tx.user.update({
         where: { id },

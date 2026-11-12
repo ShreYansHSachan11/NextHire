@@ -18,6 +18,12 @@ const nextConfig: NextConfig = {
 
   serverExternalPackages: ["@prisma/client"],
 
+  // Logo.dev's publishable key is public by design (it rides in every logo
+  // URL), so it is exposed to the browser under a NEXT_PUBLIC_ name.
+  env: {
+    NEXT_PUBLIC_LOGO_DEV_KEY: process.env.LOGO_DEV_PUBLISHABLE_KEY ?? "",
+  },
+
   // Security headers. The app previously sent none.
   async headers() {
     return [

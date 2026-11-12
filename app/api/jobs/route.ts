@@ -45,7 +45,7 @@ export const maxDuration = 300;
 
 /** Public feed columns. Deliberately no `embedding` — see FEED_INCLUDE_WITH_VECTOR. */
 const FEED_INCLUDE = {
-  company: { select: { id: true, name: true, profile: true } },
+  company: { select: { id: true, name: true, profile: true, website: true, logoUrl: true } },
   _count: { select: { applications: true } },
 } as const;
 
@@ -691,7 +691,7 @@ export async function GET(req: NextRequest) {
       const jobs = await prisma.job.findMany({
         where: { companyId },
         include: {
-          company: { select: { id: true, name: true, profile: true } },
+          company: { select: { id: true, name: true, profile: true, website: true, logoUrl: true } },
           applications: {
             include: {
               user: {
@@ -984,7 +984,7 @@ export async function POST(req: NextRequest) {
         companyId,
         isActive: body.isActive === false ? false : true,
       },
-      include: { company: { select: { id: true, name: true, profile: true } } },
+      include: { company: { select: { id: true, name: true, profile: true, website: true, logoUrl: true } } },
     });
 
     // Fire-and-forget: a posting must go live even if Gemini is down or slow.

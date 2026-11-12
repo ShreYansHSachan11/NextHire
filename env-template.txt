@@ -74,3 +74,11 @@ ADZUNA_APP_KEY=
 # Two-letter country code (in, gb, us, …) and job category; defaults: in, it-jobs.
 ADZUNA_COUNTRY=
 ADZUNA_CATEGORY=
+
+# Company logos on job cards (https://www.logo.dev). Use the publishable key
+# (pk_...), never the secret one: it is sent to the browser in image URLs.
+# Without it, cards show the company initial.
+LOGO_DEV_PUBLISHABLE_KEY=
+# Server only (never NEXT_PUBLIC_): the job import uses it to look up the
+# website of companies that came with only a name, so their logo can show.
+LOGO_DEV_SECRET_KEY=

@@ -26,7 +26,7 @@ import {
  * surest way not to serialise a 768-float vector is never to load one.
  */
 const CARD_INCLUDE = {
-  company: { select: { id: true, name: true, profile: true } },
+  company: { select: { id: true, name: true, profile: true, website: true, logoUrl: true } },
   _count: { select: { applications: true } },
 } as const;
 

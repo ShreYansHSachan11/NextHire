@@ -7,6 +7,7 @@ import { useSelector } from "react-redux";
 import type { RootState } from "@/store/store";
 import Navbar from "@/app/components/Navbar";
 import {
+  Avatar,
   Alert,
   BackLink,
   Button,
@@ -18,6 +19,7 @@ import {
   Eyebrow,
   formatDate,
   Icon,
+  IconTile,
   inputClass,
   JobStateBadge,
   Label,
@@ -27,7 +29,11 @@ import {
   Skeleton,
   SkeletonText,
   StatusBadge,
+  StatusIcon,
+  TONE_TEXT,
+  type StatusTone,
 } from "@/app/components/ui";
+import { companyLogoSrc } from "@/lib/companyLogo";
 import { useToast } from "@/app/components/Toast";
 import { compactLocation } from "@/app/components/JobCard";
 import { apiFetch } from "@/lib/clientAuth";
@@ -121,7 +127,7 @@ interface JobDetail {
   location?: string | null;
   type?: string | null;
   companyId: string;
-  company?: { id: string; name: string; profile?: string | null };
+  company?: { id: string; name: string; profile?: string | null; website?: string | null; logoUrl?: string | null };
   createdAt: string;
   isActive: boolean;
   /** Set for a job imported from a public job board; applied for at `sourceUrl`. */
@@ -148,7 +154,7 @@ interface SimilarJob {
   location?: string | null;
   type?: string | null;
   salary?: string | null;
-  company?: { id?: string; name: string; profile?: string | null };
+  company?: { id?: string; name: string; profile?: string | null; website?: string | null; logoUrl?: string | null };
   createdAt: string;
   similarity?: number;
 }
@@ -365,9 +371,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
     return (
       <PageShell>
         <Card className="mx-auto max-w-md p-6 text-center sm:p-8">
-          <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 dark:border-red-900 dark:bg-red-950/40 dark:text-red-400">
-            <Icon.warning className="h-6 w-6" />
-          </span>
+          <IconTile icon={<Icon.warning className="h-6 w-6" />} tone="bad" size="lg" className="mx-auto mb-4" />
           <Eyebrow className="mb-2">Request failed</Eyebrow>
           <h1 className="mb-2 text-xl font-semibold text-gray-900 dark:text-white">
             {loadError || "Job not found"}
@@ -397,22 +401,31 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
   const skills = job.skills ?? [];
   const importedFrom = job.sourceUrl ? sourceLabel(job.source, job.company?.name) ?? "the original site" : null;
 
+  // The fit headline, at the top of whichever apply card this reader gets, so
+  // "how well do I fit" and "apply" are read together. The full breakdown sits
+  // under the description and this links to it.
+  const fitSummary = match ? <FitSummary score={match.score} /> : null;
+  // Open, not ours, not applied to yet, and someone who can act on it: a
+  // seeker, or a visitor who can sign in. A company account has no action.
+  const showApplyShortcut =
+    !isOwner &&
+    job.isActive &&
+    !alreadyApplied &&
+    (Boolean(job.sourceUrl) || isSeeker || !mounted || !isAuthenticated);
+
   return (
     <PageShell>
       <BackLink href="/jobs" className="mb-5">
         All jobs
       </BackLink>
 
-      {/* Header: company tile, tight role title, state code, metadata chips. */}
-      <header className="mb-6">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+      {/* Header: company tile, tight role title, metadata chips, then one quiet
+          line of status. The open/closed badge used to float alone in the top
+          right corner, a long way from the title it describes. */}
+      <header className="mb-6 sm:mb-8">
+        <div className="flex items-start">
           <div className="flex min-w-0 items-start gap-3 sm:gap-4">
-            <span
-              className="mono tile tile-ink h-12 w-12 flex-shrink-0 text-lg font-semibold sm:h-14 sm:w-14 sm:text-xl"
-              aria-hidden="true"
-            >
-              {job.company?.name?.charAt(0).toUpperCase() ?? "C"}
-            </span>
+            <Avatar name={job.company?.name ?? "Company"} size="lg" logo={companyLogoSrc(job.company)} />
             <div className="min-w-0">
               <Eyebrow className="mb-1.5">
                 {job.company?.name ?? "Company"}
@@ -432,7 +445,6 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
               </h1>
             </div>
           </div>
-          <JobStateBadge isActive={job.isActive} />
         </div>
 
         <div className="mt-4 flex flex-wrap gap-1.5">
@@ -460,31 +472,92 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
             ))}
           </div>
         )}
+
+        {/* The two facts the chips do not carry. These used to sit in a
+            separate "Job details" card that repeated location, salary, type and
+            experience a second time, a screen away from the chips above. */}
+        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+          <JobStateBadge isActive={job.isActive} />
+          <Eyebrow as="span">Posted {formatDate(job.createdAt)}</Eyebrow>
+          {/* Applications to an imported job happen at the source, so a
+              NextHire count would only ever say 0. */}
+          {!importedFrom && (
+            <>
+              <span aria-hidden="true" className="eyebrow">
+                ·
+              </span>
+              <Eyebrow as="span">
+                {applicants} {applicants === 1 ? "applicant" : "applicants"}
+              </Eyebrow>
+            </>
+          )}
+        </div>
+
+        {/* Phones only. Below `lg` the apply card follows the description, and
+            an imported posting can run to several screens of text, so the
+            action is repeated here: straight out to the source for an imported
+            job, and down to the form for one that applies on NextHire. */}
+        {showApplyShortcut && (
+          <div className="mt-5 lg:hidden">
+            {job.sourceUrl ? (
+              <a href={job.sourceUrl} target="_blank" rel="noopener" className={`${buttonPrimary} w-full`}>
+                Apply on {importedFrom}
+                <Icon.arrowUpRight className="h-4 w-4" />
+              </a>
+            ) : isSeeker ? (
+              <a href="#apply" className={`${buttonPrimary} w-full`}>
+                Apply for this job
+                <Icon.chevronDown className="h-4 w-4" />
+              </a>
+            ) : (
+              <Link
+                href={`/auth/login?next=${encodeURIComponent(`/jobs/${jobId}`)}`}
+                className={`${buttonPrimary} w-full`}
+              >
+                Sign in to apply
+              </Link>
+            )}
+          </div>
+        )}
       </header>
 
-      <div className="grid gap-5 lg:grid-cols-3 lg:gap-6">
-        {/* ------------------------------------------------------------ */}
-        {/* Main column                                                   */}
-        {/* ------------------------------------------------------------ */}
-        <div className="lg:col-span-2">
+      {/*
+       * Two columns on a wide screen, in this order for everyone else:
+       * description, the apply card, then the match breakdown.
+       *
+       * The breakdown used to be stacked under the apply form in the narrow
+       * column, so a short posting left a tall empty hole under its description
+       * while the sidebar ran on for a thousand pixels. It now sits in the wide
+       * column under the description, where its meters have room to sit side by
+       * side, and the sidebar holds only what has to stay in reach: the fit
+       * headline and the apply action.
+       *
+       * `grid-rows-[auto_1fr]` gives any spare height to the second row, so a
+       * sidebar taller than the description pushes space below the breakdown
+       * rather than opening a gap between the two cards.
+       */}
+      <div className="grid gap-5 lg:grid-cols-3 lg:grid-rows-[auto_1fr] lg:gap-6">
+        <div className="min-w-0 lg:col-span-2">
           <Card>
             <CardHeader eyebrow="About the job" title="Job description" />
             <div className="px-4 py-5 sm:px-6">
-              {/* Capped at a comfortable reading measure; the body is free text
-                  from the poster, so newlines have to survive. */}
-              <p className="max-w-[68ch] whitespace-pre-wrap [overflow-wrap:anywhere] text-sm leading-relaxed text-gray-600 dark:text-gray-300 sm:text-base">
-                {job.description}
-              </p>
+              <DescriptionBody text={job.description} />
             </div>
           </Card>
         </div>
 
         {/* ------------------------------------------------------------ */}
-        {/* Sidebar — the instrument panel                                */}
+        {/* Sidebar — fit headline and the apply action                   */}
         {/* ------------------------------------------------------------ */}
-        {/* Sticky as a whole column (grid children stretch by default, hence
-            `self-start`), so the apply card and the readout travel together. */}
-        <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start">
+        {/* Sticky so the action stays in reach down a long description. Not
+            when the posting carries screening questions: a sticky column
+            taller than the screen hides its own Apply button. */}
+        <aside
+          id="apply"
+          className={`scroll-mt-24 space-y-4 lg:col-start-3 lg:row-span-2 lg:row-start-1 lg:self-start ${
+            questions.length > 0 ? "" : "lg:sticky lg:top-24"
+          }`}
+        >
           {isOwner ? (
             /* The company that posted the role gets management, not an
                apply form it could never submit. */
@@ -510,6 +583,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
             /* Imported from a public job board: there is no hiring team on
                NextHire to receive an application, so apply where it was posted. */
             <Card className="p-4 sm:p-5">
+              {fitSummary}
               <Eyebrow className="mb-2">Apply</Eyebrow>
               <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
                 {job.isActive
@@ -531,19 +605,26 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
             /* Emerald hairline: an accepted application is the page's one
                "signal" state. */
             <Card signal className="p-4 sm:p-5">
-              <Eyebrow accent className="mb-3">
-                {submitted ? "Application sent" : "You’ve applied"}
-              </Eyebrow>
+              {fitSummary}
+              <div className="mb-4 flex items-center gap-3">
+                <StatusIcon tone="good" size="lg" />
+                <div className="min-w-0">
+                  <p className="text-base font-semibold text-gray-900 dark:text-white">
+                    {submitted ? "Application sent" : "You’ve applied"}
+                  </p>
+                  {existingApplication?.createdAt && (
+                    <Eyebrow as="span">Applied {formatDate(existingApplication.createdAt)}</Eyebrow>
+                  )}
+                </div>
+              </div>
               {submitted && (
                 <Alert variant="success" className="mb-4">
                   Your application was sent to {job.company?.name ?? "the company"}.
                 </Alert>
               )}
               <div className="mb-3 flex flex-wrap items-center gap-2">
+                <Eyebrow as="span">Status</Eyebrow>
                 <StatusBadge status={existingApplication?.status ?? "PENDING"} />
-                {existingApplication?.createdAt && (
-                  <Eyebrow as="span">Applied {formatDate(existingApplication.createdAt)}</Eyebrow>
-                )}
               </div>
               <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
                 {job.company?.name ?? "The company"} will reply through NextHire. Track it from your dashboard.
@@ -557,6 +638,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
             /* A closed job used to keep an enabled Apply button, and the
                failure only appeared after the round-trip. */
             <Card className="p-4 sm:p-5">
+              {fitSummary}
               <Eyebrow className="mb-3">Applications closed</Eyebrow>
               <Alert variant="warning" className="mb-4">
                 This job is no longer accepting applications.
@@ -596,6 +678,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
             </Card>
           ) : (
             <Card className="p-4 sm:p-5">
+              {fitSummary}
               <Eyebrow className="mb-3">Apply for this job</Eyebrow>
 
               {applyError && (
@@ -648,7 +731,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
                   value={message}
                   maxLength={MESSAGE_LIMIT}
                   onChange={(event) => setMessage(event.target.value)}
-                  rows={5}
+                  rows={4}
                   aria-describedby="cover-letter-count"
                   placeholder="Tell them why you're a good fit…"
                   className={`${inputClass} resize-y text-sm`}
@@ -670,10 +753,6 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
             </Card>
           )}
 
-          {/* Sits above the fact readout: the score is about *this reader*, the
-              facts below are about the role, and the personal thing goes first. */}
-          {match && <MatchPanel jobId={jobId} match={match} />}
-
           {/* No score and nothing to score against. One line, no panel — an
               empty breakdown frame would be worse than none at all. */}
           {!match && isSeeker && (
@@ -689,32 +768,25 @@ export default function JobDetailsPage({ params }: { params: Promise<{ jobId: st
             </p>
           )}
 
-          {/* The fact readout: mono values under mono captions, on the
-              graph-paper field used for telemetry elsewhere in the app. */}
-          <Card grid className="p-4 sm:p-5">
-            <Eyebrow className="mb-4">Job details</Eyebrow>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-3">
-              <Fact label="Location" value={job.location ?? "—"} />
-              <Fact label="Salary" value={job.salary ?? "—"} />
-              <Fact label="Type" value={job.type ?? "—"} />
-              <Fact label="Experience" value={job.experience ? experienceLabel(job.experience) : "—"} />
-              <Fact label="Posted" value={formatDate(job.createdAt)} />
-              {/* Applications to an imported job happen at the source, so a
-                  NextHire count would only ever say 0. */}
-              {importedFrom ? (
-                <Fact label="Listed on" value={importedFrom} />
-              ) : (
-                <Fact label="Applicants" value={String(applicants)} />
-              )}
-            </dl>
-          </Card>
         </aside>
+
+        {/* The breakdown, in the wide column under the description. The score
+            is about *this reader* and the description about the role; the
+            headline is already in the sidebar beside Apply, so this is the
+            detail behind it rather than a second headline. */}
+        {match && (
+          <div className="min-w-0 lg:col-span-2 lg:self-start">
+            <MatchPanel jobId={jobId} match={match} />
+          </div>
+        )}
       </div>
 
       {/* Below the fold and outside the grid: neighbours are the exit route from
           this page, so they sit after everything that might keep the reader on
-          it. Renders nothing at all when there are none. */}
-      <SimilarRoles jobId={jobId} />
+          it. Renders nothing at all when there are none. Not for the company
+          that posted this job: "you may also like" other companies' jobs is
+          a seeker's prompt, not an employer's. */}
+      {!isOwner && <SimilarRoles jobId={jobId} />}
     </PageShell>
   );
 }
@@ -988,116 +1060,176 @@ function MatchPanel({ jobId, match }: { jobId: string; match: MatchBreakdown }) 
   const caveatId = "fit-caveat";
 
   return (
-    <Card grid className="p-4 sm:p-5">
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="tile tile-accent h-8 w-8 flex-shrink-0" aria-hidden="true">
-            <Icon.graph className="h-4 w-4" />
-          </span>
-          <h2 className="truncate text-sm font-semibold text-gray-900 dark:text-white">
-            Match breakdown
+    // `scroll-mt-24` so the sidebar's "See breakdown" link lands below the
+    // floating navbar rather than under it. Not `grid`: this panel now carries
+    // a sentence of prose, and graph paper behind body text costs contrast.
+    <Card as="section" id="match" aria-labelledby="match-heading" className="scroll-mt-24">
+      <div className="flex items-center gap-3 border-b border-[var(--line-subtle)] px-4 py-4 sm:px-6 sm:py-5">
+        <IconTile icon={<Icon.target className="h-5 w-5" />} />
+        <div className="min-w-0">
+          <Eyebrow className="mb-1">Your fit</Eyebrow>
+          <h2
+            id="match-heading"
+            className="text-base font-semibold leading-snug tracking-tight text-gray-900 dark:text-white sm:text-[1.0625rem]"
+          >
+            How you match this job
           </h2>
         </div>
-        {/* Our own scoring revision, not a model version — inventing one would
-            be a claim we cannot stand behind. */}
-        <Eyebrow as="span" className="flex-shrink-0 pt-1.5">
-          Fit score
-        </Eyebrow>
       </div>
 
-      {/* Prose first: a sentence is what a person reads, and the meters below
-          are the receipts for it. Renders nothing at all when there is no
-          sentence to show — see `MatchRationale`. */}
-      <MatchRationale jobId={jobId} score={match.score} />
+      <div className="px-4 py-5 sm:px-6">
+        {/*
+         * Two halves on a wide card: the verdict on the left — the band, then
+         * the sentence that explains it — and its receipts on the right.
+         *
+         * Headline. `MatchScore` rather than hand-set digits: this was the one
+         * surface still printing `76%`, which is the shape the kit was changed to
+         * stop producing — beside the word "fit" a percentage reads as a
+         * probability of being hired, and one displayed point is 0.002 of cosine,
+         * so the precision is roughly 10x what the signal carries. `coarse={false}` because this is the detail panel: the exact
+         * value belongs here even though the band leads, and the list surfaces
+         * round to 5.
+         *
+         * `describedBy` ties it to the caveat at the foot of the panel, which was
+         * an unassociated `<p>` a screen-reader user querying the score never
+         * heard (§2.4).
+         */}
+        <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] md:gap-8">
+          <div className="min-w-0">
+            <MatchScore
+              value={match.score}
+              caption="Profile fit"
+              coarse={false}
+              size="lg"
+              align="left"
+              showBar
+              describedBy={caveatId}
+            />
+            {/* The sentence, then the meters as its receipts. Renders nothing
+                at all when there is no sentence to show — see `MatchRationale`. */}
+            <MatchRationale jobId={jobId} score={match.score} />
+          </div>
 
-      {/*
-       * Headline. `MatchScore` rather than hand-set digits: this was the one
-       * surface still printing `76%`, which is the shape the kit was changed to
-       * stop producing — beside the word "fit" a percentage reads as a
-       * probability of being hired, and one displayed point is 0.002 of cosine,
-       * so the precision is roughly 10x what the signal carries. `coarse={false}` because this is the detail panel: the exact
-       * value belongs here even though the band leads, and the list surfaces
-       * round to 5.
-       *
-       * `describedBy` ties it to the caveat at the foot of the panel, which was
-       * an unassociated `<p>` a screen-reader user querying the score never
-       * heard (§2.4).
-       */}
-      <div className="mb-5 border-b border-gray-200 pb-4 dark:border-gray-700">
-        <MatchScore
-          value={match.score}
-          caption="Profile fit"
-          coarse={false}
-          size="lg"
-          align="left"
-          showBar
-          describedBy={caveatId}
-        />
-      </div>
-
-      {/*
-       * The four facets that produced the number above, each labelled with its
-       * share of the blend. Four identically-sized bars imply four equal inputs
-       * and the blend is 70/18/7/5 — an explanation that misrepresents how the
-       * number was produced is worse than no explanation. The weights come from `MATCH_WEIGHTS`, so the label cannot drift
-       * from the scorer.
-       */}
-      <div className="space-y-3">
-        <MeterRow
-          label="Experience fit"
-          value={match.facets.semantic}
-          weight={MATCH_WEIGHTS.semantic}
-        />
-        <MeterRow label="Skills match" value={match.facets.skills} weight={MATCH_WEIGHTS.skills} />
-        <MeterRow label="Location" value={match.facets.location} weight={MATCH_WEIGHTS.location} />
-        <MeterRow
-          label="Seniority"
-          value={match.facets.seniority}
-          weight={MATCH_WEIGHTS.seniority}
-        />
-      </div>
-
-      {match.sharedSkills.length > 0 && (
-        <div className="mt-5">
-          <Eyebrow accent className="mb-2">
-            Matched
-          </Eyebrow>
-          <div className="flex flex-wrap gap-1.5">
-            {match.sharedSkills.map((skill) => (
-              <Chip key={skill} accent>
-                {skill}
-              </Chip>
-            ))}
+          {/*
+           * The four facets that produced the number, each labelled with its
+           * share of the blend. Four identically-sized bars imply four equal inputs
+           * and the blend is 70/18/7/5 — an explanation that misrepresents how the
+           * number was produced is worse than no explanation. The weights come from `MATCH_WEIGHTS`, so the label cannot drift
+           * from the scorer.
+           */}
+          <div className="min-w-0 space-y-3">
+            <MeterRow
+              icon={<Icon.briefcase className="h-4 w-4" />}
+              label="Experience fit"
+              value={match.facets.semantic}
+              weight={MATCH_WEIGHTS.semantic}
+            />
+            <MeterRow
+              icon={<Icon.layers className="h-4 w-4" />}
+              label="Skills match"
+              value={match.facets.skills}
+              weight={MATCH_WEIGHTS.skills}
+            />
+            <MeterRow
+              icon={<Icon.location className="h-4 w-4" />}
+              label="Location"
+              value={match.facets.location}
+              weight={MATCH_WEIGHTS.location}
+            />
+            <MeterRow
+              icon={<Icon.trendingUp className="h-4 w-4" />}
+              label="Seniority"
+              value={match.facets.seniority}
+              weight={MATCH_WEIGHTS.seniority}
+            />
           </div>
         </div>
-      )}
 
-      {match.missingSkills.length > 0 && (
-        <div className="mt-4">
-          <Eyebrow className="mb-2">Missing from your profile</Eyebrow>
-          <div className="flex flex-wrap gap-1.5">
-            {match.missingSkills.map((skill) => (
-              <Chip key={skill}>{skill}</Chip>
-            ))}
+        {(match.sharedSkills.length > 0 || match.missingSkills.length > 0) && (
+          <div className="mt-6 grid gap-5 border-t border-[var(--line-subtle)] pt-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] md:gap-8">
+            {match.sharedSkills.length > 0 && (
+              <div className="min-w-0">
+                <SkillGroupHeading tone="good" count={match.sharedSkills.length}>
+                  Skills you have
+                </SkillGroupHeading>
+                <div className="flex flex-wrap gap-1.5">
+                  {match.sharedSkills.map((skill) => (
+                    <Chip key={skill} tone="good">
+                      {skill}
+                    </Chip>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {match.missingSkills.length > 0 && (
+              <div className="min-w-0">
+                <SkillGroupHeading tone="warn" count={match.missingSkills.length}>
+                  Missing from your profile
+                </SkillGroupHeading>
+                <div className="flex flex-wrap gap-1.5">
+                  {match.missingSkills.map((skill) => (
+                    <Chip key={skill} tone="warn">
+                      {skill}
+                    </Chip>
+                  ))}
+                </div>
+                {/* Deliberately not "missing": the posting asks for these and your
+                    profile does not mention them, which is a prompt to update the
+                    profile at least as often as it is a reason not to apply. */}
+                <p className="mt-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                  This job lists these, but your profile doesn’t. Add them if you have them.
+                </p>
+              </div>
+            )}
           </div>
-          {/* Deliberately not "missing": the posting asks for these and your
-              profile does not mention them, which is a prompt to update the
-              profile at least as often as it is a reason not to apply. */}
-          <p className="mt-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-            This job lists these, but your profile doesn’t. Add them if you have them.
-          </p>
-        </div>
-      )}
+        )}
 
-      <p
-        id={caveatId}
-        className="mt-5 border-t border-gray-200 pt-4 text-xs leading-relaxed text-gray-500 dark:border-gray-700 dark:text-gray-400"
-      >
-        {MATCH_CAVEAT_SEEKER}
-      </p>
+        <p
+          id={caveatId}
+          className="mt-6 border-t border-gray-200 pt-4 text-xs leading-relaxed text-gray-500 dark:border-gray-700 dark:text-gray-400"
+        >
+          {MATCH_CAVEAT_SEEKER}
+        </p>
 
-      <MatchDisclosure />
+        <MatchDisclosure />
+      </div>
     </Card>
+  );
+}
+
+/**
+ * The fit headline at the top of the apply card: the band and the number, and
+ * a link down to the breakdown. Exact rather than rounded, so it agrees with the
+ * panel it links to.
+ */
+/** "Skills you have · 3" in the group's status colour, led by its status dot. */
+function SkillGroupHeading({
+  tone,
+  count,
+  children,
+}: {
+  tone: StatusTone;
+  count: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <p className={`mb-2.5 flex items-center gap-2 text-sm font-semibold ${TONE_TEXT[tone]}`}>
+      <StatusIcon tone={tone} />
+      {children}
+      <Readout className="text-xs font-medium text-gray-500 dark:text-gray-400">{count}</Readout>
+    </p>
+  );
+}
+
+function FitSummary({ score }: { score: number }) {
+  return (
+    <div className="mb-4 flex items-start justify-between gap-3 border-b border-[var(--line-subtle)] pb-4">
+      <MatchScore value={score} caption="Profile fit" coarse={false} size="lg" align="left" />
+      <a href="#match" className="link hit-24 mt-1 flex-shrink-0 text-xs font-medium">
+        See breakdown
+      </a>
+    </div>
   );
 }
 
@@ -1128,7 +1260,7 @@ function MatchDisclosure() {
   const pct = (weight: number) => Math.round(weight * 100);
 
   return (
-    <details className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-700">
+    <details className="mt-3">
       {/* `list-none` plus the marker rule in globals.css: the default triangle
           sits on the text baseline and cannot be aligned with the eyebrow. */}
       <summary className="disclosure-summary eyebrow hit-24">How your fit is calculated</summary>
@@ -1222,7 +1354,7 @@ function MatchRationale({ jobId, score }: { jobId: string; score: number }) {
 
   if (pending) {
     return (
-      <div className="mb-5 border-b border-gray-200 pb-4 dark:border-gray-700">
+      <div className="mt-5">
         <Skeleton className="h-3 w-28" />
         <Skeleton className="mt-2.5 h-3.5 w-full" />
         <Skeleton className="mt-1.5 h-3.5 w-4/5" />
@@ -1234,7 +1366,7 @@ function MatchRationale({ jobId, score }: { jobId: string; score: number }) {
   if (!text) return null;
 
   return (
-    <div className="mb-5 border-b border-gray-200 pb-4 dark:border-gray-700">
+    <div className="mt-5">
       {/* `Icon.spark` is the kit's AI affordance everywhere else in the app, so
           the glyph is what marks this as machine-written rather than copy. */}
       <Eyebrow accent className="mb-2 flex items-center gap-1.5">
@@ -1247,7 +1379,7 @@ function MatchRationale({ jobId, score }: { jobId: string; score: number }) {
           below and nothing else, so it cannot claim an overlap the meters do
           not show. The second half is the framing used product-wide. */}
       <p className="mt-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-        Based on the breakdown below, not your resume. A guide, not an assessment of you.
+        Based on this breakdown, not your resume. A guide, not an assessment of you.
       </p>
     </div>
   );
@@ -1322,12 +1454,7 @@ function SimilarJobCard({ job }: { job: SimilarJob }) {
   return (
     <Card interactive className="group relative flex flex-col p-4">
       <div className="flex min-w-0 items-start gap-3">
-        <span
-          className="mono tile tile-ink h-10 w-10 flex-shrink-0 text-sm font-semibold"
-          aria-hidden="true"
-        >
-          {job.company?.name?.charAt(0).toUpperCase() ?? "C"}
-        </span>
+        <Avatar name={job.company?.name ?? "Company"} logo={companyLogoSrc(job.company)} />
         <div className="min-w-0">
           <h3 className="text-sm font-semibold leading-snug text-gray-900 dark:text-white">
             <Link href={`/jobs/${job.id}`} className="after:absolute after:inset-0 after:rounded-xl">
@@ -1368,6 +1495,114 @@ function SimilarJobCard({ job }: { job: SimilarJob }) {
   );
 }
 
+/** A bullet as posters type them: "•", "-", "*", "·", "–", or "1." / "1)". */
+const BULLET = /^\s*(?:[•\-*·–▪●]|\d{1,2}[.)])\s+/;
+
+/**
+ * A line that reads as a section title: short, a handful of words, not a list
+ * item and not a sentence. "The role", "What you'll do", "Requirements:".
+ */
+function isHeadingLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.length > 60 || BULLET.test(trimmed)) return false;
+  if (/[.,;!?]$/.test(trimmed)) return false;
+  return trimmed.split(/\s+/).length <= 8;
+}
+
+type DescriptionBlock =
+  | { kind: "heading"; text: string }
+  | { kind: "paragraph"; text: string }
+  | { kind: "list"; items: string[] };
+
+/**
+ * Free text into headings, paragraphs and lists.
+ *
+ * Postings, imported ones especially, arrive as plain text with their structure
+ * carried by line breaks: a short title line, then a paragraph, then "•" lines.
+ * Printed as one pre-wrapped block, "The Role" and "What You'll Do" were body
+ * text like everything around them and a long posting read as a wall. Nothing
+ * is rewritten or dropped — every line lands in exactly one block, in order.
+ */
+function parseDescription(text: string): DescriptionBlock[] {
+  const blocks: DescriptionBlock[] = [];
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  let paragraph: string[] = [];
+  let list: string[] = [];
+
+  const flushParagraph = () => {
+    if (paragraph.length) blocks.push({ kind: "paragraph", text: paragraph.join("\n") });
+    paragraph = [];
+  };
+  const flushList = () => {
+    if (list.length) blocks.push({ kind: "list", items: list });
+    list = [];
+  };
+
+  lines.forEach((raw, index) => {
+    const line = raw.trimEnd();
+    if (!line.trim()) {
+      flushParagraph();
+      flushList();
+      return;
+    }
+    if (BULLET.test(line)) {
+      flushParagraph();
+      list.push(line.replace(BULLET, ""));
+      return;
+    }
+    // A title only when something follows it and it starts a block: a short
+    // last line, or a short line in the middle of a paragraph, stays text.
+    const next = lines.slice(index + 1).find((candidate) => candidate.trim());
+    const startsBlock = paragraph.length === 0;
+    if (startsBlock && next !== undefined && isHeadingLine(line)) {
+      flushList();
+      blocks.push({ kind: "heading", text: line.trim().replace(/:$/, "") });
+      return;
+    }
+    flushList();
+    paragraph.push(line);
+  });
+  flushParagraph();
+  flushList();
+  return blocks;
+}
+
+/**
+ * The posting body. Capped at a comfortable reading measure; the body is free
+ * text from the poster, so newlines inside a paragraph still survive.
+ */
+function DescriptionBody({ text }: { text: string }) {
+  const blocks = parseDescription(text);
+  return (
+    <div className="max-w-[68ch] space-y-3 [overflow-wrap:anywhere] text-sm leading-relaxed text-gray-600 dark:text-gray-300 sm:text-base">
+      {blocks.map((block, index) =>
+        block.kind === "heading" ? (
+          <h3
+            key={index}
+            className={`text-sm font-semibold text-gray-900 dark:text-white sm:text-base ${
+              index === 0 ? "" : "pt-3"
+            }`}
+          >
+            {block.text}
+          </h3>
+        ) : block.kind === "list" ? (
+          <ul key={index} className="list-disc space-y-1.5 pl-5 marker:text-gray-400 dark:marker:text-gray-500">
+            {block.items.map((item, itemIndex) => (
+              <li key={itemIndex} className="whitespace-pre-wrap pl-1">
+                {item}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p key={index} className="whitespace-pre-wrap">
+            {block.text}
+          </p>
+        )
+      )}
+    </div>
+  );
+}
+
 /** Page chrome shared by the job, the error state and the skeleton. */
 function PageShell({ children }: { children: React.ReactNode }) {
   return (
@@ -1376,20 +1611,6 @@ function PageShell({ children }: { children: React.ReactNode }) {
       <main id="main-content" className="container-responsive py-6 sm:py-8">
         {children}
       </main>
-    </div>
-  );
-}
-
-/** One cell of the fact grid: mono caption above a mono value. */
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0">
-      <dt>
-        <Eyebrow as="span">{label}</Eyebrow>
-      </dt>
-      <dd className="mt-1">
-        <Readout className="block break-words text-sm font-medium">{value}</Readout>
-      </dd>
     </div>
   );
 }
@@ -1408,12 +1629,12 @@ function DetailSkeleton() {
 
         <div className="grid gap-5 lg:grid-cols-3 lg:gap-6">
           <div className="lg:col-span-2">
-            <Card grid className="p-4 sm:p-6">
+            <Card className="p-4 sm:p-6">
               <Skeleton className="mb-3 h-3 w-28" />
               <SkeletonText lines={4} />
             </Card>
           </div>
-          <Card grid className="p-4 sm:p-5">
+          <Card className="self-start p-4 sm:p-5">
             <div className="space-y-4">
               <Skeleton className="h-3 w-24" />
               <Skeleton className="h-24 w-full" rounded="rounded-lg" />

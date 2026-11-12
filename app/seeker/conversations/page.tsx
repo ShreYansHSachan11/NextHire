@@ -26,6 +26,8 @@ import {
   Card,
   dayLabel,
   EmptyState,
+  ChatArt,
+  LiveBadge,
   Eyebrow,
   formatRelative,
   formatTime,
@@ -34,6 +36,7 @@ import {
   Readout,
   Skeleton,
 } from "@/app/components/ui";
+import { companyLogoSrc } from "@/lib/companyLogo";
 
 import ConversationsLoading from "./loading";
 
@@ -61,7 +64,7 @@ interface Conversation {
   id: string;
   companyId: string;
   createdAt: string;
-  company: { id: string; name: string };
+  company: { id: string; name: string; website?: string | null; logoUrl?: string | null };
   /** The API sends only the latest message for the list preview. */
   messages: Message[];
   unreadCount: number;
@@ -376,11 +379,21 @@ function SeekerConversations() {
     />
   ) : (
     <Card className="flex h-full items-center justify-center overflow-hidden">
-      <EmptyState
-        icon={<Icon.chat className="h-7 w-7" />}
-        title="No conversation selected"
-        description="Pick a conversation on the left to start chatting with the employer."
-      />
+      {/* With an empty inbox, "pick one on the left" points at nothing; say
+          what will appear here instead. */}
+      {!listLoading && !listError && conversations.length === 0 ? (
+        <EmptyState
+          art={<ChatArt kind="conversation" />}
+          title="Your messages will show here"
+          description="When you message an employer, or one messages you, the conversation opens here."
+        />
+      ) : (
+        <EmptyState
+          art={<ChatArt kind="select" />}
+          title="No conversation selected"
+          description="Pick a conversation on the left to start chatting with the employer."
+        />
+      )}
     </Card>
   );
 
@@ -397,10 +410,7 @@ function SeekerConversations() {
             isConnected ? (
               // Emerald and the pulse are reserved for genuinely live state, so
               // this only appears once the socket is actually connected.
-              <Eyebrow accent className="inline-flex items-center gap-2">
-                <span className="dot-live" aria-hidden="true" />
-                Live
-              </Eyebrow>
+              <LiveBadge />
             ) : undefined
           }
         />
@@ -520,13 +530,16 @@ function ConversationList({
           </div>
         ) : conversations.length === 0 ? (
           <EmptyState
-            icon={<Icon.chat className="h-7 w-7" />}
+            art={<ChatArt kind="inbox" />}
             title="No conversations yet"
-            description="Apply to a job, then message the employer from your dashboard."
+            // Pointed at where the Message button actually is. "Apply to a
+            // job" was wrong for anyone who already has applications, and the
+            // Browse jobs button sent them away from them.
+            description="Open your applications on the dashboard and choose Message to contact an employer."
             action={
-              <Link href="/jobs" className={buttonPrimary}>
-                <Icon.search className="h-4 w-4" />
-                Browse jobs
+              <Link href="/seeker/dashboard" className={buttonPrimary}>
+                Your applications
+                <Icon.arrowRight className="h-4 w-4" />
               </Link>
             }
           />
@@ -548,7 +561,7 @@ function ConversationList({
                       isSelected ? "panel-signal" : "border-transparent"
                     }`}
                   >
-                    <Avatar name={conversation.company.name} />
+                    <Avatar name={conversation.company.name} logo={companyLogoSrc(conversation.company)} />
                     <span className="min-w-0 flex-1">
                       <span className="flex items-baseline justify-between gap-2">
                         <span className="truncate text-sm font-semibold text-gray-900 dark:text-white">
@@ -567,7 +580,7 @@ function ConversationList({
                           {latest ? latest.content : "No messages yet"}
                         </span>
                         {conversation.unreadCount > 0 && (
-                          <span className="mono inline-flex min-w-[1.375rem] flex-shrink-0 items-center justify-center rounded-md border border-green-200 bg-green-50 px-1.5 py-0.5 text-[11px] font-medium text-green-700 dark:border-green-800 dark:bg-green-900/30 dark:text-green-300">
+                          <span className="mono inline-flex min-w-[1.375rem] flex-shrink-0 items-center justify-center rounded-full bg-[color:var(--accent-fill)] px-1.5 py-0.5 text-[11px] font-semibold text-[color:var(--ink-on-accent)]">
                             {conversation.unreadCount > 99 ? "99+" : conversation.unreadCount}
                             <span className="sr-only"> unread messages</span>
                           </span>
@@ -623,7 +636,7 @@ function ChatPanel({
         >
           <Icon.arrowLeft className="h-5 w-5" />
         </button>
-        <Avatar name={conversation.company.name} size="sm" />
+        <Avatar name={conversation.company.name} size="sm" logo={companyLogoSrc(conversation.company)} />
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-sm font-semibold text-gray-900 dark:text-white sm:text-base">
             {conversation.company.name}

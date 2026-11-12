@@ -66,6 +66,14 @@ const INDUSTRIES = [
   "Other",
 ];
 
+/**
+ * One cell of the two-column field grid. A subgrid of the parent's rows: the
+ * label row takes the taller of the pair's labels and the shorter label sits at
+ * its foot, so the two controls start on the same line.
+ */
+const FIELD_CELL =
+  "sm:row-span-3 sm:grid sm:grid-rows-subgrid sm:gap-y-0 sm:[&>label]:self-end";
+
 const SIZES = ["1-10", "11-50", "51-200", "201-500", "501-1000", "1000+"];
 
 /**
@@ -344,8 +352,11 @@ export default function CompanyProfileEdit() {
             {/* Server-side refusals only; anything caught here lands on its field. */}
             {error && <Alert variant="error">{error}</Alert>}
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6">
-              <div>
+            {/* Each field spans three shared rows (label, control, error), so
+                a label with a hint beside one without no longer pushes one
+                input lower than its neighbour. */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-x-6">
+              <div className={FIELD_CELL}>
                 {/* The hint now lives inside the <label>, so it is announced with
                     the field itself and needs no separate aria-describedby. */}
                 <Label
@@ -377,7 +388,7 @@ export default function CompanyProfileEdit() {
                 )}
               </div>
 
-              <div>
+              <div className={FIELD_CELL}>
                 <Label htmlFor="email" required>
                   Email address
                 </Label>
@@ -403,7 +414,7 @@ export default function CompanyProfileEdit() {
                 )}
               </div>
 
-              <div>
+              <div className={FIELD_CELL}>
                 <Label htmlFor="website" hint="No need to type https://.">
                   Website
                 </Label>
@@ -430,7 +441,7 @@ export default function CompanyProfileEdit() {
                 )}
               </div>
 
-              <div>
+              <div className={FIELD_CELL}>
                 <Label htmlFor="industry">Industry</Label>
                 <select
                   id="industry"
@@ -448,7 +459,7 @@ export default function CompanyProfileEdit() {
                 </select>
               </div>
 
-              <div>
+              <div className={FIELD_CELL}>
                 <Label htmlFor="size">Company size</Label>
                 <select
                   id="size"
@@ -466,7 +477,7 @@ export default function CompanyProfileEdit() {
                 </select>
               </div>
 
-              <div>
+              <div className={FIELD_CELL}>
                 <Label htmlFor="location">Location</Label>
                 <input
                   type="text"

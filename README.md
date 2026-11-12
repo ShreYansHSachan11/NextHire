@@ -196,6 +196,8 @@ caller server-side** — ownership is never taken from the request body.
 | `GET` | `/api/stats` | Public — counts for the homepage |
 | `GET` | `/api/jobs/recommended` | Seeker — roles ranked against their profile |
 | `POST` | `/api/ai/resume` | Seeker — parse their résumé into a profile |
+| `GET` | `/api/resume-insights` | Seeker — what employers hiring for roles like theirs ask for |
+| `POST` | `/api/resume-insights` | Seeker — check their résumé against that demand (Gemini) |
 | `POST` | `/api/ai/assist` | Company — draft a description, extract skills |
 | `GET` `POST` | `/api/ai/reindex` | Admin — index health, backfill embeddings |
 

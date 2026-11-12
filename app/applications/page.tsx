@@ -52,6 +52,8 @@ import {
   Spinner,
   StatCard,
   StatusBadge,
+  StatusIcon,
+  StatusPill,
 } from "@/app/components/ui";
 
 /* -------------------------------------------------------------------------- */
@@ -161,6 +163,24 @@ interface Filters {
 }
 
 const EMPTY_FILTERS: Filters = { search: "", status: "", jobId: "", hasResume: "" };
+
+/**
+ * Starting filters from the address, so the dashboard's "Review applicants"
+ * link (`?status=PENDING`) lands on the queue it promised. Read once, in the
+ * state initialiser: the server renders the loading skeleton, never the
+ * filter bar, so there is no markup for this to disagree with.
+ */
+function filtersFromUrl(): Filters {
+  if (typeof window === "undefined") return EMPTY_FILTERS;
+  const params = new URLSearchParams(window.location.search);
+  const status = params.get("status") ?? "";
+  const jobId = params.get("jobId") ?? "";
+  return {
+    ...EMPTY_FILTERS,
+    status: (APPLICATION_STATUSES as readonly string[]).includes(status) ? status : "",
+    jobId: /^[0-9a-f-]{36}$/i.test(jobId) ? jobId : "",
+  };
+}
 
 /** "recent" is the historical behaviour and stays the default. */
 type SortMode = "recent" | "fit";
@@ -273,7 +293,7 @@ export default function ApplicationsPage() {
         application.id === change.id ? { ...application, status: change.status } : application
       )
   );
-  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  const [filters, setFilters] = useState<Filters>(filtersFromUrl);
   const [sort, setSort] = useState<SortMode>("recent");
   // Latched: once a scored row has been seen the sort control stays available,
   // so it cannot flicker away mid-session when a filter empties the list.
@@ -529,181 +549,193 @@ export default function ApplicationsPage() {
           description="Review everyone who applied to your jobs."
         />
 
-        {/* Stats */}
-        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5">
-          <StatCard
-            label="Pending"
-            value={formatCount(statusCounts.PENDING ?? 0)}
-            tone="amber"
-            icon={<Icon.clock className="h-5 w-5" />}
-            hint="Not reviewed yet"
-          />
-          <StatCard
-            label="Shortlisted"
-            value={formatCount(statusCounts.SHORTLISTED ?? 0)}
-            tone="blue"
-            icon={<Icon.checkCircle className="h-5 w-5" />}
-            hint="Moved forward"
-          />
-          <StatCard
-            label="Interview"
-            value={formatCount(statusCounts.INTERVIEW ?? 0)}
-            tone="purple"
-            icon={<Icon.badge className="h-5 w-5" />}
-            hint="Scheduled or in progress"
-          />
-          <StatCard
-            label="Accepted"
-            value={formatCount(statusCounts.ACCEPTED ?? 0)}
-            tone="green"
-            icon={<Icon.check className="h-5 w-5" />}
-            hint="Offer extended"
-          />
-          <StatCard
-            label="Rejected"
-            value={formatCount(statusCounts.REJECTED ?? 0)}
-            tone="red"
-            icon={<Icon.x className="h-5 w-5" />}
-            hint="Closed"
-          />
-        </div>
+        {/* Counts and filters only once there is something to count or
+            filter. Before the first application they were five zeros and four
+            controls stacked above an empty list that already says what to do. */}
+        {(loading || loadError || applications.length > 0) && (
+          <>
+          {/* Stats. On phones one swipeable row rather than a three-row grid:
+              five tiles stacked two-up pushed the first applicant a full screen
+              and a half down the page. */}
+          <div className="-mx-4 mt-6 flex snap-x gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-3 sm:gap-4 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-5 [&>*]:min-w-[9.5rem] [&>*]:snap-start sm:[&>*]:min-w-0">
+            <StatCard
+              highlight
+              label="Pending"
+              value={formatCount(statusCounts.PENDING ?? 0)}
+              tone="amber"
+              icon={<Icon.clock className="h-5 w-5" />}
+              hint="Not reviewed yet"
+            />
+            <StatCard
+              label="Shortlisted"
+              value={formatCount(statusCounts.SHORTLISTED ?? 0)}
+              tone="blue"
+              icon={<Icon.star className="h-5 w-5" />}
+              hint="Moved forward"
+            />
+            <StatCard
+              label="Interview"
+              value={formatCount(statusCounts.INTERVIEW ?? 0)}
+              tone="purple"
+              icon={<Icon.chat className="h-5 w-5" />}
+              hint="Scheduled or in progress"
+            />
+            <StatCard
+              label="Accepted"
+              value={formatCount(statusCounts.ACCEPTED ?? 0)}
+              tone="green"
+              icon={<Icon.check className="h-5 w-5" />}
+              hint="Offer extended"
+            />
+            <StatCard
+              label="Rejected"
+              value={formatCount(statusCounts.REJECTED ?? 0)}
+              tone="purple"
+              icon={<Icon.x className="h-5 w-5" />}
+              hint="Closed"
+            />
+          </div>
 
-        {/* Filter bar — one hairline strip, stacking to a column on phones. */}
-        <Card className="mt-4">
-          <div className="flex flex-col gap-3 p-3 sm:p-4 lg:flex-row lg:items-end lg:gap-4">
-            <div className="min-w-0 lg:flex-1">
-              <Label htmlFor="filter-search">Search</Label>
-              <div className="relative">
-                <span
-                  className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400"
-                  aria-hidden="true"
-                >
-                  <Icon.search className="h-4 w-4" />
-                </span>
-                {/* `.field` is unlayered CSS and sets `padding` as a shorthand, so
-                    the room for the leading icon has to be marked important. */}
-                <input
-                  type="search"
-                  id="filter-search"
-                  value={filters.search}
-                  onChange={(event) =>
-                    setFilters((current) => ({ ...current, search: event.target.value }))
-                  }
-                  placeholder="Name or email"
-                  className={`${inputClass} pl-10!`}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:flex lg:items-end lg:gap-3">
-              <div className="min-w-0 lg:w-40">
-                <Label htmlFor="filter-status">Status</Label>
-                <select
-                  id="filter-status"
-                  value={filters.status}
-                  onChange={(event) =>
-                    setFilters((current) => ({ ...current, status: event.target.value }))
-                  }
-                  className={inputClass}
-                >
-                  <option value="">All statuses</option>
-                  {APPLICATION_STATUSES.map((status) => (
-                    <option key={status} value={status}>
-                      {STATUS_LABELS[status]}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="min-w-0 lg:w-44">
-                <Label htmlFor="filter-job">Job</Label>
-                <select
-                  id="filter-job"
-                  value={filters.jobId}
-                  onChange={(event) =>
-                    setFilters((current) => ({ ...current, jobId: event.target.value }))
-                  }
-                  className={inputClass}
-                >
-                  <option value="">All jobs</option>
-                  {jobs.map((job) => (
-                    <option key={job.id} value={job.id}>
-                      {job.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="min-w-0 lg:w-40">
-                <Label htmlFor="filter-resume">Resume</Label>
-                <select
-                  id="filter-resume"
-                  value={filters.hasResume}
-                  onChange={(event) =>
-                    setFilters((current) => ({ ...current, hasResume: event.target.value }))
-                  }
-                  className={inputClass}
-                >
-                  <option value="">All applications</option>
-                  <option value="yes">With resume</option>
-                  <option value="no">Without resume</option>
-                </select>
-              </div>
-
-              {/* Only rendered once a scored row has actually arrived: on a
-                  deployment without a model there is nothing to sort by, and an
-                  option that cannot change the order is just noise. */}
-              {scoresSeen && (
-                <div className="min-w-0 lg:w-40">
-                  <Label htmlFor="filter-sort">Sort by</Label>
-                  <select
-                    id="filter-sort"
-                    value={sort}
+          {/* Filter bar — one hairline strip, stacking to a column on phones. */}
+          <Card className="mt-4">
+            <div className="flex flex-col gap-3 p-3 sm:p-4 lg:flex-row lg:items-end lg:gap-4">
+              <div className="min-w-0 lg:flex-1">
+                <Label htmlFor="filter-search">Search</Label>
+                <div className="relative">
+                  <span
+                    className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400"
+                    aria-hidden="true"
+                  >
+                    <Icon.search className="h-4 w-4" />
+                  </span>
+                  {/* `.field` is unlayered CSS and sets `padding` as a shorthand, so
+                      the room for the leading icon has to be marked important. */}
+                  <input
+                    type="search"
+                    id="filter-search"
+                    value={filters.search}
                     onChange={(event) =>
-                      setSort(event.target.value === "fit" ? "fit" : "recent")
+                      setFilters((current) => ({ ...current, search: event.target.value }))
+                    }
+                    placeholder="Name or email"
+                    className={`${inputClass} pl-10!`}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-flow-row-dense grid-cols-2 gap-3 sm:grid-cols-3 lg:flex lg:items-end lg:gap-3">
+                <div className="min-w-0 lg:w-40">
+                  <Label htmlFor="filter-status">Status</Label>
+                  <select
+                    id="filter-status"
+                    value={filters.status}
+                    onChange={(event) =>
+                      setFilters((current) => ({ ...current, status: event.target.value }))
                     }
                     className={inputClass}
                   >
-                    <option value="recent">Most recent</option>
-                    <option value="fit">Best fit</option>
+                    <option value="">All statuses</option>
+                    {APPLICATION_STATUSES.map((status) => (
+                      <option key={status} value={status}>
+                        {STATUS_LABELS[status]}
+                      </option>
+                    ))}
                   </select>
                 </div>
+
+                {/* Job titles are the long option text, so on phones this one
+                    takes the full row and the two short selects share one. */}
+                <div className="col-span-2 min-w-0 sm:col-span-1 lg:w-44">
+                  <Label htmlFor="filter-job">Job</Label>
+                  <select
+                    id="filter-job"
+                    value={filters.jobId}
+                    onChange={(event) =>
+                      setFilters((current) => ({ ...current, jobId: event.target.value }))
+                    }
+                    className={inputClass}
+                  >
+                    <option value="">All jobs</option>
+                    {jobs.map((job) => (
+                      <option key={job.id} value={job.id}>
+                        {job.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="min-w-0 lg:w-40">
+                  <Label htmlFor="filter-resume">Resume</Label>
+                  <select
+                    id="filter-resume"
+                    value={filters.hasResume}
+                    onChange={(event) =>
+                      setFilters((current) => ({ ...current, hasResume: event.target.value }))
+                    }
+                    className={inputClass}
+                  >
+                    <option value="">All applications</option>
+                    <option value="yes">With resume</option>
+                    <option value="no">Without resume</option>
+                  </select>
+                </div>
+
+                {/* Only rendered once a scored row has actually arrived: on a
+                    deployment without a model there is nothing to sort by, and an
+                    option that cannot change the order is just noise. */}
+                {scoresSeen && (
+                  <div className="min-w-0 lg:w-40">
+                    <Label htmlFor="filter-sort">Sort by</Label>
+                    <select
+                      id="filter-sort"
+                      value={sort}
+                      onChange={(event) =>
+                        setSort(event.target.value === "fit" ? "fit" : "recent")
+                      }
+                      className={inputClass}
+                    >
+                      <option value="recent">Most recent</option>
+                      <option value="fit">Best fit</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {filtersActive && (
+                <button
+                  type="button"
+                  onClick={() => setFilters(EMPTY_FILTERS)}
+                  className={`${buttonGhost} self-start lg:mb-0.5 lg:self-end`}
+                >
+                  <Icon.x className="h-4 w-4" />
+                  Clear filters
+                </button>
               )}
             </div>
 
-            {filtersActive && (
-              <button
-                type="button"
-                onClick={() => setFilters(EMPTY_FILTERS)}
-                className={`${buttonGhost} self-start lg:mb-0.5 lg:self-end`}
-              >
-                <Icon.x className="h-4 w-4" />
-                Clear filters
-              </button>
+            {/* The two fit figures are not the same measurement, and blurring them
+                would let a stale number look like a fresh one. Say which is on
+                screen, and say plainly what the number is for. */}
+            {scoresSeen && (
+              <div className="border-t border-gray-200 px-3 pb-3 pt-2.5 dark:border-gray-700 sm:px-4">
+                {sort === "fit" && (
+                  <Eyebrow>
+                    {rankJobId
+                      ? "Scored against the selected job"
+                      : "Fit when they applied · choose a job for a live score"}
+                  </Eyebrow>
+                )}
+                <p
+                  id={fitCaveatId}
+                  className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400"
+                >
+                  {MATCH_CAVEAT_EMPLOYER}
+                </p>
+              </div>
             )}
-          </div>
-
-          {/* The two fit figures are not the same measurement, and blurring them
-              would let a stale number look like a fresh one. Say which is on
-              screen, and say plainly what the number is for. */}
-          {scoresSeen && (
-            <div className="border-t border-gray-200 px-3 pb-3 pt-2.5 dark:border-gray-700 sm:px-4">
-              {sort === "fit" && (
-                <Eyebrow>
-                  {rankJobId
-                    ? "Scored against the selected job"
-                    : "Fit when they applied · choose a job for a live score"}
-                </Eyebrow>
-              )}
-              <p
-                id={fitCaveatId}
-                className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400"
-              >
-                {MATCH_CAVEAT_EMPLOYER}
-              </p>
-            </div>
-          )}
-        </Card>
+          </Card>
+          </>
+        )}
 
         {/* Pool summary — one role at a time, because "the shape of the pool"
             only means anything against a single posting's requirements. */}
@@ -717,8 +749,8 @@ export default function ApplicationsPage() {
           />
         )}
 
-        {/* List */}
-        <Card className="mt-4">
+        {/* List — the heading's usual gap when it sits directly under it. */}
+        <Card className={loading || loadError || applications.length > 0 ? "mt-4" : "mt-6"}>
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 px-4 py-3 dark:border-gray-700 sm:px-6">
             <Eyebrow as="h2">
               {filteredApplications.length}{" "}
@@ -1015,9 +1047,14 @@ function ApplicationRow({
           <Avatar name={application.user.name} />
 
           <div className="min-w-0 flex-1">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-white">
-              {application.user.name}
-            </h3>
+            {/* The status sits on the name line, where the eye lands when
+                scanning the queue; the select on the right is only for changing it. */}
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <h3 className="text-base font-semibold text-gray-900 dark:text-white">
+                {application.user.name}
+              </h3>
+              <StatusBadge status={application.status} />
+            </div>
             <p className="mono mt-0.5 break-all text-xs text-gray-500 dark:text-gray-400">
               {application.user.email}
             </p>
@@ -1030,8 +1067,9 @@ function ApplicationRow({
               >
                 {application.job.title}
               </Link>
+              <span aria-hidden="true"> · </span>
+              <span className="whitespace-nowrap">{formatDate(application.createdAt)}</span>
             </p>
-            <Eyebrow className="mt-1">Applied {formatDate(application.createdAt)}</Eyebrow>
 
             {application.message && (
               <p className="quote line-clamp-3 mt-2.5 whitespace-pre-wrap text-xs leading-relaxed">
@@ -1044,7 +1082,7 @@ function ApplicationRow({
             {match && (
               <div className="mt-3 flex flex-wrap items-center gap-1.5">
                 {sharedSkills.slice(0, 3).map((skill) => (
-                  <Chip key={skill} accent>
+                  <Chip key={skill} tone="good" size="sm">
                     {skill}
                   </Chip>
                 ))}
@@ -1070,12 +1108,11 @@ function ApplicationRow({
             {answers.length > 0 && (
               <div className="mt-3 flex flex-wrap items-center gap-1.5">
                 {flaggedAnswers.length > 0 && (
-                  <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-                    <Icon.warning className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
+                  <StatusPill tone="warn">
                     {flaggedAnswers.length === 1
                       ? "1 screening answer to look at"
                       : `${flaggedAnswers.length} screening answers to look at`}
-                  </span>
+                  </StatusPill>
                 )}
                 <button
                   type="button"
@@ -1091,10 +1128,51 @@ function ApplicationRow({
                 </button>
               </div>
             )}
+
+            {/* Resume and message sit with the person they belong to. Stacked
+                in the right-hand column they made every row three controls
+                tall beside two lines of text, leaving a gap under each name. */}
+            <div className="-ml-2.5 mt-2 flex flex-wrap items-center gap-x-1 gap-y-1">
+              {/* One link, opened in a new tab. The old pair hard-coded a `.pdf`
+                  filename and used a script-driven download that Cloudinary's
+                  cross-origin responses ignore anyway. */}
+              {resume ? (
+                <a
+                  href={`/api/resumes/${resume.id}/file`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={buttonGhost}
+                  title={resume.fileName ?? undefined}
+                >
+                  <Icon.document className="h-4 w-4 flex-shrink-0" />
+                  View resume
+                  <span className="sr-only">
+                    {" "}
+                    for {application.user.name} (opens in a new tab)
+                  </span>
+                  <Icon.external className="h-3.5 w-3.5 flex-shrink-0" />
+                </a>
+              ) : (
+                <Eyebrow as="span" className="px-2.5">
+                  No resume uploaded
+                </Eyebrow>
+              )}
+
+              <Button
+                variant="ghost"
+                onClick={() => void onMessage(application.user.id)}
+                loading={messaging}
+                loadingLabel="Opening the conversation"
+                icon={<Icon.chat className="h-4 w-4" />}
+              >
+                {messaging ? "Opening…" : "Message"}
+                <span className="sr-only"> {application.user.name}</span>
+              </Button>
+            </div>
           </div>
         </div>
 
-        <div className="flex flex-col gap-2.5 sm:w-56 sm:flex-shrink-0">
+        <div className="flex flex-col gap-2.5 sm:w-48 sm:flex-shrink-0">
           {/* A live breakdown when the server scored against one posting;
               otherwise the figure frozen at apply time, labelled as such. A low
               number stays neutral here — it orders the queue, it does not
@@ -1114,15 +1192,13 @@ function ApplicationRow({
             <MatchScore value={storedScore} caption="Fit at apply" describedBy={fitCaveatId} />
           ) : null}
 
-          <StatusBadge status={application.status} className="self-start" />
-
           <div>
-            <Label htmlFor={`status-${application.id}`}>Update status</Label>
+            <Label htmlFor={`status-${application.id}`}>Status</Label>
             {/* No "Saving…" caption: `application.status` is the optimistic
-                status, so this control and the badge above it already read as
-                the new value the moment the choice is made. The lock is not
-                there to report progress — it is there so a second choice cannot
-                start a PATCH that races the first one home. */}
+                status, so this control and the badge beside the name already
+                read as the new value the moment the choice is made. The lock is
+                not there to report progress — it is there so a second choice
+                cannot start a PATCH that races the first one home. */}
             <select
               id={`status-${application.id}`}
               value={application.status}
@@ -1138,32 +1214,6 @@ function ApplicationRow({
               ))}
             </select>
           </div>
-
-          {/* One link, opened in a new tab. The old pair hard-coded a `.pdf`
-              filename and used a script-driven download that Cloudinary's
-              cross-origin responses ignore anyway. */}
-          {resume ? (
-            <a href={`/api/resumes/${resume.id}/file`} target="_blank" rel="noopener noreferrer" className={buttonSecondary}>
-              <Icon.document className="h-4 w-4 flex-shrink-0" />
-              <span className="truncate">
-                {resume.fileName ? `Open ${resume.fileName}` : "Open resume"}
-              </span>
-              <Icon.external className="h-3.5 w-3.5 flex-shrink-0" />
-            </a>
-          ) : (
-            <Eyebrow>No resume uploaded</Eyebrow>
-          )}
-
-          <Button
-            variant="ghost"
-            onClick={() => void onMessage(application.user.id)}
-            loading={messaging}
-            loadingLabel="Opening the conversation"
-            icon={<Icon.chat className="h-4 w-4" />}
-            className="justify-start sm:justify-center"
-          >
-            {messaging ? "Opening…" : "Message"}
-          </Button>
         </div>
       </div>
 
@@ -1178,21 +1228,25 @@ function ApplicationRow({
                 equal bars would misstate a 70/18/7/5 blend. */}
             <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-x-6">
               <MeterRow
+                icon={<Icon.briefcase className="h-4 w-4" />}
                 label="Experience fit"
                 value={match.facets.semantic}
                 weight={MATCH_WEIGHTS.semantic}
               />
               <MeterRow
+                icon={<Icon.layers className="h-4 w-4" />}
                 label="Skills match"
                 value={match.facets.skills}
                 weight={MATCH_WEIGHTS.skills}
               />
               <MeterRow
+                icon={<Icon.location className="h-4 w-4" />}
                 label="Location"
                 value={match.facets.location}
                 weight={MATCH_WEIGHTS.location}
               />
               <MeterRow
+                icon={<Icon.trendingUp className="h-4 w-4" />}
                 label="Seniority"
                 value={match.facets.seniority}
                 weight={MATCH_WEIGHTS.seniority}
@@ -1205,7 +1259,7 @@ function ApplicationRow({
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
                   {match.sharedSkills.length > 0 ? (
                     match.sharedSkills.map((skill) => (
-                      <Chip key={skill} accent>
+                      <Chip key={skill} tone="good">
                         {skill}
                       </Chip>
                     ))
@@ -1272,7 +1326,8 @@ function ApplicationRow({
                       {answer.value}
                     </dd>
                     {flagged && (
-                      <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                      <p className="mt-1 flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-300">
+                        <StatusIcon tone="warn" size="sm" />
                         You asked for &ldquo;{answer.question.expected}&rdquo;.
                       </p>
                     )}

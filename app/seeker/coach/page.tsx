@@ -17,13 +17,20 @@ import {
   Chip,
   EmptyState,
   Eyebrow,
+  FitBars,
+  fitBand,
   Icon,
+  IconTile,
   Meter,
   PageHeading,
   Readout,
   SkeletonRows,
   Spinner,
   StatusBadge,
+  StatusIcon,
+  StatusPill,
+  TONE_TEXT,
+  type StatusTone,
   buttonGhost,
   buttonPrimary,
   buttonSecondary,
@@ -150,6 +157,13 @@ interface RoleOption {
 /* -------------------------------------------------------------------------- */
 /* Tool copy                                                                   */
 /* -------------------------------------------------------------------------- */
+
+/** Each tool's picture: a target for gaps, a page for the letter, a speech bubble for interviews. */
+const TOOL_ICON: Record<Mode, (props: { className?: string }) => React.ReactElement> = {
+  gap: Icon.target,
+  letter: Icon.document,
+  interview: Icon.chat,
+};
 
 const TOOLS: Record<Mode, { tab: string; title: string; blurb: string; cta: string }> = {
   gap: {
@@ -450,12 +464,29 @@ export default function SeekerCoachPage() {
             {/* ------------------------------------------------------ */}
             <div className="min-w-0 lg:col-span-2">
               {!selected ? (
-                <Card grid>
-                  <EmptyState
-                    icon={<Icon.graph className="h-6 w-6" />}
+                // Step 2 before a job is chosen: what the three tools do, so
+                // the right two-thirds of the page answers "why pick one" instead
+                // of being a short empty box beside a long list.
+                <Card>
+                  <CardHeader
+                    eyebrow="Step 2"
                     title="Pick a job to start"
-                    description="Your coaching is tailored to one job at a time."
+                    description="Your coaching is tailored to one job at a time. Choose one and you can:"
                   />
+                  <ul className="grid list-none gap-3 p-4 sm:grid-cols-3 sm:p-6">
+                    {(Object.keys(TOOLS) as Mode[]).map((tool) => {
+                      const ToolIcon = TOOL_ICON[tool];
+                      return (
+                        <li key={tool} className="panel-sunken rounded-xl p-4">
+                          <IconTile icon={<ToolIcon className="h-5 w-5" />} />
+                          <h3 className="mt-3 text-sm font-semibold text-gray-900 dark:text-white">
+                            {TOOLS[tool].title}
+                          </h3>
+                          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{TOOLS[tool].blurb}</p>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </Card>
               ) : (
                 <Card>
@@ -507,13 +538,16 @@ export default function SeekerCoachPage() {
                     className="p-4 sm:p-6"
                   >
                     <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0">
-                        <h3 className="text-base font-semibold text-gray-900 dark:text-white">
-                          {TOOLS[mode].title}
-                        </h3>
-                        <p className="mt-1 max-w-prose text-sm text-gray-500 dark:text-gray-400">
-                          {TOOLS[mode].blurb}
-                        </p>
+                      <div className="flex min-w-0 items-start gap-3">
+                        <IconTile icon={React.createElement(TOOL_ICON[mode], { className: "h-5 w-5" })} />
+                        <div className="min-w-0">
+                          <h3 className="text-base font-semibold text-gray-900 dark:text-white">
+                            {TOOLS[mode].title}
+                          </h3>
+                          <p className="mt-1 max-w-prose text-sm text-gray-500 dark:text-gray-400">
+                            {TOOLS[mode].blurb}
+                          </p>
+                        </div>
                       </div>
                       {/* Was a bare `<button>` whose spinner branch carried no
                           `aria-busy`, so the wait was visible and nothing
@@ -605,7 +639,9 @@ function RoleRow({
       type="button"
       onClick={onSelect}
       aria-pressed={selected}
-      className={`interactive w-full border-b border-gray-200 px-4 py-3 text-left last:border-b-0 focus-inset dark:border-gray-700 ${
+      // `relative` so the sr-only "out of 100" text is positioned inside the
+      // scrolling list; without it, it escaped the clip and stretched the page.
+      className={`interactive relative w-full border-b border-gray-200 px-4 py-3 text-left last:border-b-0 focus-inset dark:border-gray-700 ${
         selected ? "bg-green-50 dark:bg-green-950/25" : ""
       }`}
     >
@@ -621,7 +657,11 @@ function RoleRow({
         </span>
         {typeof role.score === "number" && (
           <Readout className="flex-shrink-0 pt-0.5 text-xs font-medium text-gray-500 dark:text-gray-400">
-            {role.score}%
+            {/* `/100`, not `%`, like every other fit on the site: beside a
+                job a percentage reads as a chance of being hired. */}
+            {role.score}
+            <span aria-hidden="true">/100</span>
+            <span className="sr-only"> out of 100 fit</span>
           </Readout>
         )}
       </div>
@@ -694,11 +734,22 @@ function ThinProfilePanel({
   );
 }
 
-const SEVERITY_TONE: Record<string, string> = {
-  Critical: "text-red-600 dark:text-red-400",
-  Important: "text-amber-600 dark:text-amber-400",
-  "Nice to have": "text-gray-500 dark:text-gray-400",
+/** How much a gap matters, as a status: critical is red, important amber. */
+const SEVERITY_TONE: Record<string, StatusTone> = {
+  Critical: "bad",
+  Important: "warn",
+  "Nice to have": "neutral",
 };
+
+/** A result section's heading, led by its status dot and in its status colour. */
+function StatusHeading({ tone, children }: { tone: StatusTone; children: React.ReactNode }) {
+  return (
+    <h4 className={`mb-3 flex items-center gap-2 text-sm font-semibold ${TONE_TEXT[tone]}`}>
+      <StatusIcon tone={tone} />
+      {children}
+    </h4>
+  );
+}
 
 function GapPanel({ gap, match }: { gap: GapPayload; match: MatchBreakdown | null }) {
   return (
@@ -706,18 +757,15 @@ function GapPanel({ gap, match }: { gap: GapPayload; match: MatchBreakdown | nul
       {match && (
         <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
           <div className="flex items-baseline gap-1.5">
-            <Icon.pulse
-              className="h-4 w-4 flex-shrink-0 self-center text-green-600 dark:text-green-400"
-              aria-hidden="true"
-            />
+            <FitBars value={match.score} size="lg" className="mr-1 self-center" />
             <Readout className="text-2xl font-semibold leading-none text-gray-900 dark:text-white">
               {match.score}
             </Readout>
-            <Readout className="text-base font-semibold leading-none text-gray-400 dark:text-gray-500">
-              %
+            <Readout className="text-base font-semibold leading-none text-gray-500 dark:text-gray-400">
+              /100
             </Readout>
           </div>
-          <Eyebrow className="mt-2">Profile fit</Eyebrow>
+          <Eyebrow className="mt-2">{fitBand(match.score).label} fit · Profile fit</Eyebrow>
           <Meter
             value={match.score}
             label={`Overall profile fit: ${match.score} out of 100`}
@@ -734,13 +782,11 @@ function GapPanel({ gap, match }: { gap: GapPayload; match: MatchBreakdown | nul
 
       {gap.strengths.length > 0 && (
         <section>
-          <Eyebrow accent className="mb-3">
-            What you already have
-          </Eyebrow>
+          <StatusHeading tone="good">What you already have</StatusHeading>
           <ul className="list-none space-y-3">
             {gap.strengths.map((item, index) => (
               <li key={`${index}-${item.point}`} className="flex items-start gap-2.5">
-                <Icon.check className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-600 dark:text-green-400" />
+                <StatusIcon tone="good" size="sm" className="mt-0.5" />
                 <span className="min-w-0">
                   <span className="block text-sm font-medium text-gray-900 dark:text-white">
                     {item.point}
@@ -759,7 +805,7 @@ function GapPanel({ gap, match }: { gap: GapPayload; match: MatchBreakdown | nul
 
       {gap.gaps.length > 0 && (
         <section>
-          <Eyebrow className="mb-3">Not in your profile yet</Eyebrow>
+          <StatusHeading tone="warn">Not in your profile yet</StatusHeading>
           <ul className="list-none space-y-3">
             {gap.gaps.map((item, index) => (
               <li
@@ -770,12 +816,9 @@ function GapPanel({ gap, match }: { gap: GapPayload; match: MatchBreakdown | nul
                   <span className="text-sm font-medium text-gray-900 dark:text-white">
                     {item.requirement}
                   </span>
-                  <Eyebrow
-                    as="span"
-                    className={SEVERITY_TONE[item.severity] ?? "text-gray-500 dark:text-gray-400"}
-                  >
+                  <StatusPill tone={SEVERITY_TONE[item.severity] ?? "neutral"} icon={false}>
                     {item.severity}
-                  </Eyebrow>
+                  </StatusPill>
                 </span>
                 {item.why && (
                   <span className="mt-0.5 block text-sm text-gray-500 dark:text-gray-400">
@@ -800,7 +843,7 @@ function GapPanel({ gap, match }: { gap: GapPayload; match: MatchBreakdown | nul
             {gap.nextSteps.map((step, index) => (
               <li key={`${index}-${step.action}`} className="flex items-start gap-3">
                 <span
-                  className="mono mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md border border-gray-200 text-[11px] font-medium text-gray-500 dark:border-gray-700 dark:text-gray-400"
+                  className="mono mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-[color:var(--accent-soft)] text-[11px] font-semibold text-[color:var(--accent-text)] ring-1 ring-inset ring-[color:var(--accent-line)]"
                   aria-hidden="true"
                 >
                   {index + 1}
@@ -921,7 +964,7 @@ function LetterPanel({
                 key={`${index}-${item}`}
                 className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400"
               >
-                <Icon.x className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
+                <StatusIcon tone="neutral" size="sm" className="mt-0.5" />
                 <span>{item}</span>
               </li>
             ))}

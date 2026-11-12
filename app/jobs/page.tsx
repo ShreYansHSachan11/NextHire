@@ -855,8 +855,11 @@ function JobsFeed() {
       {/* Search + filters: one hairline bar rather than a stack of boxed rows. */}
       <section aria-label="Search and filter jobs" className="mb-5 sm:mb-6">
         <Card className="p-3 sm:p-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(11rem,1fr)_repeat(4,minmax(0,9.5rem))] lg:items-end">
-            <div className="min-w-0">
+          {/* Search across the full width below `lg`, the four filters two by
+              two under it. One per row put the first job a full screen down
+              on a phone. */}
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-[minmax(11rem,1fr)_repeat(4,minmax(0,9.5rem))] lg:items-end">
+            <div className="col-span-2 min-w-0 lg:col-span-1">
               <Label htmlFor="job-search">Search</Label>
               <div className="relative">
                 <span
@@ -941,22 +944,6 @@ function JobsFeed() {
             </div>
           </div>
 
-          {/* The counts describe the corpus, not the hits — so say so, rather
-              than let "Berlin — 12 roles" be read as a promise about a search
-              that returned three. Only under a search: without one, picking an
-              option does yield exactly its count. */}
-          {/* The `.eyebrow` class rather than <Eyebrow>: this needs an `id` for
-              the selects' aria-describedby, and the component does not take
-              one. Same rendered result. */}
-          {/* Always laid out, shown only during a search: when it was mounted
-              on the first keystroke it pushed the whole list down 100px. */}
-          <p
-            id={facetCaveatId}
-            className={`eyebrow mt-3 ${search ? "" : "invisible"}`}
-            aria-hidden={search ? undefined : true}
-          >
-            Counts include all open jobs, not just this search.
-          </p>
         </Card>
       </section>
 
@@ -1080,50 +1067,78 @@ function JobsFeed() {
 
       {/* Result count, read as instrument output: "12 ROLES MATCHED". No
           `aria-live` here — see `liveMessage` above for why. */}
-      {!loading && !error && (
+      {!error && (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2 sm:mb-5">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <Eyebrow as="span">
-              {resultCount === 0
-                ? "No jobs found"
-                : `${resultCount} ${resultCount === 1 ? "job" : "jobs"} found`}
-              {/* The denominator is the corpus, from the server. It used to be
-                  `jobList.length`, which was the page the filters had already
-                  been applied to — so it read "12 / 12 total" and measured
-                  nothing. */}
-              {hasFilters && resultCount > 0 && facets.total > resultCount && (
-                <span className="text-[var(--ink-muted)]">
-                  {" "}
-                  / {facets.total} open {facets.total === 1 ? "role" : "roles"}
-                </span>
-              )}
-            </Eyebrow>
+            {!loading && (
+              <>
+                <Eyebrow as="span">
+                  {resultCount === 0
+                    ? "No jobs found"
+                    : `${resultCount} ${resultCount === 1 ? "job" : "jobs"} found`}
+                  {/* The denominator is the corpus, from the server. It used to be
+                      `jobList.length`, which was the page the filters had already
+                      been applied to — so it read "12 / 12 total" and measured
+                      nothing. */}
+                  {hasFilters && resultCount > 0 && facets.total > resultCount && (
+                    <span className="text-[var(--ink-muted)]">
+                      {" "}
+                      / {facets.total} open {facets.total === 1 ? "role" : "roles"}
+                    </span>
+                  )}
+                </Eyebrow>
 
-            {/* The delta, not just the level. A count that changed from 34 to 12
-                is the control reporting back; the same "12" with no reference
-                point is a readout that happens to have moved. */}
-            {previousCount !== null && (
-              <Eyebrow as="span" className="text-[var(--ink-muted)]">
-                {previousCount > resultCount ? "down" : "up"} from {previousCount}
-              </Eyebrow>
+                {/* The delta, not just the level. A count that changed from 34 to 12
+                    is the control reporting back; the same "12" with no reference
+                    point is a readout that happens to have moved. */}
+                {previousCount !== null && (
+                  <Eyebrow as="span" className="text-[var(--ink-muted)]">
+                    {previousCount > resultCount ? "down" : "up"} from {previousCount}
+                  </Eyebrow>
+                )}
+
+                {/* More rows match than one page returns, so the list is the newest
+                    slice of the answer rather than the answer. */}
+                {truncated && (
+                  <Eyebrow as="span">Showing the newest {resultCount} · use filters to see more</Eyebrow>
+                )}
+
+                {/* Explains why a result with no keyword overlap is on the list. */}
+                {semantic && (
+                  <Eyebrow as="span" accent className="inline-flex items-center gap-1">
+                    <Icon.spark className="h-3.5 w-3.5" aria-hidden="true" />
+                    Smart match
+                  </Eyebrow>
+                )}
+              </>
             )}
 
-            {/* More rows match than one page returns, so the list is the newest
-                slice of the answer rather than the answer. */}
-            {truncated && (
-              <Eyebrow as="span">Showing the newest {resultCount} · use filters to see more</Eyebrow>
-            )}
-
-            {/* Explains why a result with no keyword overlap is on the list. */}
-            {semantic && (
-              <Eyebrow as="span" accent className="inline-flex items-center gap-1">
-                <Icon.spark className="h-3.5 w-3.5" aria-hidden="true" />
-                Smart match
-              </Eyebrow>
-            )}
+            {/* The counts describe the corpus, not the hits — so say so, rather
+                than let "Berlin — 12 roles" be read as a promise about a search
+                that returned three. Only under a search: without one, picking an
+                option does yield exactly its count. */}
+            {/* The `.eyebrow` class rather than <Eyebrow>: this needs an `id` for
+                the selects' aria-describedby, and the component does not take
+                one. Same rendered result. */}
+            {/* Always laid out, shown only during a search: when it was mounted
+                on the first keystroke it pushed the whole list down 100px. It
+                lives in this results line rather than at the foot of the filter
+                card, where its reserved line left an empty strip inside the
+                card on every visit that was not a search. Rendered while the
+                list loads too, so the selects never describe themselves by an
+                element that is not there. */}
+            <span
+              id={facetCaveatId}
+              // Below `sm` it is dropped rather than reserved: there it would
+              // wrap to an empty line of its own above the first job.
+              className={`eyebrow ${search ? "" : "invisible max-sm:hidden"}`}
+              aria-hidden={search ? undefined : true}
+            >
+              Counts include all open jobs, not just this search.
+            </span>
           </div>
 
-          {hasFilters && (
+          {!loading && hasFilters && (
             <button type="button" onClick={clearFilters} className={buttonGhost}>
               <Icon.x className="h-3.5 w-3.5" />
               Clear filters
@@ -1146,7 +1161,7 @@ function JobsFeed() {
                row carries a match every card reserves the same score slot, so a
                two-column grid does not go ragged between a scored row and an
                unscored one. When nothing is scored, nothing reserves. */
-            <JobCard key={job.id} job={job} scored={hasMatches} />
+            <JobCard key={job.id} job={job} />
           ))}
         </div>
       ) : (

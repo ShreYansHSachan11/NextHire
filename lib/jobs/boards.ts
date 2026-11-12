@@ -21,20 +21,22 @@ export interface CareerBoard {
   slug: string;
   /** How the company is named on NextHire. */
   name: string;
+  /** The company's own site; its domain is what the logo is looked up by. */
+  website: string;
 }
 
 export const CAREER_BOARDS: CareerBoard[] = [
-  { platform: 'lever', slug: 'paytm', name: 'Paytm' },
-  { platform: 'lever', slug: 'meesho', name: 'Meesho' },
-  { platform: 'lever', slug: 'zeta', name: 'Zeta' },
-  { platform: 'lever', slug: 'cred', name: 'CRED' },
-  { platform: 'lever', slug: 'fampay', name: 'FamPay' },
-  { platform: 'greenhouse', slug: 'razorpaysoftwareprivatelimited', name: 'Razorpay' },
-  { platform: 'greenhouse', slug: 'inmobi', name: 'InMobi' },
-  { platform: 'greenhouse', slug: 'druva', name: 'Druva' },
-  { platform: 'greenhouse', slug: 'groww', name: 'Groww' },
-  { platform: 'greenhouse', slug: 'slice', name: 'slice' },
-  { platform: 'ashby', slug: 'sarvam', name: 'Sarvam AI' },
+  { platform: 'lever', slug: 'paytm', name: 'Paytm', website: 'paytm.com' },
+  { platform: 'lever', slug: 'meesho', name: 'Meesho', website: 'meesho.com' },
+  { platform: 'lever', slug: 'zeta', name: 'Zeta', website: 'zeta.tech' },
+  { platform: 'lever', slug: 'cred', name: 'CRED', website: 'cred.club' },
+  { platform: 'lever', slug: 'fampay', name: 'FamPay', website: 'famapp.in' },
+  { platform: 'greenhouse', slug: 'razorpaysoftwareprivatelimited', name: 'Razorpay', website: 'razorpay.com' },
+  { platform: 'greenhouse', slug: 'inmobi', name: 'InMobi', website: 'inmobi.com' },
+  { platform: 'greenhouse', slug: 'druva', name: 'Druva', website: 'druva.com' },
+  { platform: 'greenhouse', slug: 'groww', name: 'Groww', website: 'groww.in' },
+  { platform: 'greenhouse', slug: 'slice', name: 'slice', website: 'sliceit.com' },
+  { platform: 'ashby', slug: 'sarvam', name: 'Sarvam AI', website: 'sarvam.ai' },
 ];
 
 /** `careers` jobs carry `platform:slug:id` as their external id. */

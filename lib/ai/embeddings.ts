@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { EMBEDDING_DIMENSIONS, EMBEDDING_MODEL, isAiEnabled } from './config';
 import { embedText, embedTexts } from './gemini';
@@ -229,6 +230,13 @@ export interface ReindexReport {
  * Batched through `embedTexts` rather than looping `syncJobEmbedding`, because
  * one request carrying fifty documents is far cheaper than fifty requests.
  */
+/** Jobs read per query by `reindexAll`: about 1.3 MB at today's ~8.5 KB a job. */
+const REINDEX_PAGE = 150;
+
+type JobWithHash = Prisma.JobGetPayload<{
+  select: typeof JOB_SELECT & { embedding: { select: { contentHash: true } } };
+}>;
+
 export async function reindexAll(options: { limit?: number } = {}): Promise<ReindexReport> {
   const limit = options.limit ?? 500;
   const report: ReindexReport = {
@@ -239,12 +247,21 @@ export async function reindexAll(options: { limit?: number } = {}): Promise<Rein
   if (!isAiEnabled()) return report;
 
   /* ---- Jobs ---- */
-  const jobs = await prisma.job.findMany({
-    where: { isActive: true },
-    select: { ...JOB_SELECT, embedding: { select: { contentHash: true } } },
-    orderBy: { createdAt: 'desc' },
-    take: limit,
-  });
+  // Read in pages: full descriptions for every open job in one response
+  // passed Prisma Postgres's 5 MB per-query cap (7.66 MB at ~900 jobs), which
+  // failed the whole import.
+  const jobs: JobWithHash[] = [];
+  for (let page = 0; jobs.length < limit; page++) {
+    const batch = await prisma.job.findMany({
+      where: { isActive: true },
+      select: { ...JOB_SELECT, embedding: { select: { contentHash: true } } },
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+      skip: page * REINDEX_PAGE,
+      take: Math.min(REINDEX_PAGE, limit - jobs.length),
+    });
+    jobs.push(...batch);
+    if (batch.length < REINDEX_PAGE) break;
+  }
 
   report.jobs.total = jobs.length;
 

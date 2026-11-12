@@ -16,12 +16,12 @@ import {
   EmptyState,
   Eyebrow,
   Icon,
+  IconTile,
   Label,
   PageHeading,
   Readout,
   Spinner,
   buttonGhost,
-  buttonPrimary,
   buttonSecondary,
   formatDate,
   formatRelative,
@@ -355,16 +355,12 @@ export default function SeekerAlertsPage() {
                 // claim we cannot make about a request that never landed.
                 !loadError && (
                   <Card>
+                    {/* No button: "Browse jobs" is already in the page header,
+                        and the form that does the job is right beside this. */}
                     <EmptyState
                       icon={<Icon.bell className="h-6 w-6" />}
                       title="No saved searches yet"
-                      description="Save a search and get notified about new matches, daily or weekly."
-                      action={
-                        <Link href="/jobs" className={buttonPrimary}>
-                          <Icon.search className="h-4 w-4" />
-                          Search jobs
-                        </Link>
-                      }
+                      description="Use the form to save your first search. We’ll let you know about new jobs that match, daily or weekly."
                     />
                   </Card>
                 )
@@ -386,7 +382,12 @@ export default function SeekerAlertsPage() {
 
           {/* Second in the DOM so the list — the reason for the page — leads on a
               narrow screen, and pulled alongside it from `lg` up. */}
-          <section aria-labelledby="new-search-heading" className="min-w-0 lg:order-2">
+          {/* With nothing saved yet, the form is the only thing to do here, so on
+              a phone it comes first instead of under an empty card. */}
+          <section
+            aria-labelledby="new-search-heading"
+            className={`min-w-0 lg:order-2 ${!loading && !loadError && searches.length === 0 ? "order-first" : ""}`}
+          >
             <Card>
               <CardHeader
                 eyebrow="New alert"
@@ -605,74 +606,81 @@ function SavedSearchRow({
   return (
     <Card className="p-4 sm:p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 flex-1">
-          {renaming ? (
-            <form onSubmit={submitRename} className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <label htmlFor={renameId} className="sr-only">
-                New name for {search.name}
-              </label>
-              <input
-                id={renameId}
-                type="text"
-                value={draftName}
-                maxLength={NAME_MAX}
-                onChange={(event) => setDraftName(event.target.value)}
-                className={`${inputClass} sm:max-w-xs`}
-                autoFocus
-              />
-              <div className="flex gap-2">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          {/* A lit bell while the alert is on, a grey one once it is off. */}
+          <IconTile
+            icon={<Icon.bell className="h-5 w-5" />}
+            tone={search.frequency === "OFF" ? "neutral" : "accent"}
+          />
+          <div className="min-w-0 flex-1">
+            {renaming ? (
+              <form onSubmit={submitRename} className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <label htmlFor={renameId} className="sr-only">
+                  New name for {search.name}
+                </label>
+                <input
+                  id={renameId}
+                  type="text"
+                  value={draftName}
+                  maxLength={NAME_MAX}
+                  onChange={(event) => setDraftName(event.target.value)}
+                  className={`${inputClass} sm:max-w-xs`}
+                  autoFocus
+                />
+                <div className="flex gap-2">
+                  <Button
+                    type="submit"
+                    disabled={busy}
+                    loading={pending === "rename"}
+                    loadingLabel="Renaming this search"
+                  >
+                    Save
+                  </Button>
+                  <button
+                    type="button"
+                    className={buttonSecondary}
+                    onClick={() => {
+                      setRenaming(false);
+                      setError("");
+                    }}
+                    disabled={busy}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <h3 className="truncate text-base font-semibold text-gray-900 dark:text-white">
+                {search.name}
+              </h3>
+            )}
+
+            {/* The query in mono, because it is the literal string the alert runs. */}
+            <Readout className="mt-2 block break-words text-sm">{search.query}</Readout>
+
+            {labels.length > 0 && (
+              <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                <Eyebrow as="span">Also filtered to</Eyebrow>
+                {labels.map((label) => (
+                  <Chip key={label} icon={<Icon.filter className="h-3.5 w-3.5" />}>
+                    {label}
+                  </Chip>
+                ))}
+                {/* Clearing the filters is a PATCH like the other three, so it
+                    gets the same pending treatment rather than a button that
+                    looks idle for the length of the round trip. */}
                 <Button
-                  type="submit"
+                  variant="ghost"
                   disabled={busy}
-                  loading={pending === "rename"}
-                  loadingLabel="Renaming this search"
+                  loading={pending === "filters"}
+                  loadingLabel="Clearing these filters"
+                  onClick={() => void clearFilters()}
                 >
-                  Save
+                  Clear
                 </Button>
-                <button
-                  type="button"
-                  className={buttonSecondary}
-                  onClick={() => {
-                    setRenaming(false);
-                    setError("");
-                  }}
-                  disabled={busy}
-                >
-                  Cancel
-                </button>
               </div>
-            </form>
-          ) : (
-            <h3 className="truncate text-base font-semibold text-gray-900 dark:text-white">
-              {search.name}
-            </h3>
-          )}
-
-          {/* The query in mono, because it is the literal string the alert runs. */}
-          <Readout className="mt-2 block break-words text-sm">{search.query}</Readout>
-
-          {labels.length > 0 && (
-            <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-              <Eyebrow as="span">Also filtered to</Eyebrow>
-              {labels.map((label) => (
-                <Chip key={label} icon={<Icon.filter className="h-3.5 w-3.5" />}>
-                  {label}
-                </Chip>
-              ))}
-              {/* Clearing the filters is a PATCH like the other three, so it
-                  gets the same pending treatment rather than a button that
-                  looks idle for the length of the round trip. */}
-              <Button
-                variant="ghost"
-                disabled={busy}
-                loading={pending === "filters"}
-                loadingLabel="Clearing these filters"
-                onClick={() => void clearFilters()}
-              >
-                Clear
-              </Button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         <div className="flex-shrink-0 sm:w-40">

@@ -56,6 +56,24 @@
   --color-gray-900: #0a0c10;
   --color-gray-950: #05070a;
 
+  /* Status green: a real green, kept apart from the accent. `green-*` stays
+     remapped to the accent below (match quality, live state); `success-*` is
+     only for "this is good / done / passed" — a ticked check, an accepted
+     application, a success message — and always ships with an icon and a
+     label, never colour alone. 700 is the text step on white (5.2:1); 400 is
+     the text step on the dark canvas. Red and amber are Tailwind's own. */
+  --color-success-50: #ecfdf3;
+  --color-success-100: #d1fadf;
+  --color-success-200: #a6f4c5;
+  --color-success-300: #6ce9a6;
+  --color-success-400: #32d583;
+  --color-success-500: #12b76a;
+  --color-success-600: #039855;
+  --color-success-700: #027a48;
+  --color-success-800: #05603a;
+  --color-success-900: #054f31;
+  --color-success-950: #053321;
+
   /* The one accent. Both Tailwind hues the app uses, blue for links and focus
      and green for match quality and live state, resolve to the same slate ramp.
      400 reads on near-black, and 600 up reads as text on white. */
@@ -144,7 +162,7 @@
 
 :root {
   /* --- Surfaces ---------------------------------------------------------- */
-  --canvas: #f1f3f7;
+  --canvas: #eef1f8;
   --surface: #fbfcfd;
   --surface-raised: #ffffff;
   --surface-overlay: #ffffff;
@@ -192,11 +210,18 @@
   --accent-soft: #e8eef6;
   /* The tint for a whole card, much quieter than the one for a chip. */
   --accent-wash: rgb(61 90 128 / 0.06);
-  --accent-glow: rgb(61 90 128 / 0.16);
+  /* A touch bluer than the fill itself: at low alpha the slate goes grey on
+     white, and a lit corner should read as light, not as a smudge. */
+  --accent-glow: rgb(72 112 170 / 0.13);
   --accent-line: #b9c8dd;
   /* The loud fill for the few brand moments; the dark theme turns it teal. */
-  --brand-gradient: linear-gradient(115deg, #3d5a80 0%, #5f7fa8 100%);
-  --brand-gradient-hover: linear-gradient(115deg, #4a6b96 0%, #6d8db6 100%);
+  /* Matte black: a near-flat charcoal with just enough fall-off to read as a
+     surface, and no gloss. */
+  --brand-gradient: linear-gradient(180deg, #27272a 0%, #18181b 100%);
+  --brand-gradient-hover: linear-gradient(180deg, #303034 0%, #1f1f23 100%);
+  /* The hero line: charcoal fading to graphite, so it still differs from the
+     solid black line above it. */
+  --headline-gradient: linear-gradient(115deg, #18181b 0%, #52525b 100%);
   --shadow-glow: var(--shadow-floating);
 
   /* --- Elevation ---------------------------------------------------------
@@ -205,8 +230,8 @@
      source above the page rather than as three unrelated blurs. The ambient
      (large, faint) and direct (small, tighter) pair per level is Primer's
      two-part resting/floating shadow construction. */
-  --shadow-raised: 0 1px 2px 0 rgb(10 10 10 / 0.04), 0 8px 24px -12px rgb(10 10 10 / 0.08);
-  --shadow-floating: 0 2px 4px -2px rgb(10 10 10 / 0.06), 0 14px 32px -10px rgb(10 10 10 / 0.12);
+  --shadow-raised: 0 1px 2px 0 rgb(16 24 40 / 0.04), 0 4px 16px -8px rgb(16 24 40 / 0.08);
+  --shadow-floating: 0 1px 2px 0 rgb(16 24 40 / 0.05), 0 12px 28px -12px rgb(16 24 40 / 0.16);
   --shadow-overlay: 0 4px 8px -4px rgb(10 10 10 / 0.08), 0 24px 48px -12px rgb(10 10 10 / 0.2);
   /* Dark mode adds a 1px top highlight so a raised surface catches the light
      from above; in light mode there is nothing to catch, so it is `none` and
@@ -271,8 +296,10 @@
   --radius-lg: 1rem;
   --radius-xl: 1.25rem;
   --radius-pill: 999px;
-  /* Cards and panels: the largest radius, so nested controls read as inset. */
-  --radius-panel: 1.5rem;
+  /* Cards and panels: the largest radius, so nested controls read as inset.
+     Was 1.5rem, which made a 200px job card read as a pill rather than as a
+     card; 1.25rem keeps the soft corner and lets the edge look precise. */
+  --radius-panel: 1.25rem;
 
   /* --- Density -----------------------------------------------------------
      The house style is deliberately dense — an instrument panel, not a
@@ -319,10 +346,10 @@
   /* --- Misc --------------------------------------------------------------- */
   /* Primary button inverts between themes so it always reads as the loudest
      element on the page. */
-  --btn-bg: #3d5a80;
+  --btn-bg: #18181b;
   --btn-fg: #ffffff;
-  --btn-bg-hover: #4a6b96;
-  --btn-bg-active: #31496a;
+  --btn-bg-hover: #27272a;
+  --btn-bg-active: #0a0a0b;
 
   /* Graph-paper rule colour used by .grid-field. */
   --grid-line: rgb(10 10 10 / 0.05);
@@ -332,6 +359,16 @@
      is why the bar looked detached on one and welded on the other. Both are the
      surface tier now. */
   --header-bg: rgb(255 255 255 / 0.72);
+  /* Liquid glass bar (light). */
+  --liquid-bg: rgb(255 255 255 / 0.56);
+  --liquid-blur: blur(24px) saturate(1.9) brightness(1.12);
+  --liquid-rim: rgb(255 255 255 / 0.65);
+  --liquid-highlight: rgb(255 255 255 / 0.95);
+  --liquid-shade: rgb(15 23 42 / 0.06);
+  --liquid-inner: rgb(255 255 255 / 0.18);
+  --liquid-sheen: rgb(255 255 255 / 0.55);
+  --liquid-glint: rgb(255 255 255 / 0.5);
+  --liquid-shadow: 0 10px 30px -12px rgb(15 23 42 / 0.22), 0 1px 2px rgb(15 23 42 / 0.06);
 
   /* Skeleton placeholder fill. A token rather than `bg-gray-200
      dark:bg-gray-700` per call site, because three surfaces were hand-rolling
@@ -345,15 +382,21 @@
      pane can sit over. */
   --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%234a505b' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6.5 4 4 4-4'/%3E%3C/svg%3E");
 
-  --glass-bg: rgb(255 255 255 / 0.66);
-  --glass-raised: rgb(255 255 255 / 0.82);
+  /* Opaque enough that a card reads as white paper on the grey canvas rather
+     than as a faint film over it — the edge then comes from the hairline and
+     the shadow, which is what makes it look crisp. */
+  --glass-bg: rgb(255 255 255 / 0.8);
+  --glass-raised: rgb(255 255 255 / 0.92);
   --glass-overlay: rgb(255 255 255 / 0.96);
   --glass-sunken: rgb(10 10 10 / 0.04);
   --glass-edge: rgb(10 10 10 / 0.08);
-  --glass-sheen: inset 0 1px 0 0 rgb(255 255 255 / 0.7);
+  --glass-sheen: inset 0 1px 0 0 rgb(255 255 255 / 0.9);
   --glass-blur: saturate(1.5) blur(20px);
-  --ambient-glow: rgb(61 90 128 / 0.16);
-  --ambient-soft: rgb(255 255 255 / 0.7);
+  --ambient-glow: rgb(14 165 233 / 0.12);
+  --ambient-soft: rgb(45 212 191 / 0.12);
+  /* Two more light-only washes, so the canvas has colour, not just grey. */
+  --ambient-warm: rgb(251 146 60 / 0.09);
+  --ambient-gold: rgb(202 160 82 / 0.10);
   --canvas-lit: #d4dadf;
 }
 
@@ -397,6 +440,7 @@
   --accent-glow: rgb(45 212 191 / 0.18);
   --accent-line: rgb(94 234 212 / 0.35);
   --brand-gradient: linear-gradient(115deg, #5eead4 0%, #38bdf8 100%);
+  --headline-gradient: linear-gradient(115deg, #5eead4 0%, #38bdf8 100%);
   --brand-gradient-hover: linear-gradient(115deg, #7ff0dd 0%, #5cc8f9 100%);
 
   /* --- Elevation --------------------------------------------------------- */
@@ -427,6 +471,16 @@
 
   --grid-line: rgb(255 255 255 / 0.045);
   --header-bg: rgb(8 13 16 / 0.72);
+  /* Liquid glass bar (dark). */
+  --liquid-bg: rgb(16 24 28 / 0.38);
+  --liquid-blur: blur(22px) saturate(1.6);
+  --liquid-rim: rgb(255 255 255 / 0.12);
+  --liquid-highlight: rgb(255 255 255 / 0.16);
+  --liquid-shade: rgb(0 0 0 / 0.35);
+  --liquid-inner: rgb(255 255 255 / 0.03);
+  --liquid-sheen: rgb(255 255 255 / 0.07);
+  --liquid-glint: rgb(94 234 212 / 0.10);
+  --liquid-shadow: 0 14px 40px -14px rgb(0 0 0 / 0.7);
   --skeleton: #18232a;
   --skeleton-shine: rgb(255 255 255 / 0.06);
 
@@ -480,6 +534,8 @@
   --glass-sheen: inset 0 1px 0 0 rgb(255 255 255 / 0.05);
   --ambient-glow: rgb(20 184 166 / 0.17);
   --ambient-soft: rgb(56 189 248 / 0.07);
+  --ambient-warm: transparent;
+  --ambient-gold: transparent;
   --canvas-lit: #0a1a1b;
 }
 
@@ -543,9 +599,16 @@ html.dark {
     --glass-sunken: var(--surface-sunken);
     --glass-edge: var(--line);
     --glass-blur: none;
+    --liquid-bg: var(--surface);
+    --liquid-blur: none;
+    --liquid-rim: var(--line);
+    --liquid-sheen: transparent;
+    --liquid-glint: transparent;
     --header-bg: var(--surface);
     --ambient-glow: transparent;
     --ambient-soft: transparent;
+    --ambient-warm: transparent;
+    --ambient-gold: transparent;
   }
 }
 
@@ -571,7 +634,9 @@ body::before {
   pointer-events: none;
   background:
     radial-gradient(70vw 60vh at 88% -8%, var(--ambient-glow), transparent 70%),
-    radial-gradient(60vw 60vh at 4% 104%, var(--ambient-soft), transparent 70%);
+    radial-gradient(60vw 60vh at 4% 104%, var(--ambient-soft), transparent 70%),
+    radial-gradient(45vw 40vh at 6% 8%, var(--ambient-warm, transparent), transparent 70%),
+    radial-gradient(50vw 50vh at 96% 70%, var(--ambient-gold, transparent), transparent 70%);
 }
 
 /* Display type is set tight and dark — the reference's defining move. */
@@ -942,8 +1007,11 @@ html.dark body::before {
     --line: #2a2f38;
     --accent: #8fa9d0;
     --accent-wash: rgb(90 130 185 / 0.06);
-    --btn-bg: #44658f;
-    --btn-fg: #ffffff;
+    --btn-bg: #fafafa;
+    --btn-fg: #18181b;
+    --btn-bg-hover: #ffffff;
+    --brand-gradient: linear-gradient(180deg, #ffffff 0%, #ececee 100%);
+    --brand-gradient-hover: linear-gradient(180deg, #ffffff 0%, #f4f4f5 100%);
   }
 
   .dark .band-dark {
@@ -1041,13 +1109,97 @@ html.dark body::before {
   /* The sticky header's own surface, so the bar is the same tier in both
      themes rather than white-over-grey in one and canvas-over-canvas in the
      other. */
+  /*
+   * Liquid glass: mostly transparent, with the page behind it blurred and
+   * saturated so its colour comes through. A bright rim and top edge catch the
+   * light, a soft sheen falls from the top, and a faint inner shade at the
+   * bottom gives the pane thickness. Under reduced transparency or more
+   * contrast the tokens fall back to a solid bar (see the media block above).
+   */
   .header-surface {
-    background: var(--header-bg);
-    border: 1px solid var(--glass-edge);
+    position: relative;
+    isolation: isolate;
+    background: var(--liquid-bg, var(--header-bg));
+    border: 1px solid var(--liquid-rim, var(--glass-edge));
     border-radius: 1.75rem;
-    box-shadow: var(--shadow-floating), var(--glass-sheen);
-    -webkit-backdrop-filter: var(--glass-blur);
-    backdrop-filter: var(--glass-blur);
+    box-shadow:
+      var(--liquid-shadow, var(--shadow-floating)),
+      inset 0 1px 0 0 var(--liquid-highlight, rgb(255 255 255 / 0.9)),
+      inset 0 -1px 0 0 var(--liquid-shade, rgb(0 0 0 / 0.04)),
+      inset 0 0 0 1px var(--liquid-inner, transparent);
+    -webkit-backdrop-filter: var(--liquid-blur, var(--glass-blur));
+    backdrop-filter: var(--liquid-blur, var(--glass-blur));
+  }
+
+  /* The sheen: light pooled along the top of the pane. */
+  .header-surface::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    background:
+      linear-gradient(180deg, var(--liquid-sheen, transparent) 0%, transparent 55%),
+      radial-gradient(120% 140% at 15% -40%, var(--liquid-glint, transparent), transparent 60%);
+  }
+
+  /* No strip behind the bar any more: content scrolls under the glass, which
+     blurs it, rather than under a fading band of canvas. */
+  .header-shell {
+    isolation: isolate;
+  }
+
+  /*
+   * The emphasised stat tile, light edition.
+   *
+   * This used to borrow `.surface-accent`, the solid slate card — right for a
+   * closing call to action, too loud for one number in a row of three, where it
+   * read as a block of paint rather than as the figure that matters. It is now
+   * the same white tile as its neighbours with an accent hairline, a wash of
+   * the accent fading down from its top edge, an accent icon tile and the
+   * figure set in the accent, so it is still unmistakably the one to look at.
+   * The dark theme keeps the deep teal pane it already had (below), which was
+   * never the problem.
+   */
+  .stat-highlight {
+    border-color: var(--accent-line);
+    background:
+      linear-gradient(to bottom, var(--accent-soft), transparent 80%),
+      var(--glass-raised);
+    box-shadow: var(--shadow-raised), var(--glass-sheen);
+  }
+
+  .stat-highlight .readout {
+    color: var(--accent-text);
+  }
+
+  /*
+   * Empty state. It used to sit on graph paper, which turned a calm "nothing
+   * here yet" into the busiest thing on the page. Now the surface is flat and
+   * the icon sits in a raised tile with a soft halo ring, which gives the
+   * moment a focal point without any texture.
+   */
+  .dark .stat-highlight {
+    border-color: rgb(94 234 212 / 0.28);
+    background:
+      radial-gradient(80% 120% at 50% 0%, rgb(45 212 191 / 0.18), transparent 65%),
+      #08181a;
+    box-shadow: var(--shadow-glow), inset 0 1px 0 0 rgb(94 234 212 / 0.14);
+  }
+
+  .dark .stat-highlight .readout {
+    color: var(--ink);
+  }
+
+
+  .empty-state-icon {
+    background: var(--glass-raised);
+    box-shadow:
+      var(--shadow-raised),
+      var(--glass-sheen),
+      0 0 0 6px var(--accent-wash);
+    color: var(--ink-muted);
   }
 
   /* Small square tile that holds an icon — the accent one leads SignalPanel,
@@ -1098,6 +1250,9 @@ html.dark body::before {
 
   .segmented {
     display: flex;
+    /* Hug the segments rather than stretching across a block parent. */
+    width: fit-content;
+    max-width: 100%;
     flex-wrap: wrap;
     gap: var(--space-1);
     padding: var(--space-2);
@@ -1324,7 +1479,9 @@ html.dark body::before {
     width: var(--control-h-md);
     flex-shrink: 0;
     border-radius: var(--radius-pill);
-    background-color: var(--wash-hover);
+    /* Clear at rest, so the bar's glyphs read as a quiet row rather than as a
+       row of grey discs; `.interactive` supplies the film on hover/press. */
+    background-color: transparent;
     color: var(--ink-muted);
   }
 
@@ -1564,8 +1721,8 @@ html.dark body::before {
     color: var(--btn-fg);
     padding: 0.625rem var(--space-6);
     font-size: 0.875rem;
-    font-weight: 600;
-    letter-spacing: -0.01em;
+    font-weight: 500;
+    letter-spacing: -0.005em;
     box-shadow: var(--shadow-raised);
     transition-property: background-color, box-shadow, color;
     transition-duration: 150ms;
@@ -1600,8 +1757,8 @@ html.dark body::before {
     color: var(--ink);
     padding: 0.625rem var(--space-6);
     font-size: 0.875rem;
-    font-weight: 600;
-    letter-spacing: -0.01em;
+    font-weight: 500;
+    letter-spacing: -0.005em;
     transition-property: background-color, background-image, border-color, color;
     transition-duration: 150ms;
     transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
@@ -1636,8 +1793,8 @@ html.dark body::before {
     color: #b91c1c;
     padding: 0.625rem var(--space-6);
     font-size: 0.875rem;
-    font-weight: 600;
-    letter-spacing: -0.01em;
+    font-weight: 500;
+    letter-spacing: -0.005em;
     transition-property: background-color, border-color, color;
     transition-duration: 150ms;
     transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
@@ -2435,6 +2592,26 @@ html.dark body::before {
     transform: translate(-50%, -50%);
   }
 
+  /* A `<summary>` already spends its `::before` on the disclosure chevron, so
+     `.hit-24`'s invisible target box would replace the chevron and draw its
+     borders in the middle of the label. There the target comes from the
+     summary's own height instead, and the chevron is restored. */
+  .disclosure-summary.hit-24 {
+    min-height: 24px;
+  }
+
+  .disclosure-summary.hit-24::before {
+    position: static;
+    inset: auto;
+    width: 0.4375rem;
+    height: 0.4375rem;
+    transform: translateY(-2px) rotate(45deg);
+  }
+
+  details[open] > .disclosure-summary.hit-24::before {
+    transform: translateY(1px) rotate(-135deg);
+  }
+
   .line-clamp-2 {
     display: -webkit-box;
     -webkit-line-clamp: 2;
@@ -2494,8 +2671,24 @@ html.dark body::before {
     background-image: var(--brand-gradient);
   }
 
+  /* A 1px lit top edge and a hairline contact shadow, instead of a soft drop
+     shadow: reads as a pressable surface without a halo under it. */
+  .btn-ink {
+    box-shadow:
+      inset 0 1px 0 0 rgb(255 255 255 / 0.06),
+      0 0 0 1px color-mix(in srgb, var(--btn-bg) 85%, #000),
+      0 1px 2px 0 rgb(16 24 40 / 0.12);
+  }
+
   .btn-ink:hover:not(:disabled) {
     background-image: var(--brand-gradient-hover);
+    box-shadow:
+      inset 0 1px 0 0 rgb(255 255 255 / 0.08),
+      0 0 0 1px color-mix(in srgb, var(--btn-bg) 85%, #000),
+      0 4px 12px -4px var(--accent-glow);
+  }
+
+  .dark .btn-ink:hover:not(:disabled) {
     box-shadow: var(--shadow-glow);
   }
 
@@ -2521,7 +2714,7 @@ html.dark body::before {
      the fallback where `background-clip: text` is not supported. */
   .text-gradient {
     color: var(--accent-text);
-    background-image: var(--brand-gradient);
+    background-image: var(--headline-gradient, var(--brand-gradient));
     background-size: 200% 100%;
     -webkit-background-clip: text;
     background-clip: text;
@@ -2757,5 +2950,59 @@ html.dark body::before {
       transform: scale(2.4);
       opacity: 0;
     }
+  }
+}
+
+/* ==========================================================================
+   Live artwork (app/components/art). Each piece is one container: everything
+   inside is sized in cqi so it scales as one composition, and the pointer
+   arrives as --px / --py / --hover from usePointerField.
+   ========================================================================== */
+@layer components {
+  .art-frame {
+    --px: 50%;
+    --py: 50%;
+    --hover: 0;
+    container-type: inline-size;
+    /* Vertical scrolling still works when a finger lands on the art. */
+    touch-action: pan-y;
+  }
+
+  /* Faint dot grid that leans away from the pointer. */
+  .art-grid {
+    background-image: radial-gradient(circle at center, var(--line-strong) 1px, transparent 1.4px),
+      radial-gradient(circle at var(--px) var(--py), var(--accent-wash), transparent 45%);
+    background-size: 4.5cqi 4.5cqi, 100% 100%;
+  }
+
+  .art-parallax {
+    transform: translate(calc((0.5 - var(--pxn, 0.5)) * 6cqi), calc((0.5 - var(--pyn, 0.5)) * 4cqi));
+  }
+
+  .art-pop {
+    animation: art-pop 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+  }
+
+  .art-puck {
+    box-shadow: 0 0 0 calc(1cqi + var(--hover) * 1.2cqi) var(--accent-soft), 0 10px 30px -10px rgb(0 0 0 / 0.35);
+  }
+
+  /* Two-layer reveal: the secret layer is the same layout, clipped to the lens. */
+  .art-reveal {
+    clip-path: circle(var(--lens-r, 13cqi) at var(--lx, var(--px)) var(--ly, var(--py)));
+  }
+
+  .art-lens {
+    left: var(--lx, var(--px));
+    top: var(--ly, var(--py));
+    width: calc(var(--lens-r, 13cqi) * 2);
+    height: calc(var(--lens-r, 13cqi) * 2);
+  }
+}
+
+@keyframes art-pop {
+  from {
+    opacity: 0;
+    transform: translateY(0.8cqi) scale(0.92);
   }
 }

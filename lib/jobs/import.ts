@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { lookUpCompanyWebsites, type LogoLookupReport } from './logoLookup';
 import { queueJobEmbedding, reindexAll } from '@/lib/ai/embeddings';
 import { invalidateJobVectorCache } from '@/lib/ai/cache';
 import { findSkillsInText, isKnownSkill, skillLabel } from '@/lib/ai/skills';
@@ -46,6 +47,10 @@ interface ImportedJob {
   externalId: string;
   title: string;
   companyName: string;
+  /** The company's own site, when the source knows it (logo lookup). */
+  companyWebsite?: string | null;
+  /** A logo URL the source provides directly. */
+  companyLogo?: string | null;
   description: string;
   location: string | null;
   type: string | null;
@@ -70,6 +75,8 @@ export interface SourceReport {
 export interface ImportReport {
   sources: SourceReport[];
   embedded: number;
+  /** Companies looked up by name for their logo this run. */
+  logos?: LogoLookupReport;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -350,6 +357,8 @@ interface RemoteOkItem {
   salary_min?: number;
   salary_max?: number;
   url?: string;
+  company_logo?: string;
+  logo?: string;
 }
 
 async function fetchRemoteOk(): Promise<ImportedJob[]> {
@@ -365,6 +374,7 @@ async function fetchRemoteOk(): Promise<ImportedJob[]> {
       externalId: String(item.id),
       title: cleanTitle(item.position),
       companyName: clean(item.company),
+      companyLogo: httpsUrl(item.company_logo) ?? httpsUrl(item.logo),
       description,
       location: !place || /^(worldwide|anywhere|remote)$/i.test(place) ? 'Remote' : `Remote · ${place}`,
       type: normaliseType(item.position),
@@ -545,6 +555,7 @@ function fromGreenhouse(board: CareerBoard, item: GreenhouseJob): ImportedJob {
     externalId: careerId(board, item.id),
     title,
     companyName: board.name,
+    companyWebsite: board.website,
     description,
     location: clean(item.location?.name) || null,
     type: normaliseType(title),
@@ -591,6 +602,7 @@ function fromLever(board: CareerBoard, item: LeverJob): ImportedJob {
     externalId: careerId(board, item.id),
     title,
     companyName: board.name,
+    companyWebsite: board.website,
     description,
     location: clean(places) || (item.workplaceType === 'remote' ? 'Remote' : null),
     type: normaliseType(item.categories?.commitment) ?? normaliseType(title),
@@ -626,6 +638,7 @@ function fromAshby(board: CareerBoard, item: AshbyJob): ImportedJob {
     externalId: careerId(board, item.id),
     title,
     companyName: board.name,
+    companyWebsite: board.website,
     description,
     location: clean(places) || (item.isRemote ? 'Remote' : null),
     // "FullTime", "PartTime", "Intern", "Contract".
@@ -720,8 +733,24 @@ async function fetchCareerJob(board: CareerBoard, id: string, timeoutMs: number)
 /* Sync                                                                        */
 /* -------------------------------------------------------------------------- */
 
-/** Finds or creates the external company rows for a batch, keyed by lower-cased name. */
-async function companyIds(names: string[]): Promise<Map<string, string>> {
+/** An absolute https URL, or null: only those are safe to put in an img src. */
+function httpsUrl(value?: string | null): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === 'https:' ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Finds or creates the external company rows for a batch, keyed by lower-cased
+ * name, and fills in a website or logo the source knows when the row has none.
+ * It never overwrites one already on record.
+ */
+async function companyIds(jobs: ImportedJob[]): Promise<Map<string, string>> {
+  const names = jobs.map((job) => job.companyName);
   const unique = [...new Map(names.map((name) => [name.toLowerCase(), name])).values()];
   const ids = new Map<string, string>();
 
@@ -739,6 +768,20 @@ async function companyIds(names: string[]): Promise<Map<string, string>> {
       select: { id: true, name: true },
     });
     for (const company of created) ids.set(company.name.toLowerCase(), company.id);
+  }
+
+  const brand = new Map<string, { website: string | null; logoUrl: string | null }>();
+  for (const job of jobs) {
+    if (!job.companyWebsite && !job.companyLogo) continue;
+    const key = job.companyName.toLowerCase();
+    const seen = brand.get(key) ?? { website: null, logoUrl: null };
+    brand.set(key, { website: seen.website ?? job.companyWebsite ?? null, logoUrl: seen.logoUrl ?? job.companyLogo ?? null });
+  }
+  for (const [key, { website, logoUrl }] of brand) {
+    const id = ids.get(key);
+    if (!id) continue;
+    if (website) await prisma.company.updateMany({ where: { id, website: null }, data: { website } });
+    if (logoUrl) await prisma.company.updateMany({ where: { id, logoUrl: null }, data: { logoUrl } });
   }
   return ids;
 }
@@ -759,7 +802,7 @@ async function syncSource(
     jobs.filter((job) => job.title && job.companyName).map((job) => [job.externalId, enrich(job)])
   );
   const unique = [...byId.values()];
-  const companies = await companyIds(unique.map((job) => job.companyName));
+  const companies = await companyIds(unique);
 
   const existing = await prisma.job.findMany({
     where: { source, externalId: { in: [...byId.keys()] } },
@@ -927,8 +970,22 @@ export async function importJobs(
   // Every run, not only when something changed: a job whose embedding failed
   // last time (a rate limit, say) is picked up here. Jobs whose text has not
   // changed are skipped by content hash, so this costs no tokens for them.
-  const reindex = await reindexAll({ limit: 2000 });
-  report.embedded = reindex.jobs.embedded;
+  // A re-index failure must not fail the import: the jobs are already saved,
+  // and the next run picks up anything left unembedded.
+  try {
+    const reindex = await reindexAll({ limit: 2000 });
+    report.embedded = reindex.jobs.embedded;
+  } catch (error) {
+    console.error('Re-indexing after import failed:', error);
+  }
+
+  // Fill in websites (and so logos) for companies that came with only a name.
+  // Never fails the import: a lookup problem only leaves initials in place.
+  report.logos = await lookUpCompanyWebsites().catch((error) => ({
+    looked: 0,
+    found: 0,
+    error: error instanceof Error ? error.message : String(error),
+  }));
 
   return report;
 }

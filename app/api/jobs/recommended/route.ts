@@ -28,7 +28,7 @@ const CANDIDATE_LIMIT = 300;
 const MIN_SCORE = 40;
 
 const RECOMMENDED_INCLUDE = {
-  company: { select: { id: true, name: true } },
+  company: { select: { id: true, name: true, website: true, logoUrl: true } },
   _count: { select: { applications: true } },
   embedding: { select: { vector: true } },
 } as const;
